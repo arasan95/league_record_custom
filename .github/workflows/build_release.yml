@@ -1,5 +1,6 @@
 name: Build Release Artifacts
 
+# Trigger build
 on:
   push:
     tags: ["*"]
