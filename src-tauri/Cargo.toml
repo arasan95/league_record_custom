@@ -37,7 +37,7 @@ specta-typescript = "0.0.9"
 
 [package]
 # name = "LeagueRecord"
-name = "LeagueRecordx"
+name = "LeagueRecord"
 description = "A customized clone of LeagueRecord (originally v2.1.1 by FFFFFFFXXXXXXX)"
 repository = "https://github.com/arasan95/league_record_custom"
 build = "build.rs"
@@ -45,7 +45,7 @@ version = { workspace = true }
 edition = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
-default-run = "LeagueRecordx"
+default-run = "LeagueRecord"
 
 
 [dependencies]
