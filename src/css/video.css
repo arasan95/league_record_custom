@@ -275,7 +275,7 @@ body:has(.vjs-fullscreen) {
 /* 2. SHOW only requested controls */
 
 /* Play Button */
-.video-js .vjs-play-control {
+.video-js .vjs-control-bar .vjs-play-control {
     display: flex !important;
     align-items: center;
     justify-content: center;
@@ -284,7 +284,7 @@ body:has(.vjs-fullscreen) {
 }
 
 /* Volume Panel */
-.video-js .vjs-volume-panel {
+.video-js .vjs-control-bar .vjs-volume-panel {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -320,7 +320,7 @@ body:has(.vjs-fullscreen) {
 }
 
 /* Seek Bar / Progress Control */
-.video-js .vjs-progress-control {
+.video-js .vjs-control-bar .vjs-progress-control {
     display: flex !important;
     align-items: center;
     order: 4 !important; /* Middle */
@@ -332,7 +332,7 @@ body:has(.vjs-fullscreen) {
 }
 
 /* Playback Rate */
-.video-js .vjs-playback-rate {
+.video-js .vjs-control-bar .vjs-playback-rate {
     display: flex !important;
     align-items: center;
     justify-content: center;
@@ -351,7 +351,7 @@ body:has(.vjs-fullscreen) {
 }
 
 /* Fullscreen Control */
-.video-js .vjs-fullscreen-control {
+.video-js .vjs-control-bar .vjs-fullscreen-control {
     display: flex !important;
     align-items: center;
     justify-content: center;
