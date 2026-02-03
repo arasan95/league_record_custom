@@ -25,7 +25,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      - run: 7z a -tzip LeagueRecord_${{ github.ref_name }}_x64_en-US.zip LeagueRecord.exe ../libobs licenses LICENSE.txt
+      - run: 7z a -tzip LeagueRecord_${{ github.ref_name }}_x64_en-US.zip LeagueRecordx.exe ../libobs licenses LICENSE.txt
         working-directory: ./src-tauri/target/release/
 
       - uses: ncipollo/release-action@v1
