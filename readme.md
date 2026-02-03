@@ -33,15 +33,31 @@ Configure automatic behavior based on game status:
 - Stop: Automatically stops video playback when a new game session begins.
 - Play: Automatically starts playing a recording as soon as it is selected.
 - Select: Automatically selects the most recent recording immediately after a game ends.
+- PopUp: Automatically opens the player window when a recording finishes.
 
-Mouse Wheel Controls
+Mouse & Keyboard Controls
 
-- Scroll: Adjust playback speed in 0.1x increments.
-- Middle Click: Reset playback speed to 1.0x.
+- **Back / Forward Buttons**: Rewind or Fast Forward by 5 seconds.
+- **Modifier Key + Scroll**: Fine-tune scrubbing or frame advance (depending on configuration).
+- **Scroll**: Adjust playback speed in 0.1x increments.
+- **Middle Click**: Reset playback speed to 1.0x.
+
+Scoreboard Tracker
+
+- Click on any summoner name in the scoreboard to view their profile on your configured tracker site (e.g., OP.GG).
+
+The following features were planned but could not be implemented due to current API restrictions:
+
+- **Role Quest Progress**: Real-time tracking of support/jungle item quests is not available.
+- **Real-time CS & Gold**: CS and Gold values can only be updated every 60 seconds.
+- **Summoner Spell Cooldowns**: Live cooldown tracking on the scoreboard is not supported.
+- **Bounty Display**: Champion bounties cannot be retrieved live.
+- **Baron Power Play**: Calculating precise gold gained during the Baron buff is not possible.
+- **Accurate Role Detection**: Role assignments may be inaccurate in non-Standard modes like Practice Tool or Co-op vs. AI.
 
 If the UI does not reflect changes as expected, press F5 to refresh the view.
 
-![screenshot-tray](https://github.com/user-attachments/assets/5087ff6f-9881-4fa1-9123-2d0c6cb1ed21)
+![screenshot-custom](assets/screenshot.png)
 
 In case you have any problems, questions or suggestions feel free to open an issue or contact me.
 <arasan1115525@gmail.com>
