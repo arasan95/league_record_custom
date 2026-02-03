@@ -1,0 +1,38 @@
+[package]
+name = "shaco"
+version = "0.6.0"
+edition = "2021"
+description = "A League of Legends wrapper for the LCU REST & WS + the ingame API"
+license = "MIT"
+documentation = "https://docs.rs/shaco"
+readme = "README.md"
+homepage = "https://github.com/Leastrio/Shaco"
+repository = "https://github.com/Leastrio/Shaco"
+
+[dependencies]
+# async
+tokio = "1.24.2"
+futures-util = "0.3.25"
+# async websockets
+tokio-tungstenite = { version = "0.23.1", features = ["__rustls-tls"] }
+# async http
+reqwest = { version = "0.12.2", default-features = false, features = [
+    "json",
+    "rustls-tls",
+] }
+# riot auth
+riot_local_auth = { path = "../riot_local_auth" }
+rustls = { version = "0.23.12", default-features = false, features = [
+    "ring",
+    "logging",
+    "std",
+    "tls12",
+] }
+rustls-pemfile = "2.0.0"
+# serde
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.91"
+derive_more = { version = "0.99.17", features = ["display"] }
+
+[dev-dependencies]
+tokio = { version = "1.17.0", features = ["full"] }

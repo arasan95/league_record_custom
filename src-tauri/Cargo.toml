@@ -1,0 +1,137 @@
+# --- WORKSPACE ---
+
+[workspace]
+members = ["riot_datatypes"]
+exclude = ["vendor"]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+authors = ["arasan95"]
+license = "GPL-3.0-or-later"
+
+[workspace.dependencies]
+riot_datatypes = { path = "riot_datatypes" }
+
+libobs-recorder = { path = "vendor/libobs-recorder" }
+riot_local_auth = { path = "vendor/riot_local_auth" }
+shaco = { path = "vendor/shaco" }
+
+tokio = { version = "1.47.1", default-features = false }
+tokio-util = { version = "0.7.15", default-features = false }
+futures-util = { version = "0.3.31", default-features = false }
+
+serde = "1.0.219"
+serde_repr = "0.1.20"
+serde_json = "1.0.141"
+
+anyhow = "1.0.98"
+log = "0.4.27"
+chrono = "0.4.41"
+strum_macros = "0.27.1"
+
+specta = "=2.0.0-rc.22"
+specta-typescript = "0.0.9"
+
+# --- APP ---
+
+[package]
+# name = "LeagueRecord"
+name = "LeagueRecord"
+description = "A customized clone of LeagueRecord (originally v2.1.1 by FFFFFFFXXXXXXX)"
+repository = "https://github.com/arasan95/league_record_custom"
+build = "build.rs"
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+default-run = "LeagueRecord"
+
+
+[dependencies]
+tauri = { version = "2.9.1", features = ["protocol-asset", "tray-icon"] }
+tauri-plugin-updater = "2.9.0"
+tauri-plugin-autostart = "2.5.0"
+tauri-plugin-single-instance = "2.3.0"
+tauri-plugin-log = "2.6.0"
+tauri-plugin-dialog = "2.6.0"
+tauri-plugin-clipboard-manager = "2.3.2"
+
+tokio = { workspace = true, features = ["macros"] }
+tokio-util = { workspace = true, features = ["io"] }
+futures-util = { workspace = true }
+console-subscriber = { version = "0.4.0", optional = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+riot_datatypes = { workspace = true }
+riot_local_auth = { workspace = true }
+shaco = { workspace = true }
+
+libobs-recorder = { workspace = true, features = ["specta"] }
+
+anyhow = { workspace = true }
+log = { workspace = true }
+chrono = { workspace = true }
+strum_macros = { workspace = true }
+notify = { version = "6.1.1", default-features = false, features = [
+    "macos_kqueue",
+] }
+semver = "1.0.23"
+windows-key-listener = "0.2.0"
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Input",
+    "Win32_System_LibraryLoader",
+] }
+
+# Add reqwest for debug script
+reqwest = { version = "0.12.2", default-features = false, features = [
+    "json",
+    "rustls-tls",
+] }
+tauri-plugin-shell = "2.3.4"
+tauri-plugin-fs = "2.4.5"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61.3", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }
+[target.'cfg(target_os = "macos")'.dependencies]
+
+[build-dependencies]
+tauri-build = { version = "2.3.0" }
+libobs-recorder = { path = "vendor/libobs-recorder", artifact = "bin:extprocess_recorder" }
+build-helper = { path = "vendor/libobs-recorder/build-helper" }
+
+[dev-dependencies]
+riot_datatypes = { workspace = true, features = ["specta"] }
+specta = { workspace = true }
+specta-typescript = { workspace = true }
+tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
+
+[features]
+# by default Tauri runs in production mode
+# when `tauri dev` runs it is executed with `cargo run --no-default-features` if `devPath` is an URL
+default = ["custom-protocol"]
+# this feature is used used for production builds where `devPath` points to the filesystem
+# DO NOT remove this
+custom-protocol = ["tauri/custom-protocol"]
+tokio-console = ["dep:console-subscriber", "tokio/full", "tokio/tracing"]
+
+[profile.dev]
+debug = 0
+strip = "debuginfo"
+
+# [profile.release]
+# opt-level = 3
+# strip = "debuginfo"
+# debug = false
+# debug-assertions = false
+# lto = "fat"
+# panic = "abort"

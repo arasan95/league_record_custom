@@ -1,0 +1,85 @@
+@font-face {
+    font-family: "BeaufortW01-Bold";
+    src: url("BeaufortW01-Bold.ttf") format("truetype");
+}
+
+/* Local Inter Font Definitions */
+@font-face {
+    font-family: 'Inter';
+    src: url('../assets/fonts/Inter-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Inter';
+    src: url('../assets/fonts/Inter-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Inter';
+    src: url('../assets/fonts/Inter-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+}
+
+:root {
+    --theme-color: #a1b0d8;
+    --background-color: #000;
+}
+
+* {
+    scrollbar-color: #555 #111111;
+    font-family: "BeaufortW01-Bold";
+}
+
+html, body {
+    height: 100vh !important;
+    width: 100vw !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background: var(--background-color);
+}
+
+/* Global disable by default */
+*, *::before, *::after {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+}
+
+/* Allow selection if body has .selectable class */
+body.selectable, body.selectable * {
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-user-drag: auto;
+}
+
+/* Always allow inputs */
+input, textarea, [contenteditable] {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
+}
+
+/* Custom Scrollbar for WebKit (Chrome, Edge, Tauri) */
+*::-webkit-scrollbar {
+    width: 10px;
+    background: #2c2f3e; /* User requested background color */
+}
+
+*::-webkit-scrollbar-track {
+    background: #2c2f3e;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: #555; 
+    border-radius: 5px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: #777; 
+}

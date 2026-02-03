@@ -1,0 +1,39 @@
+name: Build Release Artifacts
+
+on:
+  push:
+    tags: ["*"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: cargo release
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri"
+
+      - run: bun install --linker=isolated && bun run --bun tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      - run: 7z a -tzip LeagueRecord_${{ github.ref_name }}_x64_en-US.zip LeagueRecord.exe ../libobs licenses LICENSE.txt
+        working-directory: ./src-tauri/target/release/
+
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: "./src-tauri/target/release/*.zip, ./src-tauri/target/release/bundle/nsis/*"
+          prerelease: true
+          body: |
+            Windows-x64 installer and portable version.
+            The \"portable\" requires a version of the webview2 runtime to be installed and won't work without it.
+            Windows 11 should have the Webview2 runtime installed by default.

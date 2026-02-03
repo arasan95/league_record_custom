@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" type="image/ico" href="favicon.ico" />
+    <link rel="stylesheet" href="video.js/dist/video-js.min.css" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/container.css" />
+    <link rel="stylesheet" href="css/sidebar.css" />
+    <link rel="stylesheet" href="css/video.css" />
+    <link rel="stylesheet" href="css/scoreboard.css" />
+    <link rel="stylesheet" href="css/header.css" />
+    <link rel="stylesheet" href="css/modal.css" />
+    <link rel="stylesheet" href="css/settings.css" />
+    <link rel="stylesheet" href="css/titlebar.css" />
+    <script type="module" src="ts/main.ts"></script>
+  </head>
+
+  <body>
+    <div id="modal">
+      <div id="modal-content"></div>
+    </div>
+
+    <div id="container">
+      <div id="sidebar">
+        <div id="sidebar-info">
+          <div class="sidebar-actions-header">
+              <button id="settings-btn" class="btn icon-btn" title="Settings">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="3"></circle>
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                  </svg>
+              </button>
+              <button id="vid-folder-btn" class="btn icon-btn" title="Open Recordings Folder">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                  </svg>
+              </button>
+              <!-- <div class="divider-vertical" style="width: 1px; height: 18px; background: #444; margin: 0 4px;"></div> -->
+              <button id="filter-star-btn" class="btn icon-btn" title="Show Favorites Only">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                  </svg>
+              </button>
+              <button id="filter-clip-btn" class="btn icon-btn" title="Show Clips Only">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+                      <line x1="7" y1="2" x2="7" y2="22"></line>
+                      <line x1="17" y1="2" x2="17" y2="22"></line>
+                      <line x1="2" y1="12" x2="22" y2="12"></line>
+                      <line x1="2" y1="7" x2="7" y2="7"></line>
+                      <line x1="2" y1="17" x2="7" y2="17"></line>
+                      <line x1="17" y1="17" x2="22" y2="17"></line>
+                      <line x1="17" y1="7" x2="22" y2="7"></line>
+                  </svg>
+              </button>
+              </button>
+          </div>
+          
+          <!-- Storage Info Bar -->
+          <div class="storage-info" title="Storage Usage">
+              <div class="storage-bar">
+                  <div class="storage-seg seg-clip"></div>
+                  <div class="storage-seg seg-star"></div>
+                  <div class="storage-seg seg-norm"></div>
+              </div>
+              <div class="storage-text">
+                  <span id="size-total">-</span> / <span id="size-max">-</span> GB
+              </div>
+          </div>
+        </div>
+        <ul id="sidebar-content"></ul>
+      </div>
+
+      <div id="main" class="hide-scrollbar">
+        <video id="video_player" class="video-js vjs-big-play-centered">
+          <p class="vjs-no-js">Error: JavaScript not enabled</p>
+        </video>
+
+        <div id="controls-bar" class="controls-bar">
+          <!-- Loop Section -->
+          <div class="control-section loop-section">
+            <div class="section-label">Loop</div>
+            <div class="section-content">
+              <span class="loop-label">A:</span>
+              <input type="text" id="loop-start" placeholder="00:00" class="loop-input" autocomplete="off" spellcheck="false" />
+              <span class="loop-label">B:</span>
+              <input type="text" id="loop-end" placeholder="00:00" class="loop-input" autocomplete="off" spellcheck="false" />
+              <div class="loop-checkbox-wrapper">
+                <input type="checkbox" id="loop-enabled" />
+                <label for="loop-enabled">On</label>
+              </div>
+              <button id="create-clip-btn" class="btn small-btn" disabled>Clip</button>
+            </div>
+          </div>
+
+          <!-- Auto Section -->
+          <div class="control-section auto-section">
+            <div class="section-label">Auto</div>
+            <div class="section-content">
+              <label class="marker-checkbox auto-checkbox" title="Auto Stop Playback">
+                <input type="checkbox" id="auto-stop-cb"> Stop
+              </label>
+              <label class="marker-checkbox auto-checkbox" title="Auto Play Video">
+                <input type="checkbox" id="auto-play-cb"> Play
+              </label>
+              <label class="marker-checkbox auto-checkbox" title="Auto Select Recorded Game">
+                <input type="checkbox" id="auto-select-cb"> Select
+              </label>
+              <label class="marker-checkbox auto-checkbox" title="Auto Popup Window On Recording End">
+                <input type="checkbox" id="auto-popup-cb"> PopUp
+              </label>
+            </div>
+          </div>
+
+          <!-- Markers Section -->
+          <div class="control-section marker-section">
+            <div class="section-label">Events</div>
+            <div id="marker-lists" class="section-content marker-content">
+              <label class="marker-checkbox"><input type="checkbox" id="kill" checked /> Kill</label>
+              <label class="marker-checkbox"><input type="checkbox" id="death" checked /> Death</label>
+              <label class="marker-checkbox"><input type="checkbox" id="assist" checked /> Assist</label>
+              <label class="marker-checkbox"><input type="checkbox" id="structure" checked /> Structure</label>
+              <label class="marker-checkbox"><input type="checkbox" id="dragon" checked /> Dragon</label>
+              <label class="marker-checkbox"><input type="checkbox" id="voidgrub" checked /> Voidgrub</label>
+              <label class="marker-checkbox"><input type="checkbox" id="herald" checked /> Herald</label>
+              <label class="marker-checkbox"><input type="checkbox" id="baron" checked /> Baron</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

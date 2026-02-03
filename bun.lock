@@ -1,0 +1,122 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 0,
+  "workspaces": {
+    "": {
+      "name": "league_record",
+      "dependencies": {
+        "@fffffffxxxxxxx/league_record_types": "file:league_record_types/",
+        "@fffffffxxxxxxx/videojs-markers": "^1.2.0",
+        "@tauri-apps/api": "^2.9.1",
+        "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
+        "@tauri-apps/plugin-dialog": "2.6.0",
+        "@tauri-apps/plugin-fs": "^2.4.5",
+        "@tauri-apps/plugin-updater": "^2.9.0",
+        "video.js": "^8.23.4"
+      },
+      "devDependencies": {
+        "@tauri-apps/cli": "^2.9.6",
+        "oxlint": "^1.38.0"
+      }
+    }
+  },
+  "packages": {
+    "@babel/runtime": ["@babel/runtime@7.27.6", "", {}, "sha512-vbavdySgbTTrmFE+EsiqUTzlOr5bzlnJtUv9PynGCAKvfQqjIXbvFdumPM/GxMDfyuGMJaJAU6TO4zc1Jf1i8Q=="],
+
+    "@fffffffxxxxxxx/league_record_types": ["@fffffffxxxxxxx/league_record_types@file:league_record_types", {}],
+
+    "@fffffffxxxxxxx/videojs-markers": ["@fffffffxxxxxxx/videojs-markers@1.2.0", "", { "peerDependencies": { "video.js": "^8.0.0" } }, "sha512-3DrIPy2jl7P93Fdn1O2ZOSVl3lfvmsHKAR8Q46IJnacpspTG7kenDZAPwAQdl/+d6ig+MmyD4/B7+kEYV85EPQ=="],
+
+    "@oxlint/darwin-arm64": ["@oxlint/darwin-arm64@1.38.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-9rN3047QTyA4i73FKikDUBdczRcLtOsIwZ5TsEx5Q7jr5nBjolhYQOFQf9QdhBLdInxw1iX4+lgdMCf1g74zjg=="],
+
+    "@oxlint/darwin-x64": ["@oxlint/darwin-x64@1.38.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-Y1UHW4KOlg5NvyrSn/bVBQP8/LRuid7Pnu+BWGbAVVsFcK0b565YgMSO3Eu9nU3w8ke91dr7NFpUmS+bVkdkbw=="],
+
+    "@oxlint/linux-arm64-gnu": ["@oxlint/linux-arm64-gnu@1.38.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-ZiVxPZizlXSnAMdkEFWX/mAj7U3bNiku8p6I9UgLrXzgGSSAhFobx8CaFGwVoKyWOd+gQgZ/ogCrunvx2k0CFg=="],
+
+    "@oxlint/linux-arm64-musl": ["@oxlint/linux-arm64-musl@1.38.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-ELtlCIGZ72A65ATZZHFxHMFrkRtY+DYDCKiNKg6v7u5PdeOFey+OlqRXgXtXlxWjCL+g7nivwI2FPVsWqf05Qw=="],
+
+    "@oxlint/linux-x64-gnu": ["@oxlint/linux-x64-gnu@1.38.0", "", { "os": "linux", "cpu": "x64" }, "sha512-E1OcDh30qyng1m0EIlsOuapYkqk5QB6o6IMBjvDKqIoo6IrjlVAasoJfS/CmSH998gXRL3BcAJa6Qg9IxPFZnQ=="],
+
+    "@oxlint/linux-x64-musl": ["@oxlint/linux-x64-musl@1.38.0", "", { "os": "linux", "cpu": "x64" }, "sha512-4AfpbM/4sQnr6S1dMijEPfsq4stQbN5vJ2jsahSy/QTcvIVbFkgY+RIhrA5UWlC6eb0rD5CdaPQoKGMJGeXpYw=="],
+
+    "@oxlint/win32-arm64": ["@oxlint/win32-arm64@1.38.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-OvUVYdI68OwXh3d1RjH9N/okCxb6PrOGtEtzXyqGA7Gk+IxyZcX0/QCTBwV8FNbSSzDePSSEHOKpoIB+VXdtvg=="],
+
+    "@oxlint/win32-x64": ["@oxlint/win32-x64@1.38.0", "", { "os": "win32", "cpu": "x64" }, "sha512-7IuZMYiZiOcgg5zHvpJY6jRlEwh8EB/uq7GsoQJO9hANq96TIjyntGByhIjFSsL4asyZmhTEki+MO/u5Fb/WQA=="],
+
+    "@tauri-apps/api": ["@tauri-apps/api@2.9.1", "", {}, "sha512-IGlhP6EivjXHepbBic618GOmiWe4URJiIeZFlB7x3czM0yDHHYviH1Xvoiv4FefdkQtn6v7TuwWCRfOGdnVUGw=="],
+
+    "@tauri-apps/cli": ["@tauri-apps/cli@2.9.6", "", { "optionalDependencies": { "@tauri-apps/cli-darwin-arm64": "2.9.6", "@tauri-apps/cli-darwin-x64": "2.9.6", "@tauri-apps/cli-linux-arm-gnueabihf": "2.9.6", "@tauri-apps/cli-linux-arm64-gnu": "2.9.6", "@tauri-apps/cli-linux-arm64-musl": "2.9.6", "@tauri-apps/cli-linux-riscv64-gnu": "2.9.6", "@tauri-apps/cli-linux-x64-gnu": "2.9.6", "@tauri-apps/cli-linux-x64-musl": "2.9.6", "@tauri-apps/cli-win32-arm64-msvc": "2.9.6", "@tauri-apps/cli-win32-ia32-msvc": "2.9.6", "@tauri-apps/cli-win32-x64-msvc": "2.9.6" }, "bin": { "tauri": "tauri.js" } }, "sha512-3xDdXL5omQ3sPfBfdC8fCtDKcnyV7OqyzQgfyT5P3+zY6lcPqIYKQBvUasNvppi21RSdfhy44ttvJmftb0PCDw=="],
+
+    "@tauri-apps/cli-darwin-arm64": ["@tauri-apps/cli-darwin-arm64@2.9.6", "", { "os": "darwin", "cpu": "arm64" }, "sha512-gf5no6N9FCk1qMrti4lfwP77JHP5haASZgVbBgpZG7BUepB3fhiLCXGUK8LvuOjP36HivXewjg72LTnPDScnQQ=="],
+
+    "@tauri-apps/cli-darwin-x64": ["@tauri-apps/cli-darwin-x64@2.9.6", "", { "os": "darwin", "cpu": "x64" }, "sha512-oWh74WmqbERwwrwcueJyY6HYhgCksUc6NT7WKeXyrlY/FPmNgdyQAgcLuTSkhRFuQ6zh4Np1HZpOqCTpeZBDcw=="],
+
+    "@tauri-apps/cli-linux-arm-gnueabihf": ["@tauri-apps/cli-linux-arm-gnueabihf@2.9.6", "", { "os": "linux", "cpu": "arm" }, "sha512-/zde3bFroFsNXOHN204DC2qUxAcAanUjVXXSdEGmhwMUZeAQalNj5cz2Qli2elsRjKN/hVbZOJj0gQ5zaYUjSg=="],
+
+    "@tauri-apps/cli-linux-arm64-gnu": ["@tauri-apps/cli-linux-arm64-gnu@2.9.6", "", { "os": "linux", "cpu": "arm64" }, "sha512-pvbljdhp9VOo4RnID5ywSxgBs7qiylTPlK56cTk7InR3kYSTJKYMqv/4Q/4rGo/mG8cVppesKIeBMH42fw6wjg=="],
+
+    "@tauri-apps/cli-linux-arm64-musl": ["@tauri-apps/cli-linux-arm64-musl@2.9.6", "", { "os": "linux", "cpu": "arm64" }, "sha512-02TKUndpodXBCR0oP//6dZWGYcc22Upf2eP27NvC6z0DIqvkBBFziQUcvi2n6SrwTRL0yGgQjkm9K5NIn8s6jw=="],
+
+    "@tauri-apps/cli-linux-riscv64-gnu": ["@tauri-apps/cli-linux-riscv64-gnu@2.9.6", "", { "os": "linux", "cpu": "none" }, "sha512-fmp1hnulbqzl1GkXl4aTX9fV+ubHw2LqlLH1PE3BxZ11EQk+l/TmiEongjnxF0ie4kV8DQfDNJ1KGiIdWe1GvQ=="],
+
+    "@tauri-apps/cli-linux-x64-gnu": ["@tauri-apps/cli-linux-x64-gnu@2.9.6", "", { "os": "linux", "cpu": "x64" }, "sha512-vY0le8ad2KaV1PJr+jCd8fUF9VOjwwQP/uBuTJvhvKTloEwxYA/kAjKK9OpIslGA9m/zcnSo74czI6bBrm2sYA=="],
+
+    "@tauri-apps/cli-linux-x64-musl": ["@tauri-apps/cli-linux-x64-musl@2.9.6", "", { "os": "linux", "cpu": "x64" }, "sha512-TOEuB8YCFZTWVDzsO2yW0+zGcoMiPPwcUgdnW1ODnmgfwccpnihDRoks+ABT1e3fHb1ol8QQWsHSCovb3o2ENQ=="],
+
+    "@tauri-apps/cli-win32-arm64-msvc": ["@tauri-apps/cli-win32-arm64-msvc@2.9.6", "", { "os": "win32", "cpu": "arm64" }, "sha512-ujmDGMRc4qRLAnj8nNG26Rlz9klJ0I0jmZs2BPpmNNf0gM/rcVHhqbEkAaHPTBVIrtUdf7bGvQAD2pyIiUrBHQ=="],
+
+    "@tauri-apps/cli-win32-ia32-msvc": ["@tauri-apps/cli-win32-ia32-msvc@2.9.6", "", { "os": "win32", "cpu": "ia32" }, "sha512-S4pT0yAJgFX8QRCyKA1iKjZ9Q/oPjCZf66A/VlG5Yw54Nnr88J1uBpmenINbXxzyhduWrIXBaUbEY1K80ZbpMg=="],
+
+    "@tauri-apps/cli-win32-x64-msvc": ["@tauri-apps/cli-win32-x64-msvc@2.9.6", "", { "os": "win32", "cpu": "x64" }, "sha512-ldWuWSSkWbKOPjQMJoYVj9wLHcOniv7diyI5UAJ4XsBdtaFB0pKHQsqw/ItUma0VXGC7vB4E9fZjivmxur60aw=="],
+
+    "@tauri-apps/plugin-clipboard-manager": ["@tauri-apps/plugin-clipboard-manager@2.3.2", "", { "dependencies": { "@tauri-apps/api": "^2.8.0" } }, "sha512-CUlb5Hqi2oZbcZf4VUyUH53XWPPdtpw43EUpCza5HWZJwxEoDowFzNUDt1tRUXA8Uq+XPn17Ysfptip33sG4eQ=="],
+
+    "@tauri-apps/plugin-dialog": ["@tauri-apps/plugin-dialog@2.6.0", "", { "dependencies": { "@tauri-apps/api": "^2.8.0" } }, "sha512-q4Uq3eY87TdcYzXACiYSPhmpBA76shgmQswGkSVio4C82Sz2W4iehe9TnKYwbq7weHiL88Yw19XZm7v28+Micg=="],
+
+    "@tauri-apps/plugin-fs": ["@tauri-apps/plugin-fs@2.4.5", "", { "dependencies": { "@tauri-apps/api": "^2.8.0" } }, "sha512-dVxWWGE6VrOxC7/jlhyE+ON/Cc2REJlM35R3PJX3UvFw2XwYhLGQVAIyrehenDdKjotipjYEVc4YjOl3qq90fA=="],
+
+    "@tauri-apps/plugin-updater": ["@tauri-apps/plugin-updater@2.9.0", "", { "dependencies": { "@tauri-apps/api": "^2.6.0" } }, "sha512-j++sgY8XpeDvzImTrzWA08OqqGqgkNyxczLD7FjNJJx/uXxMZFz5nDcfkyoI/rCjYuj2101Tci/r/HFmOmoxCg=="],
+
+    "@videojs/http-streaming": ["@videojs/http-streaming@3.17.2", "", { "dependencies": { "@babel/runtime": "^7.12.5", "@videojs/vhs-utils": "^4.1.1", "aes-decrypter": "^4.0.2", "global": "^4.4.0", "m3u8-parser": "^7.2.0", "mpd-parser": "^1.3.1", "mux.js": "7.1.0", "video.js": "^7 || ^8" } }, "sha512-VBQ3W4wnKnVKb/limLdtSD2rAd5cmHN70xoMf4OmuDd0t2kfJX04G+sfw6u2j8oOm2BXYM9E1f4acHruqKnM1g=="],
+
+    "@videojs/vhs-utils": ["@videojs/vhs-utils@4.1.1", "", { "dependencies": { "@babel/runtime": "^7.12.5", "global": "^4.4.0" } }, "sha512-5iLX6sR2ownbv4Mtejw6Ax+naosGvoT9kY+gcuHzANyUZZ+4NpeNdKMUhb6ag0acYej1Y7cmr/F2+4PrggMiVA=="],
+
+    "@videojs/xhr": ["@videojs/xhr@2.7.0", "", { "dependencies": { "@babel/runtime": "^7.5.5", "global": "~4.4.0", "is-function": "^1.0.1" } }, "sha512-giab+EVRanChIupZK7gXjHy90y3nncA2phIOyG3Ne5fvpiMJzvqYwiTOnEVW2S4CoYcuKJkomat7bMXA/UoUZQ=="],
+
+    "@xmldom/xmldom": ["@xmldom/xmldom@0.8.10", "", {}, "sha512-2WALfTl4xo2SkGCYRt6rDTFfk9R1czmBvUQy12gK2KuRKIpWEhcbbzy8EZXtz/jkRqHX8bFEc6FC1HjX4TUWYw=="],
+
+    "aes-decrypter": ["aes-decrypter@4.0.2", "", { "dependencies": { "@babel/runtime": "^7.12.5", "@videojs/vhs-utils": "^4.1.1", "global": "^4.4.0", "pkcs7": "^1.0.4" } }, "sha512-lc+/9s6iJvuaRe5qDlMTpCFjnwpkeOXp8qP3oiZ5jsj1MRg+SBVUmmICrhxHvc8OELSmc+fEyyxAuppY6hrWzw=="],
+
+    "dom-walk": ["dom-walk@0.1.2", "", {}, "sha512-6QvTW9mrGeIegrFXdtQi9pk7O/nSK6lSdXW2eqUspN5LWD7UTji2Fqw5V2YLjBpHEoU9Xl/eUWNpDeZvoyOv2w=="],
+
+    "global": ["global@4.4.0", "", { "dependencies": { "min-document": "^2.19.0", "process": "^0.11.10" } }, "sha512-wv/LAoHdRE3BeTGz53FAamhGlPLhlssK45usmGFThIi4XqnBmjKQ16u+RNbP7WvigRZDxUsM0J3gcQ5yicaL0w=="],
+
+    "is-function": ["is-function@1.0.2", "", {}, "sha512-lw7DUp0aWXYg+CBCN+JKkcE0Q2RayZnSvnZBlwgxHBQhqt5pZNVy4Ri7H9GmmXkdu7LUthszM+Tor1u/2iBcpQ=="],
+
+    "m3u8-parser": ["m3u8-parser@7.2.0", "", { "dependencies": { "@babel/runtime": "^7.12.5", "@videojs/vhs-utils": "^4.1.1", "global": "^4.4.0" } }, "sha512-CRatFqpjVtMiMaKXxNvuI3I++vUumIXVVT/JpCpdU/FynV/ceVw1qpPyyBNindL+JlPMSesx+WX1QJaZEJSaMQ=="],
+
+    "min-document": ["min-document@2.19.0", "", { "dependencies": { "dom-walk": "^0.1.0" } }, "sha512-9Wy1B3m3f66bPPmU5hdA4DR4PB2OfDU/+GS3yAB7IQozE3tqXaVv2zOjgla7MEGSRv95+ILmOuvhLkOK6wJtCQ=="],
+
+    "mpd-parser": ["mpd-parser@1.3.1", "", { "dependencies": { "@babel/runtime": "^7.12.5", "@videojs/vhs-utils": "^4.0.0", "@xmldom/xmldom": "^0.8.3", "global": "^4.4.0" }, "bin": { "mpd-to-m3u8-json": "bin/parse.js" } }, "sha512-1FuyEWI5k2HcmhS1HkKnUAQV7yFPfXPht2DnRRGtoiiAAW+ESTbtEXIDpRkwdU+XyrQuwrIym7UkoPKsZ0SyFw=="],
+
+    "mux.js": ["mux.js@7.1.0", "", { "dependencies": { "@babel/runtime": "^7.11.2", "global": "^4.4.0" }, "bin": { "muxjs-transmux": "bin/transmux.js" } }, "sha512-NTxawK/BBELJrYsZThEulyUMDVlLizKdxyAsMuzoCD1eFj97BVaA8D/CvKsKu6FOLYkFojN5CbM9h++ZTZtknA=="],
+
+    "oxlint": ["oxlint@1.38.0", "", { "optionalDependencies": { "@oxlint/darwin-arm64": "1.38.0", "@oxlint/darwin-x64": "1.38.0", "@oxlint/linux-arm64-gnu": "1.38.0", "@oxlint/linux-arm64-musl": "1.38.0", "@oxlint/linux-x64-gnu": "1.38.0", "@oxlint/linux-x64-musl": "1.38.0", "@oxlint/win32-arm64": "1.38.0", "@oxlint/win32-x64": "1.38.0" }, "peerDependencies": { "oxlint-tsgolint": ">=0.10.0" }, "optionalPeers": ["oxlint-tsgolint"], "bin": { "oxlint": "bin/oxlint" } }, "sha512-XT7tBinQS+hVLxtfJOnokJ9qVBiQvZqng40tDgR6qEJMRMnpVq/JwYfbYyGntSq8MO+Y+N9M1NG4bAMFUtCJiw=="],
+
+    "pkcs7": ["pkcs7@1.0.4", "", { "dependencies": { "@babel/runtime": "^7.5.5" }, "bin": { "pkcs7": "bin/cli.js" } }, "sha512-afRERtHn54AlwaF2/+LFszyAANTCggGilmcmILUzEjvs3XgFZT+xE6+QWQcAGmu4xajy+Xtj7acLOPdx5/eXWQ=="],
+
+    "process": ["process@0.11.10", "", {}, "sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A=="],
+
+    "video.js": ["video.js@8.23.4", "", { "dependencies": { "@babel/runtime": "^7.12.5", "@videojs/http-streaming": "^3.17.2", "@videojs/vhs-utils": "^4.1.1", "@videojs/xhr": "2.7.0", "aes-decrypter": "^4.0.2", "global": "4.4.0", "m3u8-parser": "^7.2.0", "mpd-parser": "^1.3.1", "mux.js": "^7.0.1", "videojs-contrib-quality-levels": "4.1.0", "videojs-font": "4.2.0", "videojs-vtt.js": "0.15.5" } }, "sha512-qI0VTlYmKzEqRsz1Nppdfcaww4RSxZAq77z2oNSl3cNg2h6do5C8Ffl0KqWQ1OpD8desWXsCrde7tKJ9gGTEyQ=="],
+
+    "videojs-contrib-quality-levels": ["videojs-contrib-quality-levels@4.1.0", "", { "dependencies": { "global": "^4.4.0" }, "peerDependencies": { "video.js": "^8" } }, "sha512-TfrXJJg1Bv4t6TOCMEVMwF/CoS8iENYsWNKip8zfhB5kTcegiFYezEA0eHAJPU64ZC8NQbxQgOwAsYU8VXbOWA=="],
+
+    "videojs-font": ["videojs-font@4.2.0", "", {}, "sha512-YPq+wiKoGy2/M7ccjmlvwi58z2xsykkkfNMyIg4xb7EZQQNwB71hcSsB3o75CqQV7/y5lXkXhI/rsGAS7jfEmQ=="],
+
+    "videojs-vtt.js": ["videojs-vtt.js@0.15.5", "", { "dependencies": { "global": "^4.3.1" } }, "sha512-yZbBxvA7QMYn15Lr/ZfhhLPrNpI/RmCSCqgIff57GC2gIrV5YfyzLfLyZMj0NnZSAz8syB4N0nHXpZg9MyrMOQ=="],
+
+    "@tauri-apps/plugin-updater/@tauri-apps/api": ["@tauri-apps/api@2.7.0", "", {}, "sha512-v7fVE8jqBl8xJFOcBafDzXFc8FnicoH3j8o8DNNs0tHuEBmXUDqrCOAzMRX0UkfpwqZLqvrvK0GNQ45DfnoVDg=="],
+
+    "@videojs/http-streaming/video.js": ["video.js@8.23.3", "", { "dependencies": { "@babel/runtime": "^7.12.5", "@videojs/http-streaming": "^3.17.0", "@videojs/vhs-utils": "^4.1.1", "@videojs/xhr": "2.7.0", "aes-decrypter": "^4.0.2", "global": "4.4.0", "m3u8-parser": "^7.2.0", "mpd-parser": "^1.3.1", "mux.js": "^7.0.1", "videojs-contrib-quality-levels": "4.1.0", "videojs-font": "4.2.0", "videojs-vtt.js": "0.15.5" } }, "sha512-Toe0VLlDZcUhiaWfcePS1OEdT3ATfktm0hk/PELfD7zUoPDHeT+cJf/wZmCy5M5eGVwtGUg25RWPCj1L/1XufA=="]
+  }
+}

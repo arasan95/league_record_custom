@@ -1,0 +1,59 @@
+{
+  "productName": "LeagueRecord",
+  "identifier": "com.leaguerecord.custom",
+  "app": {
+    "windows": [
+      {
+        "label": "Main",
+        "title": "LeagueRecord",
+        "width": 1280,
+        "height": 720,
+        "backgroundColor": "#000000",
+        "theme": "Dark"
+      }
+    ],
+    "security": {
+      "assetProtocol": {
+        "scope": ["**/*.json", "**/*.mp4", "**/*.png"],
+        "enable": true
+      }
+    }
+  },
+  "build": {
+    "beforeDevCommand": "bun run --bun dev",
+    "beforeBuildCommand": "bun run --bun build",
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420"
+  },
+
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": ["nsis"],
+    "resources": {
+      "target/libobs": "libobs",
+      "../licenses/*": "licenses/",
+      "../LICENSE.txt": "LICENSE.txt"
+    },
+    "shortDescription": "Record and review LoL games",
+    "longDescription": "Record and review League of Legends games",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERCQzZGOTU1QTUwOTJDQ0MKUldUTUxBbWxWZm5HMjRYMGxqdlNoaVVVRVJOblA5Y3hWSGl4N0dCYnd3Mlh4QmZmS01jbVFHR0oK",
+      "endpoints": [
+        "https://github.com/arasan95/LeagueRecord_custom/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "quiet"
+      }
+    }
+  }
+}

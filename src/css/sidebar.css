@@ -1,0 +1,461 @@
+#sidebar {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: [header] 1fr [list] 11fr;
+
+    border-right: 1px solid #333;
+    border-left: 1px solid #1e1e1e; /* 1px Invisible Safety Buffer for DWM */
+    background-color: #1e1e1e;
+    isolation: isolate;
+}
+
+#sidebar #sidebar-info {
+    background: #1e1e1e;
+    border-bottom: 1px solid #333;
+    color: #ccc;
+    font-size: 0.9em;
+    padding: 10px;
+    display: flex;
+    flex-direction: column; /* Stack actions and storage */
+    gap: 10px;
+}
+
+.sidebar-actions-header {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    justify-content: space-between; /* Spread buttons */
+}
+/* ... icon btn styles ... */
+/* Storage Info */
+.storage-info {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.storage-bar {
+    width: 100%;
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    display: flex;
+    overflow: hidden;
+}
+
+.storage-seg {
+    height: 100%;
+    transition: width 0.5s ease-out;
+}
+
+.seg-clip { background-color: #5c7a7e; } /* Lighter Cyan */
+.seg-star { background-color: #605842; } /* Lighter Gold */
+.seg-norm { background-color: #555555; }
+
+.storage-text {
+    display: flex;
+    justify-content: flex-end; /* Align to right */
+    font-size: 14px; /* Larger text */
+    font-weight: bold;
+    color: #eee;
+    align-items: center;
+    margin-top: 2px;
+}
+
+.storage-legend {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.legend-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.legend-dot.clip { background-color: #00d2ff; }
+.legend-dot.star { background-color: #ffd700; }
+
+.icon-btn {
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    padding: 5px !important;
+    color: #ccc !important;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    width: auto !important; /* Override default .btn fixed width */
+    margin: 0 !important;   /* Override default .btn margin */
+}
+
+.icon-btn:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: #fff !important;
+}
+
+.icon-btn svg {
+    display: block;
+}
+
+/* Filter Active States */
+#filter-star-btn.active {
+    color: #ffd700 !important;
+    background: rgba(255, 215, 0, 0.15) !important;
+}
+
+#filter-clip-btn.active {
+    color: #00d2ff !important;
+    background: rgba(0, 210, 255, 0.15) !important;
+}
+
+#sidebar #sidebar-info #size {
+    text-align: center;
+    color: #ffffff;
+}
+
+#sidebar #sidebar-content {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 14px;
+    color: #ccc;
+    background-color: #1e1e1e;
+    overflow-y: auto;
+    overflow-x: hidden; /* Prevent horizontal scrollbar */
+}
+
+/* List Item Base */
+#sidebar #sidebar-content li {
+    position: relative;
+    border-bottom: 3px solid #000000;
+    padding: 10px;
+    padding-left: 15px; /* Add space for the bar */
+    cursor: pointer;
+    transition: background-color 0.1s;
+    /* Removed border-left, using ::before for the bar */
+}
+
+#sidebar #sidebar-content li:hover {
+    background-color: #3f3f3f;
+}
+
+#sidebar #sidebar-content li.active {
+    background-color: #2e2e2e;
+}
+
+/* Side Indicators (Bar via pseudo-element) */
+#sidebar #sidebar-content li::before {
+    content: "";
+    position: absolute;
+    left: 0px; /* Slight inset from edge */
+    top: 0px; /* Match top padding */
+    bottom: 0px; /* Match bottom padding */
+    width: 2px;
+    border-radius: 2px;
+    background-color: transparent; /* Default hidden */
+    transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+#sidebar #sidebar-content li.side-blue::before {
+    background-color: #0acbe6;
+}
+
+#sidebar #sidebar-content li.side-red::before {
+    background-color: #e63b3b;
+}
+
+/* Fallback for active item with no side info - Neutral color */
+#sidebar #sidebar-content li.active:not(.side-blue):not(.side-red)::before {
+    background-color: #666;
+}
+
+/* Neon Glow Effect on Active State - Intensified */
+#sidebar #sidebar-content li.active.side-blue::before {
+    background-color: #b5f6ff !important;
+    box-shadow: 
+        0 0 8px 2px rgba(10, 203, 230, 0.9),
+        0 0 15px 5px rgba(10, 204, 230, 0.598) !important;
+    z-index: 10;
+}
+
+#sidebar #sidebar-content li.active.side-red::before {
+    background-color: #ffc8c8 !important;
+    box-shadow: 
+        0 0 8px 2px rgba(255, 0, 0, 0.685),
+        0 0 15px 5px rgba(255, 0, 0, 0.692) !important;
+    z-index: 10;
+}
+
+/* Result Colors */
+.sidebar-lp {
+    font-size: 0.85em;
+    font-weight: 700;
+    font-family: 'Cinzel', serif;
+    margin-top: 2px; /* 少し間隔を空ける */
+}
+
+.win-text { color: #fff200; text-shadow: 0 0 5px rgba(255, 242, 0, 0.5); }
+.loss-text { color: #930000; text-shadow: 0 0 5px rgb(0, 0, 0); }
+.remake-text { color: #ccc; }
+
+/* Metadata Layout */
+/* Metadata Layout */
+/* Metadata Layout */
+.recording-content {
+    display: grid;
+    /* Columns: Main (Header+Body) | Right (Meta) */
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 4px 6px 0;
+}
+
+/* Main Column */
+.sidebar-main {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    padding-left: 8px;
+    min-width: 0;
+}
+
+.sidebar-header-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 2px;
+    padding-bottom: 2px;
+
+    position: relative;
+}
+
+.sidebar-header-row::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(
+        to right,
+        rgba(190, 190, 190, 0.4),
+        rgba(0,0,0,0.1)
+    );
+}
+
+.sidebar-time {
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 0 5px rgba(0,0,0,0.5);
+}
+
+.sidebar-mode {
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 0.9em;
+    color: #ccc;
+    font-weight: 600;
+}
+
+/* Body Row: Icon [Stats] */
+.sidebar-body-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+.main-champ-img {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid #555;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    flex-shrink: 0;
+}
+
+/* Stats Column (inside Body Row) */
+.sidebar-stats {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 2px;
+    margin-left: 14px;
+    min-width: 0;
+}
+
+/* Old Center removed */
+
+/* Col 3: Right Meta */
+.sidebar-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end; /* right align */
+    gap: 2px;
+}
+
+/* Inner Elements */
+/* Inner Elements */
+.sidebar-date {
+    font-size: 0.9em;
+    font-weight: 600;
+    color: #999; /* Dimmed */
+    margin-bottom: 2px;
+    margin-right: 8px; /* Was translateX(-8px) */
+}
+
+/* Clean up removed classes */
+
+.sidebar-kda {
+    font-size: 1.1em;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 0 5px rgba(0,0,0,0.5);
+    /* Removed overflow handling to prevent truncation (...) */
+}
+
+.sidebar-result {
+    font-size: 0.9em;
+    font-weight: 700;
+    font-family: 'Cinzel', serif;
+}
+
+/* Sidebar Participants Container */
+.sidebar-participants {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: -0px;
+}
+.sidebar-participants > * + * {
+    margin-top: -7px; 
+}
+
+.participant-row {
+    display: flex;
+    gap: 3px;
+    padding: 8px 15px;
+    border-radius: 8px;
+    justify-content: center;
+    align-items: center;
+    margin-right: -20px; 
+    contain: paint;
+}
+
+/* Hide empty rows (e.g. if no players in a team) */
+.participant-row:empty {
+    display: none;
+    padding: 0;
+}
+
+/* Blue Team Background (First Row) - Radial Gradient fading out */
+.participant-row:first-child {
+    background: radial-gradient(ellipse at center, rgba(0, 155, 175, 0.623) 0%, rgba(0, 101, 114, 0) 75%);
+}
+
+/* Red Team Background (Second Row) - Radial Gradient fading out */
+.participant-row:last-child {
+    background: radial-gradient(ellipse at center, rgba(176, 0, 0, 0.584) 0%, rgba(0, 135, 22, 0) 75%);
+}
+
+.sub-champ-icon {
+    width: 24px;
+    height: 24px; 
+    border-radius: 0%;
+    border: 0px solid #000000;
+    object-fit: cover;
+    background-color: #111;
+}
+
+
+/* Actions (Hover) */
+.sidebar-actions {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: none; /* Hidden by default */
+    gap: 8px;
+}
+
+#sidebar #sidebar-content li:hover .sidebar-actions {
+    display: flex;
+}
+
+.favorite, .rename, .delete {
+    font-size: 16px;
+    color: #666;
+    transition: color 0.2s;
+    background: rgba(0,0,0,0.5); /* Background for visibility */
+    border-radius: 3px;
+    padding: 0 4px;
+}
+
+.favorite:hover { color: gold; }
+.rename:hover { color: rgb(69, 255, 137); }
+.delete:hover { color: red; }
+
+/* Fallback for no-metadata (just text) */
+.video-name {
+    display: block;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 10px 0;
+}
+
+/* --- Compact Mode --- */
+#sidebar.sidebar-compact .sidebar-right {
+    display: none !important;
+}
+
+#sidebar.sidebar-compact .sidebar-date {
+    display: none !important;
+}
+
+#sidebar.sidebar-compact .sub-champ-icon {
+    display: none !important;
+}
+
+/* --- Collapsed Mode --- */
+#sidebar.sidebar-collapsed {
+    /* Width will be set via variable to ~15px */
+    overflow: hidden !important;
+}
+
+#sidebar.sidebar-collapsed #sidebar-info,
+#sidebar.sidebar-collapsed #sidebar-content {
+    display: none !important;
+}
+
+/* --- Resize Handle --- */
+.sidebar-resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize; /* ew-resize */
+    z-index: 100;
+    background: transparent;
+    transition: background 0.2s;
+}
+
+.sidebar-resize-handle:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Ensure sidebar allows absolute positioning of handle */
+#sidebar {
+    position: relative; 
+}

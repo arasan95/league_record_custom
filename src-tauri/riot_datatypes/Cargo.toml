@@ -1,0 +1,16 @@
+[package]
+name = "riot_datatypes"
+repository = "https://github.com/FFFFFFFXXXXXXX/league_record/riot_datatypes"
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+serde = { workspace = true }
+serde_repr = { workspace = true }
+specta = { workspace = true, optional = true, features = ["derive"] }
+# specta-typescript = { workspace = true }
+
+[features]
+specta = ["dep:specta"]

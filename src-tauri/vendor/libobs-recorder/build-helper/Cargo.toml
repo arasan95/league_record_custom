@@ -1,0 +1,10 @@
+[package]
+name = "build-helper"
+version = "0.1.0"
+description = "stuff for building this mess"
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+fs_extra = { workspace = true }
