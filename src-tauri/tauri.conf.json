@@ -28,7 +28,7 @@
 
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "targets": ["nsis"],
     "resources": {
       "target/libobs": "libobs",
@@ -46,7 +46,8 @@
     ]
   },
   "plugins": {
-    "updater": {
+    "_updater_DISABLED": {
+      "comment": "Auto-update disabled by user request. Remove '_DISABLED' suffix to re-enable.",
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERCQzZGOTU1QTUwOTJDQ0MKUldUTUxBbWxWZm5HMjRYMGxqdlNoaVVVRVJOblA5Y3hWSGl4N0dCYnd3Mlh4QmZmS01jbVFHR0oK",
       "endpoints": [
         "https://github.com/arasan95/LeagueRecord_custom/releases/latest/download/latest.json"
