@@ -1,0 +1,174 @@
+/* src/css/header.css */
+/* Spectator header container: same element has id="video-header" and class="spectator-header" in DOM */
+
+/* Main Header Container (spectator mode) - 元の video.css .spectator-header の見た目を維持 */
+#video-header.spectator-header {
+    pointer-events: auto;
+    width: 100%;
+    height: 50px;
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: rgb(255, 255, 255);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 0 30px;
+    margin: 0 !important;
+    flex-shrink: 0;
+    z-index: 500;
+    box-sizing: border-box;
+}
+
+/* Timer Section (Dragon/Baron) */
+.spec-timer-container {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 90px;
+    justify-content: center;
+}
+
+.spec-timer-icon {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+}
+
+.spec-timer-text {
+    font-size: 1.2rem;
+    font-weight: bold;
+    text-align: center;
+    color: white;
+    /* Monospace numbers for better timer alignment? Optional */
+    font-variant-numeric: tabular-nums;
+}
+
+/* Team Sections - 元の video.css の値（gap 20px, padding 0 40px） */
+.spec-team {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    gap: 20px;
+    padding: 0 40px;
+}
+
+.spec-team.blue {
+    justify-content: flex-end;
+}
+
+.spec-team.red {
+    justify-content: flex-start;
+}
+
+/* Individual Stat Group (Icon + Value) - 元の video.css の値 */
+.spec-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+}
+
+.spec-stat-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.spec-val {
+    font-size: 1.2em;
+    font-weight: bold;
+    text-shadow: 0 0 3px black;
+}
+
+.gold-stat .spec-val {
+    color: #ffd700; /* Gold color */
+}
+
+.kill-stat .spec-val {
+    font-size: 1.8em;
+}
+
+.spec-team.blue .kill-stat .spec-val {
+    color: #0acbe6;
+}
+.spec-team.red .kill-stat .spec-val {
+    color: #ff2345;
+}
+
+/* Gold Lead Text */
+.gold-lead {
+    font-size: 12px;
+    height: 12px;
+    line-height: 12px;
+    font-weight: bold;
+    margin-top: 2px;
+}
+
+/* Objectives Group (Towers, Grubs, etc) - 元の video.css の値 */
+.spec-obj-group {
+    display: flex;
+    gap: 15px;
+}
+
+/* Icons - 元の video.css の値 */
+.spec-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    margin-bottom: 2px;
+}
+
+/* Masked Icons - 元の video.css の値（20px, margin） */
+.spec-icon-masked {
+    width: 20px;
+    height: 20px;
+    background-color: #a0a0a0;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    margin-bottom: 4px;
+    margin-top: 2px;
+}
+
+/* Team Specific Colors for Icons - 元の video.css の色 */
+.spec-team.blue .spec-icon-masked,
+.team-100 .spec-icon-masked, .blue .spec-icon-masked {
+    background-color: #4da6ff;
+}
+.spec-team.red .spec-icon-masked,
+.team-200 .spec-icon-masked, .red .spec-icon-masked {
+    background-color: #ff5e5e;
+}
+/* Revert to white/grey for neutral objectives if preferred, but existing code had black fill? */
+/* TS code used specific images. Let's assume the TS code handles src/mask logic. */
+
+
+/* Center Game Time - 元の video.css の値（120px, 2.2em） */
+.spec-center {
+    width: 120px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 2.2em;
+    opacity: 1.0;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 5px rgba(0,0,0,0.8);
+}
+
+/* Responsive adjustments */
+@media (max-width: 1000px) {
+    #video-header.spectator-header {
+        font-size: 0.8em;
+    }
+    .spec-timer-icon {
+        width: 30px;
+        height: 30px;
+    }
+    .spec-icon {
+        width: 20px;
+        height: 20px;
+    }
+}

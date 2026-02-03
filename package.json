@@ -1,0 +1,32 @@
+{
+  "name": "league_record_custom",
+  "private": true,
+  "type": "module",
+  "files": [
+    "src",
+    "index.html",
+    "tsconfig.json",
+    "vite.config.ts"
+  ],
+  "scripts": {
+    "predev": "cd src-tauri && cargo test",
+    "dev": "bun run --watch --port 1420 src/index.html",
+    "build": "rm -rf dist && bun build --minify --target browser --outdir dist src/index.html",
+    "preview": "bun dist/index.html"
+  },
+  "dependencies": {
+    "@fffffffxxxxxxx/league_record_types": "file:league_record_types/",
+    "@fffffffxxxxxxx/videojs-markers": "^1.2.0",
+    "@tauri-apps/api": "^2.9.1",
+    "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
+    "@tauri-apps/plugin-dialog": "2.6.0",
+    "@tauri-apps/plugin-fs": "^2.4.5",
+    "@tauri-apps/plugin-shell": "^2.3.4",
+    "@tauri-apps/plugin-updater": "^2.9.0",
+    "video.js": "^8.23.4"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.6",
+    "oxlint": "^1.38.0"
+  }
+}

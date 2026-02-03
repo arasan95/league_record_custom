@@ -1,0 +1,464 @@
+use std::{task::Poll, time::Duration};
+
+use futures_util::Stream;
+use reqwest::Response;
+use tokio::{
+    sync::mpsc::{unbounded_channel, UnboundedReceiver},
+    sync::oneshot,
+    sync::oneshot::Sender,
+    task::JoinHandle,
+};
+
+use crate::{error::IngameClientError, model::ingame::*};
+
+const PORT: u16 = 2999;
+const DEFAULT_POLLING_RATE_MILLIS: Duration = Duration::from_millis(500);
+
+/// A client for the LoL-Ingame API
+pub struct IngameClient(reqwest::Client);
+
+impl Default for IngameClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl IngameClient {
+    /// Create a new connection to the ingame api. This will return an error if a game is not running
+    pub fn new() -> Self {
+        Self(
+            reqwest::ClientBuilder::new()
+                .danger_accept_invalid_certs(true)
+                .timeout(Duration::from_millis(200))
+                .build()
+                .unwrap(),
+        )
+    }
+
+    /// Checks if there is an active game \
+    /// Returns true only after the loading screen
+    pub async fn active_game(&self) -> bool {
+        let req = self
+            .0
+            .get(format!(
+                "https://127.0.0.1:{PORT}/GetLiveclientdataGamestats"
+            ))
+            .send()
+            .await;
+
+        if let Ok(req) = req {
+            // as soon as your own game has loaded the API returns GameStats but with a game_time slightly bigger than 0.0
+            // this game_time stays constant until the game starts
+            // as far as I can tell the value is always something around ~0.02
+            // => check if game_time is > 0.1 as a proxy for if the game has started
+            if let Ok(game_stats) = req.json::<GameStats>().await {
+                return game_stats.game_time > 0.1;
+            }
+        }
+
+        false
+    }
+
+    /// Checks if there is an active game \
+    /// Same as [`IngameClient::active_game`] but returns true during loading screen when other API calls still return Error.
+    /// Also returns true when the game has already started.
+    pub async fn active_game_loadingscreen(&self) -> bool {
+        let req = self
+            .0
+            .head(format!("https://127.0.0.1:{PORT}/Help"))
+            .send()
+            .await;
+
+        if let Ok(req) = req {
+            req.status().is_success()
+        } else {
+            false
+        }
+    }
+
+    /// Checks if the game is a livegame or in spectatormode
+    pub async fn is_spectator_mode(&self) -> Result<bool, IngameClientError> {
+        // before the game has actually started the API sometimes returns falsely
+        // that the game is a spectator game when it is not
+        if !self.active_game().await {
+            return Err(IngameClientError::ApiNotAvailableDuringLoadingScreen);
+        }
+
+        let req = self
+            .0
+            .head(format!(
+                "https://127.0.0.1:{PORT}/GetLiveclientdataActiveplayer"
+            ))
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(IngameClientError::from);
+
+        match req {
+            Ok(_) => Ok(false),
+            Err(IngameClientError::ApiNotAvailableInSpectatorMode) => Ok(true),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Get all current game data
+    pub async fn all_game_data(
+        &self,
+        event_id: Option<u32>,
+    ) -> Result<AllGameData, IngameClientError> {
+        self.0
+            .get(format!(
+                "https://127.0.0.1:{}/GetLiveclientdataAllgamedata?eventID={}",
+                PORT,
+                event_id.unwrap_or(0) // an event_id of 0 returns all events
+            ))
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(IngameClientError::from)?
+            .json()
+            .await
+            .map_err(IngameClientError::from)
+    }
+
+    /// Get event data for the active game
+    pub async fn event_data(
+        &self,
+        event_id: Option<u32>,
+    ) -> Result<Vec<GameEvent>, IngameClientError> {
+        use crate::model::ingame::treat_error_as_none;
+
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "PascalCase")]
+        struct IngameEvents {
+            pub events: Vec<GameEventTmp>,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct GameEventTmp(#[serde(deserialize_with = "treat_error_as_none")] Option<GameEvent>);
+
+        self.0
+            .get(format!(
+                "https://127.0.0.1:{}/GetLiveclientdataEventdata?eventID={}",
+                PORT,
+                event_id.unwrap_or(0) // an event_id of 0 returns all events
+            ))
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(IngameClientError::from)?
+            .json::<IngameEvents>()
+            .await
+            .map_err(IngameClientError::from)
+            .map(|ie| {
+                ie.events
+                    .into_iter()
+                    .filter_map(|event| event.0)
+                    .collect::<Vec<_>>()
+            })
+    }
+
+    /// Get the active games stats
+    pub async fn game_stats(&self) -> Result<GameStats, IngameClientError> {
+        self.0
+            .get(format!(
+                "https://127.0.0.1:{PORT}/GetLiveclientdataGamestats"
+            ))
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(IngameClientError::from)?
+            .json()
+            .await
+            .map_err(IngameClientError::from)
+    }
+
+    /// Get a specified players items
+    pub async fn player_items<S: AsRef<str>>(
+        &self,
+        summoner_name: S,
+    ) -> Result<Vec<PlayerItem>, IngameClientError> {
+        self.0
+            .get(format!(
+                "https://127.0.0.1:{}/GetLiveclientdataPlayeritems?riotId={}",
+                PORT,
+                summoner_name.as_ref()
+            ))
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(IngameClientError::from)?
+            .json()
+            .await
+            .map_err(IngameClientError::from)
+    }
+
+    /// Get a list of players in game
+    pub async fn player_list(
+        &self,
+        team_id: Option<TeamId>,
+    ) -> Result<Vec<Player>, IngameClientError> {
+        use crate::model::ingame::treat_error_as_none;
+
+        #[derive(serde::Deserialize)]
+        struct PlayerOpt(#[serde(deserialize_with = "treat_error_as_none")] Option<Player>);
+
+        self.0
+            .get(format!(
+                "https://127.0.0.1:{}/GetLiveclientdataPlayerlist?teamID={}",
+                PORT,
+                team_id
+                    .map(|team_id| format!("{team_id}"))
+                    .unwrap_or("".to_string())
+            ))
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(IngameClientError::from)?
+            .json::<Vec<PlayerOpt>>()
+            .await
+            .map_err(IngameClientError::from)
+            .map(|players| {
+                players
+                    .into_iter()
+                    .filter_map(|player| player.0)
+                    .collect::<Vec<_>>()
+            })
+    }
+
+    /// Get a specified players main runes
+    pub async fn player_main_runes<S: AsRef<str>>(
+        &self,
+        summoner_name: S,
+    ) -> Result<PlayerRunes, IngameClientError> {
+        self.0
+            .get(format!(
+                "https://127.0.0.1:{}/GetLiveclientdataPlayermainrunes?riotId={}",
+                PORT,
+                summoner_name.as_ref()
+            ))
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(IngameClientError::from)?
+            .json()
+            .await
+            .map_err(IngameClientError::from)
+    }
+
+    /// Get a specified players score
+    pub async fn player_scores<S: AsRef<str>>(
+        &self,
+        summoner_name: S,
+    ) -> Result<PlayerScores, IngameClientError> {
+        self.0
+            .get(format!(
+                "https://127.0.0.1:{}/GetLiveclientdataPlayerscores?riotId={}",
+                PORT,
+                summoner_name.as_ref()
+            ))
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(IngameClientError::from)?
+            .json()
+            .await
+            .map_err(IngameClientError::from)
+    }
+
+    /// Get specified players summoner spells
+    pub async fn player_summoner_spells<S: AsRef<str>>(
+        &self,
+        summoner_name: S,
+    ) -> Result<SummonerSpells, IngameClientError> {
+        self.0
+            .get(format!(
+                "https://127.0.0.1:{}/GetLiveclientdataPlayersummonerspells?riotId={}",
+                PORT,
+                summoner_name.as_ref()
+            ))
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(IngameClientError::from)?
+            .json()
+            .await
+            .map_err(IngameClientError::from)
+    }
+
+    /// Get active players data \
+    /// Only available during livegame
+    pub async fn active_player(&self) -> Result<ActivePlayer, IngameClientError> {
+        /// only available in live games - is Error when spectating
+        #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+        #[serde(untagged)]
+        enum ActivePlayerInfo {
+            ActivePlayer(Box<ActivePlayer>),
+            Error { error: String },
+        }
+
+        self.0
+            .get(format!(
+                "https://127.0.0.1:{PORT}/GetLiveclientdataActiveplayer"
+            ))
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(IngameClientError::from)?
+            .json::<ActivePlayerInfo>()
+            .await
+            .map_err(IngameClientError::from)
+            .map(|i| match i {
+                ActivePlayerInfo::ActivePlayer(i) => Ok(*i),
+                ActivePlayerInfo::Error { error } => {
+                    Err(IngameClientError::DeserializationError(error))
+                }
+            })?
+    }
+
+    /// Get the active players abilities \
+    /// Only available during livegame
+    pub async fn active_player_abilities(&self) -> Result<PlayerAbilities, IngameClientError> {
+        self.0
+            .get(format!(
+                "https://127.0.0.1:{PORT}/GetLiveclientdataActiveplayerabilities"
+            ))
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(IngameClientError::from)?
+            .json()
+            .await
+            .map_err(IngameClientError::from)
+    }
+
+    /// Get the active players name \
+    /// Only available during livegame
+    pub async fn active_player_name(&self) -> Result<String, IngameClientError> {
+        self.0
+            .get(format!(
+                "https://127.0.0.1:{PORT}/GetLiveclientdataActiveplayername"
+            ))
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(IngameClientError::from)?
+            .text()
+            .await
+            .map(|txt| {
+                // remove the first and last character since the received text is wrapped in quotes (e.g. "playerName")
+                let mut chars = txt.chars();
+                chars.next();
+                chars.next_back();
+                chars.as_str().to_string()
+            })
+            .map_err(IngameClientError::from)
+    }
+
+    /// Get the active players runes \
+    /// Only available during livegames
+    pub async fn active_player_runes(&self) -> Result<FullPlayerRunes, IngameClientError> {
+        self.0
+            .get(format!(
+                "https://127.0.0.1:{PORT}/GetLiveclientdataActiveplayerrunes"
+            ))
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(IngameClientError::from)?
+            .json()
+            .await
+            .map_err(IngameClientError::from)
+    }
+}
+
+/// A wrapper around a [IngameClient] that regularly polls the ingame events
+pub struct EventStream {
+    start_tx: Option<Sender<()>>,
+    poll_task_handle: JoinHandle<()>,
+    events_rx: UnboundedReceiver<GameEvent>,
+}
+
+impl Default for EventStream {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EventStream {
+    pub fn new() -> Self {
+        Self::from_ingame_client(IngameClient::new())
+    }
+
+    pub fn new_with_polling_rate(polling_rate: Duration) -> Self {
+        Self::from_ingame_client_with_polling_rate(IngameClient::new(), polling_rate)
+    }
+
+    /// Create an [EventStream] from an [IngameClient] \
+    /// Takes an [Option] that specifies the polling rate of the [IngameClient] that's being wrapped \
+    /// The default [Duration] is 500ms
+    pub fn from_ingame_client(ingame_client: IngameClient) -> Self {
+        Self::from_ingame_client_with_polling_rate(ingame_client, DEFAULT_POLLING_RATE_MILLIS)
+    }
+
+    /// Create an [EventStream] from an [IngameClient] \
+    /// Takes an [Option] that specifies the polling rate of the [IngameClient] that's being wrapped \
+    /// The default [Duration] is 500ms
+    pub fn from_ingame_client_with_polling_rate(
+        ingame_client: IngameClient,
+        polling_rate: Duration,
+    ) -> Self {
+        let (start_tx, start_rx) = oneshot::channel::<()>();
+        let (events_tx, events_rx) = unbounded_channel();
+
+        let poll_task_handle = tokio::spawn(async move {
+            let mut timer = tokio::time::interval(polling_rate);
+            let mut current_event_id = 0;
+
+            // await start so the future is maximally lazy, but return on error (start_tx got dropped)
+            if start_rx.await.is_err() {
+                return;
+            }
+
+            // loop for as long as api calls are successful
+            timer.reset();
+            while let Ok(events) = ingame_client.event_data(Some(current_event_id)).await {
+                if let Some(last_event) = events.last() {
+                    current_event_id = last_event.get_event_id() + 1;
+                }
+
+                events.into_iter().for_each(|e| _ = events_tx.send(e));
+
+                timer.tick().await;
+            }
+        });
+
+        Self {
+            start_tx: Some(start_tx),
+            poll_task_handle,
+            events_rx,
+        }
+    }
+}
+
+impl Stream for EventStream {
+    type Item = GameEvent;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        if let Some(start_tx) = self.start_tx.take() {
+            if start_tx.send(()).is_err() {
+                return Poll::Ready(None);
+            }
+        }
+        self.events_rx.poll_recv(cx)
+    }
+}
+
+impl Drop for EventStream {
+    fn drop(&mut self) {
+        self.poll_task_handle.abort()
+    }
+}

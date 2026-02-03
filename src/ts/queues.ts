@@ -1,0 +1,35 @@
+export const QueueID = {
+    CUSTOM: 0,
+    DRAFT_PICK: 400,
+    RANKED_SOLO: 420,
+    BLIND_PICK: 430,
+    RANKED_FLEX: 440,
+    ARAM: 450,
+    SWIFTPLAY: 490, // Replaces Quickplay
+    CLASH: 700,
+    COOP_AI_INTRO: 830,
+    COOP_AI_BEGINNER: 840,
+    COOP_AI_INTERMEDIATE: 850,
+    COOP_AI_INTRO_2: 890,
+    TFT_NORMAL: 1090,
+    TFT_RANKED: 1100,
+    TFT_HYPER_ROLL: 1130,
+    TFT_DOUBLE_UP: 1160,
+    ARENA: 1700,
+    PRACTICE_TOOL: 3140
+} as const;
+
+export const SR_QUEUES = [
+    QueueID.CUSTOM,
+    QueueID.DRAFT_PICK,
+    QueueID.RANKED_SOLO,
+    QueueID.BLIND_PICK,
+    QueueID.RANKED_FLEX,
+    QueueID.SWIFTPLAY,
+    QueueID.CLASH,
+    QueueID.COOP_AI_INTRO,
+    QueueID.COOP_AI_BEGINNER,
+    QueueID.COOP_AI_INTERMEDIATE,
+    QueueID.COOP_AI_INTRO_2,
+    QueueID.PRACTICE_TOOL
+];

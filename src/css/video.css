@@ -1,0 +1,791 @@
+﻿/* =========================================================================
+   1. GLOBAL & DEFAULTS
+   ========================================================================= */
+body {
+    background-color: black;
+    margin: 0;
+    overflow: hidden;
+}
+
+/* hide videojs player outline when focused */
+video {
+    outline: none !important;
+}
+
+.vjs-modal-dialog-content {
+    background-color: black;
+}
+
+/* =========================================================================
+   2. LAYOUT SYSTEM
+   ========================================================================= */
+/* Main Container: Flexbox Layout for robustness */
+#main {
+    grid-area: main; /* Keep grid-area so it sits in #container grid */
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start;
+    align-items: stretch;
+    
+    width: 100%;
+    height: 100vh !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden;
+    background-color: #000;
+}
+
+/* Video Player Container: Level 2 Grid */
+.video-js,
+#video_player {
+    /* Flex Item in #main */
+    flex: 1 1 0 !important; /* Grow and shrink, basis 0 to force fit */
+    
+    /* Internal Layout: Strict Vertical Stack of Internal Components */
+    /* 1. Video Content (1fr)
+       2. Scoreboard (Auto)
+       3. Controls1 (Play Bar) (Auto)
+    */
+    display: grid !important;
+    grid-template-columns: 100%;
+    grid-template-rows: 1fr auto auto; 
+    grid-template-areas:
+        "video-content"
+        "st-scoreboard"
+        "play-controls";
+        
+    width: 100% !important;
+    height: 100% !important;
+    max-height: none !important;
+    min-height: 200px !important;
+    
+    padding: 0 !important;
+    margin: 0 !important;
+    background-color: black !important;
+    position: relative !important;
+    overflow: hidden !important;
+    font-size: 14px;
+    overflow: visible !important; /* ALLOW POPUPS/RULERS TO OVERFLOW */
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* =========================================================================
+   3. VIDEO PLAYER CORE
+   ========================================================================= */
+/* Video Element - Intrinsic size mapped to 'video-content' area */
+.video-js .vjs-tech {
+    grid-area: video-content;
+    position: relative !important; /* Behave as grid item */
+    width: 100% !important;
+    height: 100% !important;
+    max-height: none !important;
+    object-fit: contain; 
+    top: auto !important;
+    left: auto !important;
+    margin: 0 !important;
+    z-index: 1;
+}
+
+/* Fullscreen Behavior */
+/* Force root elements to black in fullscreen */
+html:has(.vjs-fullscreen),
+body:has(.vjs-fullscreen) {
+    background-color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Force backdrop to be black */
+::backdrop {
+    background-color: black !important;
+}
+
+/* Fullscreen Player Container */
+.video-js.vjs-fullscreen {
+    width: 100% !important;
+    height: 100% !important;
+    background-color: black !important;
+    padding-bottom: 0 !important; /* Remove any padding bleeding */
+    overflow: hidden !important; /* Prevent Ruler/Ticks from creating scrollbars at bottom */
+    -webkit-user-select: none !important;
+    user-select: none !important; /* Prevent blue text selection highlight */
+    
+    /* Force layout */
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important; /* Centered implementation allows controls to hug video */
+    align-items: center !important;
+}
+
+/* Allow video to grow fully in fullscreen but reserve space for controls */
+.video-js.vjs-fullscreen .vjs-tech {
+    max-height: calc(100% - 70px) !important; /* Reserve 70px for control bar */
+    flex: 0 1 auto !important; /* Do NOT grow to fill space, just fit content */
+}
+
+.video-js .vjs-load-progress {
+    display: none !important;
+}
+
+/* =========================================================================
+   4. SPECTATOR HEADER
+   ========================================================================= */
+#video-header {
+    flex: 0 0 auto !important;
+    width: 100%;
+    margin: 0 !important;
+    padding: 5px 20px;
+    background-color: transparent;
+    color: white;
+    font-size: 0.95em;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 40px;
+    z-index: 20;
+    grid-area: info-header;
+    box-sizing: border-box;
+    position: relative;
+}
+
+#video-header .meta-left,
+#video-header .meta-right {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+}
+
+#video-header .meta-right {
+    margin-right: 30px; /* Prevent cutoff on right edge */
+}
+
+#video-header .summoner-name {
+    font-weight: bold;
+    color: #f0e6d2;
+}
+
+#video-header .win { color: #4c965e; font-weight: bold; }
+#video-header .loss { color: #c95252; font-weight: bold; }
+#video-header .remake { color: #a0a0a0; }
+
+#video-header .meta-sep {
+    color: rgba(255, 255, 255, 0.4);
+    margin: 0 2px;
+}
+
+#description {
+    color: lightgray;
+    font-size: 1.35rem;
+    margin: 5px 0;
+    margin-bottom: auto; /* Push upwards (Centering part 2) */
+    display: flex; /* Changed from grid to flex for simpler center alignment if needed, or keep hidden/empty */
+    justify-content: center;
+}
+
+#description-left, #description-right {
+    display: none; /* Hide unused sides */
+}
+
+#description-center {
+    flex: 1;
+    text-align: center;
+    padding-top: 5px;
+}
+
+.summoner-name {
+    font-size: 24px;
+    color: #947f51;
+}
+
+.win { font-size: 30px; color: #0acbe6; }
+.loss { font-size: 30px; color: #ff2345; }
+.remake { font-size: 30px; color: #a09b8c; }
+
+/* =========================================================================
+   5. EVENT MARKERS
+   ========================================================================= */
+.vjs-marker {
+    width: 3px !important;
+    margin-left: -1px !important; /* Center the thinner marker */
+    opacity: 0.4 !important;
+}
+
+.vjs-marker.kill { background-color: rgb(43, 255, 0) !important; z-index: 12; }
+.vjs-marker.assist { background-color: rgb(251, 255, 0) !important; z-index: 12; }
+.vjs-marker.death { background-color: red !important; z-index: 12; }
+.vjs-marker.turret,
+.vjs-marker.inhibitor { background-color: mediumblue !important; z-index: 12; }
+
+.vjs-marker.infernal-dragon,
+.vjs-marker.ocean-dragon,
+.vjs-marker.mountain-dragon,
+.vjs-marker.cloud-dragon,
+.vjs-marker.hextech-dragon,
+.vjs-marker.chemtech-dragon,
+.vjs-marker.elder-dragon,
+.vjs-marker.dragon {
+    background-color: rgb(0, 234, 255) !important;
+    z-index: 13;
+    width: 5px !important;
+    opacity: 0.7 !important;
+}
+
+.vjs-marker.voidgrub { background-color: deeppink !important; z-index: 13 !important; width: 3px !important; }
+.vjs-marker.herald { background-color: rgb(234, 0, 255) !important; z-index: 13 !important; width: 5px !important; }
+.vjs-marker.baron { background-color: rgb(123, 0, 255) !important; z-index: 13; width: 5px !important; opacity: 0.7 !important; }
+.vjs-marker.highlight { background-color: rgb(255, 170, 0) !important; z-index: 12; }
+
+/* =========================================================================
+   6. VIDEO.JS CONTROL BAR
+   ========================================================================= */
+
+/* Container Positioning & Visibility */
+.video-js .vjs-control-bar {
+    grid-area: play-controls;
+    position: relative !important; /* Not absolute anymore */
+    bottom: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    z-index: 20000 !important; /* Ensure high priority */
+    overflow: visible !important;
+    padding-bottom: 3px !important; /* Make room for ruler numbers below */
+    height: auto !important; /* Allow growth automatically */
+    display: flex !important; /* Use Flexbox */
+    align-items: center !important; /* Center vertically */
+}
+
+/* Ensure control bar is always visible */
+.video-js.vjs-user-inactive:not(.vjs-paused) .vjs-control-bar {
+    opacity: 1 !important;
+}
+
+/* ---------------------------------------------------- */
+/* STRICT CONTROL VISIBILITY (Whitelist Strategy)       */
+/* ---------------------------------------------------- */
+
+/* 1. HIDE EVERYTHING in the control bar by default */    
+.video-js .vjs-control-bar > * {
+    display: none !important;
+}
+
+/* 2. SHOW only requested controls */
+
+/* Play Button */
+.video-js .vjs-play-control {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    order: 1 !important;
+    flex: 0 0 auto !important;
+}
+
+/* Volume Panel */
+.video-js .vjs-volume-panel {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    order: 2 !important;
+    flex: 0 0 auto !important;
+    
+    /* Fixed dimensions to match others */
+    width: 50px !important;
+    height: 50px !important;
+    max-height: 50px !important;
+    
+    position: relative !important;
+    z-index: 200 !important;
+    overflow: visible !important;
+}
+
+/* Mute Control Button specific alignment */
+.video-js .vjs-volume-panel .vjs-mute-control {
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: none !important; /* Ensure no border shifts it */
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Custom Game Time Display (Replacer) */
+/* Custom Game Time Display (Replacer) - HIDDEN REQUESTED */
+.vjs-custom-time-display {
+    display: none !important;
+}
+
+/* Seek Bar / Progress Control */
+.video-js .vjs-progress-control {
+    display: flex !important;
+    align-items: center;
+    order: 4 !important; /* Middle */
+    flex: 1 1 auto !important; /* FILL SPACE */
+    width: auto !important;
+    min-width: 100px !important; 
+    margin: 0 10px !important;
+    height: 100% !important; /* Full height alignment */
+}
+
+/* Playback Rate */
+.video-js .vjs-playback-rate {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    order: 5 !important;
+    flex: 0 0 auto !important;
+}
+
+.video-js .vjs-playback-rate-value {
+    line-height: 70px !important; /* Match control bar height */
+    font-size: 1.25em !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    height: 100% !important;
+    width: 100%;
+}
+
+/* Fullscreen Control */
+.video-js .vjs-fullscreen-control {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    margin-left: 0 !important; 
+    order: 6 !important;
+    flex: 0 0 auto !important;
+}
+
+/* 3. NORMALIZE LAYOUT for Visible Controls */
+.video-js .vjs-control-bar > .vjs-control {
+    height: 50px !important; /* Match parent height dynamically */
+    top: 0 !important;
+    margin-top: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* Common styling for visible controls spacing */
+.video-js .vjs-play-control,
+.video-js .vjs-volume-panel,
+.video-js .vjs-playback-rate,
+.video-js .vjs-fullscreen-control {
+    margin: 0 15px !important;
+}
+
+/* Icon Alignment */
+.video-js .vjs-control-bar .vjs-icon-placeholder:before {
+    line-height: 50px !important;
+    top: 0 !important;
+    font-size: 2.2em; /* Adjusted size slightly larger */
+}
+.video-js .vjs-control:before,
+.video-js .vjs-button:before {
+    line-height: 1 !important;
+    position: relative !important;
+    top: 0 !important;
+    vertical-align: middle !important;
+}
+
+/* 4. SPECIFIC COMPONENT STYLING */
+
+/* Volume Vertical Slider */
+.video-js .vjs-volume-control.vjs-volume-vertical {
+    background-color: rgba(26, 26, 26, 0.95) !important;
+    border-radius: 5px !important;
+    width: 40px !important;
+    height: 10em !important; 
+    bottom: 100% !important;
+    margin-bottom: 12px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    position: absolute !important;
+    box-sizing: border-box !important;
+    display: none !important; /* Hidden by default */
+}
+/* Bridge to prevent closing on gap transition */
+.video-js .vjs-volume-control.vjs-volume-vertical::after {
+    content: "";
+    position: absolute;
+    bottom: -15px;
+    left: 0;
+    width: 100%;
+    height: 20px;
+    background: transparent;
+    display: block;
+}
+/* Show Volume on Hover */
+.video-js .vjs-volume-panel:hover .vjs-volume-control.vjs-volume-vertical, 
+.video-js .vjs-volume-panel.vjs-hover .vjs-volume-control.vjs-volume-vertical {
+    display: flex !important;
+    pointer-events: auto !important;
+}
+.video-js .vjs-volume-bar.vjs-slider-vertical {
+    width: 0.5em !important;
+    margin: 1.35em 0 !important;
+}
+
+/* Seek Bar Holder */
+.video-js .vjs-progress-holder {
+    height: 100% !important; /* Fill parent height */
+    border-radius: 4px; 
+    margin: 0 15px; 
+    background: rgba(115, 133, 159, 0.3) !important; 
+    position: relative !important; 
+    overflow: visible !important; /* Allow ticks/pointer */
+}
+
+/* Play Progress */
+.video-js .vjs-play-progress {
+    height: 100% !important; 
+    background-color: #424c6762 !important; 
+    border-radius: 4px 0 0 4px;
+    z-index: 10 !important;
+}
+/* Play Head (Triangle) */
+.video-js .vjs-play-progress:before {
+    content: "\25BC" !important; 
+    font-family: sans-serif !important; 
+    font-size: 10px !important; 
+    color: white !important;
+    top: -9px !important; 
+    background: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    line-height: 1 !important;
+}
+
+/* 5. EXTRA ELEMENTS (Rulers, Tooltips) */
+
+/* Ruler Container */
+.vjs-ruler-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 20;
+    display: block !important;
+}
+
+/* Ruler Ticks */
+.vjs-ruler-tick {
+    position: absolute;
+    bottom: 0;
+    width: 1px !important;
+    background-color: rgba(255, 255, 255, 0.7);
+    transform: translateX(-50%);
+}
+.vjs-ruler-tick.large { height: 50% !important; }
+.vjs-ruler-tick.medium { height: 35% !important; }
+.vjs-ruler-tick.small { height: 20% !important; }
+
+/* Ruler Numbers */
+.vjs-ruler-number {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding-top: 6px; 
+    padding-bottom: 6px; 
+    font-size: 11px;
+    color: #eee;
+    font-weight: 500;
+    pointer-events: none;
+    text-shadow: 1px 1px 1px #000;
+    bottom: auto;
+}
+
+/* Custom Tooltips */
+#custom-tooltip {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    pointer-events: none;
+    z-index: 20001;
+    white-space: nowrap;
+    display: none;
+    transform: translateX(-50%);
+    bottom: 68px;
+}
+#custom-play-tooltip {
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.9);
+    color: black;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: bold;
+    pointer-events: none;
+    z-index: 20000;
+    white-space: nowrap;
+    display: none; 
+    transform: translateX(-50%);
+    bottom: 68px;
+}
+.video-js .vjs-time-tooltip { display: none !important; }
+.video-js .vjs-mouse-display { z-index: 10000 !important; }
+
+/* Fullscreen adjustments */
+.video-js.vjs-fullscreen .vjs-control-bar {
+    height: auto !important;
+    padding-bottom: 15px !important; 
+    align-items: center !important; 
+    background: rgb(20, 20, 20) !important;
+}
+.video-js.vjs-fullscreen .vjs-ruler-number {
+    z-index: 25;
+}
+
+/* HIDE Unwanted Controls strictly */
+.video-js .vjs-control-bar div[class*="live"],
+.video-js .vjs-control-bar .vjs-seek-to-live-control,
+.video-js .vjs-control-bar .vjs-live-control,
+.video-js .vjs-control-bar button[class*="skip-"], /* Hide all skip buttons */
+.video-js .vjs-control-bar .vjs-skip-backward-undefined, /* Specific user request */
+.video-js .vjs-control-bar .vjs-hidden, /* Ensure hidden elements stay hidden */
+.video-js .vjs-control-bar .vjs-live-display,
+.video-js .vjs-control-bar .vjs-chapters-button,
+.video-js .vjs-control-bar .vjs-remaining-time,
+.video-js .vjs-control-bar .vjs-remaining-time-display,
+.video-js .vjs-control-bar .vjs-current-time,
+.video-js .vjs-control-bar .vjs-current-time-display,
+.video-js .vjs-control-bar .vjs-duration,
+.video-js .vjs-control-bar .vjs-time-control,
+.video-js .vjs-control-bar .vjs-time-divider,
+.video-js .vjs-control-bar .vjs-subs-caps-button,
+.video-js .vjs-control-bar .vjs-audio-button,
+.video-js .vjs-control-bar .vjs-descriptions-button,
+.video-js .vjs-control-bar .vjs-picture-in-picture-control {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* =========================================================================
+   7. CUSTOM CONTROLS BAR (Bottom Bar)
+   ========================================================================= */
+.controls-bar {
+    flex: 0 0 auto !important; /* Fixed height based on content */
+    grid-row: auto; /* Reset grid */
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    align-items: stretch; /* Stretch children */
+    justify-content: space-between; /* Spread sections */
+    padding: 10px; 
+    background-color: #1a1a1a;
+    gap: 15px;
+    flex-shrink: 0; 
+    position: relative;
+    z-index: 9999;
+    min-height: 40px; 
+    margin: 0 !important; 
+    padding: 10px 10px 10px 10px !important; 
+    padding-bottom: 4px !important; 
+    margin-bottom: 0 !important;
+}
+
+.control-section {
+    display: flex;
+    flex-direction: row; 
+    align-items: center; 
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 4px 8px;
+    background-color: #252525;
+    justify-content: center;
+    min-width: -webkit-fill-available;
+}
+@supports (min-width: fit-content) {
+    .control-section { min-width: fit-content; }
+}
+
+.loop-section { flex: 2.5; }
+.auto-section { flex: 2.5; }
+.marker-section { flex: 5; }
+
+.section-label {
+    font-size: 10px;
+    color: #aaa;
+    text-transform: uppercase;
+    font-weight: bold;
+    margin-bottom: 0;
+    margin-right: 8px; 
+    white-space: nowrap;
+}
+body.compact-labels .section-label { display: none !important; }
+
+.section-content {
+    display: flex;
+    align-items: center;
+    justify-content: center; 
+    width: 100%; 
+    gap: 8px;
+}
+
+.marker-group { gap: 15px; }
+.marker-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #ccc;
+    font-size: 0.9em;
+    cursor: pointer;
+    -webkit-user-drag: none;
+}
+
+/* Inputs & Buttons */
+.auto-checkbox { width: auto !important; }
+
+.small-btn {
+    display: inline-block !important;
+    padding: 4px 8px !important;
+    font-size: 0.9em !important;
+    width: auto !important;
+    margin: 0 !important;
+    min-width: 50px !important;
+    white-space: nowrap !important;
+    color: #aaa !important;
+    border-color: #555 !important;
+}
+
+.loop-input {
+    width: 50px;
+    padding: 4px;
+    border-radius: 4px;
+    border: 1px solid #555;
+    background: #2c2f3e;
+    color: white;
+    text-align: center;
+}
+.loop-label { color: #aaa; font-weight: bold; font-size: 0.9em; }
+.loop-checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #ccc;
+    cursor: pointer;
+    margin-left: 5px;
+}
+.toggle-btn.active {
+    background-color: #2e7d32; 
+    color: white;
+    border: 1px solid #1b5e20;
+}
+
+/* Checkbox Styling */
+input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 1px solid #444;
+    background-color: #1a1a1a; 
+    border-radius: 3px;
+    cursor: pointer;
+    position: relative;
+    display: inline-block;
+    vertical-align: middle;
+    transition: background-color 0.2s, border-color 0.2s;
+    margin: 0;
+}
+input[type="checkbox"]:checked::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* Checkbox Colors */
+#kill:checked { background-color: #145214; border-color: #145214; }
+#assist:checked { background-color: #736e0d; border-color: #736e0d; }
+#death:checked { background-color: #661111; border-color: #661111; }
+#structure:checked { background-color: #0d246b; border-color: #0d246b; }
+#dragon:checked { background-color: #0d626e; border-color: #0d626e; }
+#voidgrub:checked { background-color: #730d4d; border-color: #730d4d; }
+#herald:checked { background-color: #660d66; border-color: #660d66; }
+#baron:checked { background-color: #3d0d66; border-color: #3d0d66; }
+
+input[type="checkbox"]:not([id]):checked,
+#loop-enabled:checked,
+#auto-stop-cb:checked,
+#auto-play-cb:checked,
+#auto-select-cb:checked,
+#auto-popup-cb:checked {
+    background-color: #2d3e6b;
+    border-color: #2d3e6b;
+}
+
+/* Fonts */
+.vjs-control-bar, .vjs-control-bar *,
+.controls-bar, .controls-bar *,
+#modal-content, #modal-content *,
+#sidebar, #sidebar * {
+    font-family: 'Inter', sans-serif;
+}
+
+/* =========================================================================
+   8. RESPONSIVE DESIGN
+   ========================================================================= */
+@media (max-width: 800px) {
+    #video-header {
+        font-size: 0.85em;
+        padding: 5px 10px;
+    }
+}
+
+@media (max-width: 600px) {
+    #video-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+    }
+    #video-header .meta-right {
+        font-size: 0.9em;
+        opacity: 0.9;
+    }
+}
+
+/* Utility (Total Gold Display) */
+.total-gold {
+    color: #ffd700; 
+    font-weight: bold;
+    font-size: 0.9em;
+    min-width: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.team-100 .player-name { margin-right: 8px !important; }
+.team-100 .total-gold {
+    order: 2; 
+    margin-right: 15px !important;
+    justify-content: flex-end; 
+}
+.team-200 .runes { margin-right: 8px !important; }
+.team-200 .total-gold {
+    order: 8;
+    margin-right: 15px !important; 
+    justify-content: flex-start; 
+}
+.icon-white { background-color: white !important; }

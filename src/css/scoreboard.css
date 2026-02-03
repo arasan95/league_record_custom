@@ -1,0 +1,602 @@
+﻿/* Scoreboard Overlay - Mapped to Grid Area */
+.scoreboard {
+    grid-area: st-scoreboard;
+    display: flex;
+    flex-direction: row; 
+    gap: 0; 
+    width: 100%;
+    align-items: flex-end; /* Align bottom matches typical scoreboard placement */
+    position: relative !important;
+    z-index: 15;
+    background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); /* Subtle backing */
+    padding-bottom: 5px;
+}
+
+.scoreboard-center {
+    display: flex;
+    flex-direction: column;
+    width: 60px; /* Fixed width for center column */
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.5); /* Slightly darker bg for center */
+    border-radius: 4px;
+    margin: 0 4px;
+}
+
+.center-header-spacer {
+    height: 20px; /* Fixed height for alignment */
+    margin-bottom: 2px;
+    width: 100%;
+}
+
+.center-diff-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+     /* Match player-row height (30px) */
+    height: 30px; 
+    width: 100%;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: #888;
+    margin-bottom: 2px; /* Match .team gap */
+}
+
+.center-diff-row.blue-win {
+    color: #4db8ff; /* Blueish */
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+.center-diff-row.red-win {
+    color: #ff6b6b; /* Reddish */
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.arrow {
+    margin: 0 2px;
+    font-size: 0.8em;
+}
+
+.team {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 4px;
+    flex: 1; 
+}
+
+.team-100 { /* Blue Team */
+    background-color: rgba(20, 30, 50, 0.4);
+    border-left: 3px solid #0acbe6;
+}
+
+.team-200 { /* Red Team */
+    background-color: rgba(50, 20, 20, 0.4);
+    border-right: 3px solid #ff2345;
+    border-left: none;
+}
+
+.team-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8em;
+    color: #ddd;
+    margin-bottom: 2px;
+    padding-left: 4px;
+    height: 20px; /* Fixed height for alignment */
+    align-items: center; /* Center text vertically */
+}
+.team-title { font-weight: bold; }
+.team-objectives { font-size: 0.9em; opacity: 0.8; }
+
+.player-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 2px;
+    height: 30px; /* Reduced to 30px (~80% of 36px) */
+}
+
+/* --- Icons & Stats --- */
+
+.champ-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 20%;
+    border: 0px solid #444;
+}
+
+.item-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 3px;
+    background-color: #1a1a1a;
+    border: 1px solid #333;
+}
+
+/* --- New Stats Components --- */
+
+.cs-stat {
+    font-size: 0.9em;
+    color: #ffe53c;
+    width: 30px; /* Reduced to fit 3 digits tightly */
+    min-width: 30px;
+    text-align: center;
+    white-space: nowrap;
+    opacity: 0.8;
+    font-variant-numeric: tabular-nums;
+}
+
+.kda {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: #ddd;
+    width: 80px; /* Reduced safely for 99/99/99 */
+    min-width: 80px;
+    white-space: nowrap;
+    text-align: center;
+    margin: 0 2px; /* Minimal margin */
+    font-variant-numeric: tabular-nums;
+}
+
+.items-grid {
+    display: flex;
+    gap: 2px;
+    /* 6 items * 24px + 5 * 2px = 144 + 10 = 154px */
+    width: 154px; 
+    min-width: 154px;
+    justify-content: center;
+}
+
+.trinket-slot {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 24px;
+    height: 24px;
+}
+
+.trinket-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px; /* Distinct shape maybe? */
+}
+
+/* Runes Styles */
+.runes {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px; /* Fixed width same as icons */
+}
+.rune-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%; 
+    background: rgba(0,0,0,0.5);
+}
+
+/* Spells adjustments */
+.spells {
+    gap: 2px;
+    display: flex; /* Ensure flex behavior */
+    flex-wrap: nowrap; /* Prevent wrapping to second line */
+    white-space: nowrap;
+    flex-shrink: 0; /* Verify it doesn't shrink */
+}
+.spell-icon {
+    width: 24px;
+    height: 24px;
+}
+
+.team-100 .player-row {
+    flex-direction: row; 
+    justify-content: flex-end; 
+}
+
+/* Explicit order to create Mirror of Red Team */
+/* Target: Name(Outer), Items, Stats, Spells, Icon(Inner) -- GoldDiff(Most Inner) */
+/* Inner for Blue is RIGHT. Inner for Red is LEFT. */
+
+/* === Spectator Layout (Flow, Non-Overlay) === */
+
+/* Container: Flex Column */
+/* Container: Flex Column */
+.video-js {
+    display: grid !important; /* Force Grid from previous step */
+    /* flex props are overridden by grid, but keeping clean */
+    height: 100% !important; 
+    width: 100% !important;
+    overflow: hidden; 
+    background-color: #000;
+}
+
+/* 2. Video (Middle) */
+/* Override video.js absolute positioning */
+.video-js .vjs-tech {
+    position: relative !important;
+    top: auto;
+    left: auto;
+    width: 100% !important;
+    height: auto !important;
+    flex: 1 1 0 !important; 
+    min-height: 0 !important;
+    object-fit: contain;
+    grid-area: video-content; /* Force grid area assignment */
+}
+
+/* 3. Scoreboard (Bottom, above controls) */
+.scoreboard {
+    position: relative !important; 
+    grid-area: st-scoreboard;
+    width: 100%;
+    flex-shrink: 0;
+    background: rgba(0,0,0,0.9);
+    pointer-events: auto;
+    padding-bottom: 0; 
+    z-index: 20;
+    transition: height 0.1s; /* Smooth transition */
+}
+
+.scoreboard.collapsed {
+    height: 12px !important; 
+    min-height: 0 !important;
+    background: rgba(200, 200, 200, 0.1) !important;
+    overflow: hidden !important;
+    width: 100% !important;
+}
+
+/* Reset zoom on collapsed to keep handle usable */
+.scoreboard.collapsed {
+    zoom: 1 !important;
+}
+
+.scoreboard.collapsed .team,
+.scoreboard.collapsed .scoreboard-center {
+    display: none !important;
+}
+
+.scoreboard.collapsed .scoreboard-resize-handle {
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    background: rgba(255, 255, 255, 0.3) !important;
+}
+.scoreboard.collapsed:hover .scoreboard-resize-handle {
+    background: rgba(255, 255, 255, 0.5) !important;
+}
+
+
+/* Resize Handle (Top Edge) */
+.scoreboard-resize-handle {
+    position: absolute;
+    top: 0; /* Align with top edge */
+    left: 0;
+    width: 100%;
+    height: 10px; /* Grabbable area */
+    transform: translateY(-50%); /* Center on the border line */
+    cursor: ns-resize;
+    z-index: 100; /* High priority */
+    background: transparent;
+    transition: background 0.2s;
+}
+
+.scoreboard-resize-handle:hover {
+    background: rgba(255, 255, 255, 0.4); /* Visible feedback */
+}
+
+/* 4. Control Bar (Bottom-most) */
+.video-js .vjs-control-bar {
+    grid-area: play-controls;
+    position: relative !important; /* Changed from absolute to relative to respect grid */
+    bottom: auto !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 50px!important; /* Keep generous height */
+    background: #1a1a1a !important; /* Match Controls 2 background */
+    display: flex !important;
+    align-items: center !important; /* Center items vertically */
+    justify-content: flex-start;
+    padding: 0 15px; /* Comfortable padding */
+    box-sizing: border-box;
+    z-index: 20000 !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    gap: 10px; /* Space between controls */
+}
+
+/* Progress Control (Seek Bar Container) */
+/* Progress Control (Seek Bar Container) - Top Layout */
+/* Progress Control (Seek Bar) - Flex Item Row */
+.video-js .vjs-progress-control {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    width: auto !important;
+    height: 100% !important;
+    flex: 1 1 auto !important; /* Grow to fill space */
+    display: flex !important;
+    align-items: center !important;
+    z-index: 20005 !important;
+    background: transparent !important;
+    margin: 0 10px !important; /* Horizontal spacing only */
+    padding: 0 !important;
+    order: 5; /* Ensure placement in flex order */
+    min-width: 200px !important; /* Prevent collapse */
+}
+
+.video-js .vjs-progress-control .vjs-progress-holder {
+    height: 70% !important; /* User preference */
+    margin: 0 !important;
+    background: rgba(67, 67, 67, 0.3) !important;
+    position: relative !important;
+    overflow: visible !important; /* Visible to show Triangle */
+    width: 100% !important;
+    border-radius: 5px !important;
+}
+
+.video-js .vjs-play-progress {
+    height: 100% !important;
+    background-color: #394f7161 !important;
+    position: absolute !important;
+    top: 0 !important;
+    border-radius: 5px !important; /* Round all to fit container at 100% */
+}
+
+/* 1. Top Triangle Pointer */
+.video-js .vjs-play-progress:before {
+    content: "\25BC" !important; /* Down Triangle */
+    font-family: sans-serif !important;
+    font-size: 10px !important;
+    color: white !important;
+    position: absolute !important;
+    right: -4px !important; /* Center triangle over edge */
+    top: -12px !important; /* Allow sticking out */
+    line-height: 1 !important;
+    z-index: 20;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+/* 2. Internal Vertical Line */
+.video-js .vjs-play-progress:after {
+    content: "" !important;
+    position: absolute !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    right: 0 !important;
+    width: 2px !important;
+    height: 100% !important;
+    background: white !important;
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.8) !important;
+    z-index: 15;
+    border-radius: 0 !important; /* Keep line sharp even if bar is rounded */
+}
+
+/* Controls */
+/* Controls Items */
+.video-js .vjs-control {
+    position: relative;
+    height: 100% !important; /* Fill bar height */
+    width: auto !important;
+    min-width: 32px;
+    display: flex !important;
+    align-items: center !important; /* Vertical center */
+    justify-content: center;
+    flex: 0 0 auto !important;
+    visibility: visible !important;
+}
+
+.video-js.vjs-has-started .vjs-big-play-button {
+    display: none;
+}
+
+
+/* Spectator header and .spec-* content: see header.css (single source) */
+
+/* --- Scoreboard & Team Styles --- */
+/* .scoreboard is defined in Layout section above */
+
+/* Standardize Container Gaps */
+.team {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 2px; /* Ensure 2px padding for both teams */
+    border-radius: 0;
+    flex: 1; 
+    background-color: transparent; 
+}
+
+/* Remove borders from teams in spectator mode */
+/* Restore single continuous border for teams with NEON GLOW */
+.team-100 { 
+    border-left: 3px solid #0acbe6 !important; 
+    border-right: none !important; /* Explicitly remove right border */
+    background: transparent;
+    box-shadow: -4px 0 15px rgba(10, 203, 230, 0.5), inset 10px 0 20px rgba(10, 203, 230, 0.1); 
+}
+.team-200 { 
+    border-right: 3px solid #ff2345 !important; 
+    border-left: none !important; /* Explicitly remove left border */
+    background: transparent; 
+    box-shadow: 4px 0 15px rgba(255, 35, 69, 0.5), inset -10px 0 20px rgba(255, 35, 69, 0.1); 
+}
+
+/* Keep player row styling */
+.player-row {
+    background-color: rgba(20, 20, 20, 0.6) !important;
+    margin-bottom: 0 !important; /* Use gap */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+    height: 34px !important; /* Compact Height */
+    display: flex !important;
+    align-items: center !important; /* Vertical Center content */
+    padding: 0 5px !important; /* Reduce vertical padding */
+    box-sizing: border-box !important;
+}
+
+/* Remove individual row borders to create a clean single team edge */
+.team-100 .player-row { 
+    border-left: none !important; 
+    background: linear-gradient(90deg, rgba(10, 203, 230, 0.15) 0%, rgba(20, 20, 20, 0.6) 40%) !important;
+}
+.team-200 .player-row { 
+    border-right: none !important; 
+    background: linear-gradient(-90deg, rgba(255, 35, 69, 0.15) 0%, rgba(20, 20, 20, 0.6) 40%) !important;
+}
+
+/* Item Slot Styling to restore frames */
+.item-slot {
+    width: 26px;
+    height: 26px;
+    border: 1px solid #555;
+    background-color: rgba(0,0,0,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    margin: 0; /* Margin replaced by flex gap */
+}
+
+/* Ensure Trinket slot matches or overrides */
+.trinket-slot-frame {
+    border-color: #777; 
+}
+
+.item-icon {
+    width: 24px;
+    height: 24px;
+    display: block;
+}
+
+
+
+/* Center Gold Diff Column */
+/* Center Gold Diff Column */
+.scoreboard-center {
+    width: 60px;
+    background-color: transparent; 
+    
+    /* Match .team structure for vertical alignment */
+    display: flex;
+    flex-direction: column;
+    padding: 2px; /* Top padding matches .team */
+    gap: 2px;     /* Gap matches .team */
+    
+    justify-content: flex-start; 
+}
+
+.center-diff-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 34px !important; /* MATCH PLAYER ROW HEIGHT */
+    width: 100%;
+    font-size: 1.1em; /* Increased from 0.8em */
+    font-weight: bold;
+    color: #ddd; /* Brightened from #888 */
+    margin-bottom: 0 !important; /* MATCH PLAYER ROW MARGIN */
+    box-sizing: border-box !important;
+}
+
+/* Gold Diff Value Centering Wrapper */
+.center-diff-row .diff-val {
+    position: relative;
+    display: inline-block;
+}
+
+/* Unhook Arrow from flow to keep number centered */
+.center-diff-row .arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.8em; /* Slightly smaller arrow if needed */
+    white-space: nowrap;
+}
+
+.center-diff-row .arrow-left {
+    right: 100%;
+    margin-right: 4px;
+}
+
+.center-diff-row .arrow-right {
+    left: 100%;
+    margin-left: 4px;
+}
+
+/* Clear old specific team styles if we are overriding completely */
+/* === NEW SYMMETRICAL LAYOUT === */
+/*
+   Blue Team (Left): [Runes] [Spells] [Trinket] [Items] [KDA] [CS] [Icon] [Name] -> Center
+   Red Team (Right): Center <- [Name] [Icon] [CS] [KDA] [Items] [Trinket] [Spells] [Runes]
+*/
+
+/* Blue Team (Team 100) - Layout: Outer [Name] [Runes] [Spells] [Trinket] [Items] ... [Icon] Inner */
+.team-100 .player-row {
+    flex-direction: row; 
+    justify-content: flex-end; /* Align content towards center (Right) */
+}
+
+/* Shared Flex Properties for stability */
+.items-grid, .trinket-container {
+    display: flex !important;
+    align-items: center !important;
+    flex-shrink: 0 !important;
+    gap: 2px !important; /* Spacing between slots */
+}
+
+/* 
+   Blue Team (100) - [Spells] --(5px)-- [Trinket] --(2px)-- [Items] 
+   Symmetry Goal: Spells-Trinket (5px), Trinket-Items (2px)
+*/
+.team-100 .player-name      { order: 1; text-align: right; margin-right: 15px; } 
+.team-100 .runes            { order: 2; margin-right: 2px; }
+.team-100 .spells           { order: 3; margin-right: 0px; } 
+.team-100 .trinket-container{ order: 4; margin-left: 5px; margin-right: 2px; } 
+.team-100 .items-grid       { order: 5; margin-right: 5px; } /* Gap to KDA */
+.team-100 .kda-stat         { order: 6; margin-right: 0px; text-align: center; }
+.team-100 .cs-stat          { order: 7; margin-right: 5px; text-align: center; }
+.team-100 .champ-icon       { order: 8; margin-right: 5px; }
+
+/* 
+   Red Team (200) - [Items] --(2px)-- [Trinket] --(5px)-- [Spells] 
+   Symmetry Goal: Items-Trinket (2px), Trinket-Spells (5px)
+*/
+.team-200 .player-row {
+    flex-direction: row; 
+    justify-content: flex-start; /* Align content towards center (Left) */
+}
+.team-200 .champ-icon       { order: 1; margin-right: 5px; }
+.team-200 .cs-stat          { order: 2; margin-right: 0px; text-align: center; }
+.team-200 .kda-stat         { order: 3; margin-right: 5px; text-align: center; }
+.team-200 .items-grid       { order: 4; margin-right: 12px; } /* Gap to Trinket (Increased to 8px to fix overlap) */
+.team-200 .trinket-container{ order: 5; margin-left: 0px; margin-right: 5px; } /* Gap to Spells (5px) */
+.team-200 .spells           { order: 6; margin-right: 2px; }
+.team-200 .runes            { order: 7; margin-right: 15px; }
+.team-200 .player-name      { order: 8; text-align: left; }
+
+/* Remove old order rules */
+
+/* Old gold-diff styles removed */
+
+/* Obsolete gold-diff rules removed */
+
+.team-200 { /* Red Team */
+    background-color: rgba(50, 20, 20, 0.4);
+    border-left: none;
+    border-right: 3px solid #ff2345; /* Border on Right (Outside) */
+}
+
+/* Blue Team already has border-left from base class or previous rule, which is correct for Outside (Left) */
+
+.team-100 .team-header {
+    flex-direction: row; /* Keep standard header L->R (Title on Left) */
+    /* If we want Title on Outside (Left), standard is fine. */
+}
+
+.team-200 .team-header {
+    flex-direction: row-reverse; /* Flip Header: Title on Right (Outside) */
+}
+
+/* Clear previous overrides */
+/* ---------------------------------------------------- */
