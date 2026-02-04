@@ -1850,8 +1850,8 @@ export default class UI {
             return teamDiv;
         };
 
-        const topDiv = await renderTeam(100, participants100, participants200);
-        const botDiv = await renderTeam(200, participants200, participants100);
+        const topDiv = await renderTeam(100, sorted100, sorted200);
+        const botDiv = await renderTeam(200, sorted200, sorted100);
 
         if (this.metadataRenderId !== currentRenderId) return;
         if (!topDiv || !botDiv) return;
