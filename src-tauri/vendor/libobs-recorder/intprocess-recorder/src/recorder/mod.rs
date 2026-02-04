@@ -461,14 +461,34 @@ impl InpRecorder {
 
         let framerate = settings.framerate.unwrap_or(Framerate::new(30, 1));
 
+        // SMART SCALING: Recalculate output resolution to maintain aspect ratio
+        let input = settings.input_resolution;
+        let output_target = settings.output_resolution;
+
+        // Calculate aspect ratio from input (Game Window)
+        let aspect = input.width() as f64 / input.height() as f64;
+
+        // Calculate new width based on target height (e.g. 720) and input aspect ratio
+        let new_width = (output_target.height() as f64 * aspect).round() as u32;
+
+        // Ensure even width (required for many encoders/formats like NV12)
+        let new_width = new_width + (new_width % 2);
+
+        let effective_output_resolution = Resolution::new(new_width, output_target.height());
+
+        println!(
+            "Configuring Resolution: Input {:?} -> Target {:?} -> Effective {:?}",
+            input, output_target, effective_output_resolution
+        );
+
         let video_reset_necessary = settings.input_resolution.width() != ovi.base_width
             || settings.input_resolution.height() != ovi.base_height
-            || settings.output_resolution.width() != ovi.output_width
-            || settings.output_resolution.height() != ovi.output_height
+            || effective_output_resolution.width() != ovi.output_width
+            || effective_output_resolution.height() != ovi.output_height
             || framerate.num() != ovi.fps_num
             || framerate.den() != ovi.fps_den;
         if video_reset_necessary {
-            Self::reset_video(settings.input_resolution, settings.output_resolution, framerate)?;
+            Self::reset_video(settings.input_resolution, effective_output_resolution, framerate)?;
 
             unsafe {
                 // reconfigure video output pipeline after resetting the video backend

@@ -2382,8 +2382,19 @@ export default class UI {
 
              // --- Update Spawn Timers ---
              // Calculate Next Spawn
-             // Current Time is `Math.floor(currentTime / 1000)` (seconds) plus offset
-             const now = Math.floor(currentTime / 1000) + this.recordingOffset;
+             // SYNC FIX: Use raw player time (seconds) + recording offset.
+             // Do NOT use 'currentTime' variable from above as it has a +2000ms hack for inventory sync.
+             const rawVideoSeconds = this.player.currentTime();
+             const gameTimeFloat = rawVideoSeconds + this.recordingOffset;
+             const now = Math.floor(gameTimeFloat);
+
+             // Update Central Game Timer
+             if (this.headerTimeText) {
+                 const absNow = Math.abs(now);
+                 const m = Math.floor(absNow / 60);
+                 const s = Math.floor(absNow % 60);
+                 this.headerTimeText.textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+             }
 
              // Get Config based on Queue ID
              const queueId = this.currentQueueId;
