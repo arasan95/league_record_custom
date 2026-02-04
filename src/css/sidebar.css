@@ -113,6 +113,16 @@
     background: rgba(0, 210, 255, 0.15) !important;
 }
 
+#filter-ranked-btn.active {
+    color: #2de09e !important;
+    background: rgba(45, 224, 158, 0.15) !important;
+}
+
+#filter-search-btn.active {
+    color: #d566ff !important;
+    background: rgba(213, 102, 255, 0.15) !important;
+}
+
 #sidebar #sidebar-info #size {
     text-align: center;
     color: #ffffff;
