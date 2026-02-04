@@ -1154,8 +1154,8 @@ export default class UI {
         this.recordingOffset = data.ingameTimeRecStartOffset;
         
         // DEBUG: Trace ID Map and Refs
-        console.log("DEBUG: Metadata Participants:", data.participants.map(p => `${p.participantId}:${p.championId}`));
-        console.log("DEBUG: ID Map:", Array.from(idMap.entries()));
+        // console.log("DEBUG: Metadata Participants:", data.participants.map(p => `${p.participantId}:${p.championId}`));
+        // console.log("DEBUG: ID Map:", Array.from(idMap.entries()));
 
         // Note: The rest of this function renders the *final* state as the initial view.
         // We will then start updating it on timeupdate.
@@ -1406,22 +1406,22 @@ export default class UI {
                  const killer = this.participants.find(p => p.participantId == kId);
                  if (killer) {
                      teamId = killer.teamId;
-                     console.warn(`[DEBUG-INIT] EliteKill Found: kId=${kId} Team=${teamId} Type=${e.EliteMonsterKill.monster_type.monsterType}`);
+                     // console.warn(`[DEBUG-INIT] EliteKill Found: kId=${kId} Team=${teamId} Type=${e.EliteMonsterKill.monster_type.monsterType}`);
                  } else {
                      // 2. Check Assists if killer is neutral/minion
                      const assists = e.EliteMonsterKill.assisting_participant_ids;
                      if (assists && assists.length > 0) {
                          const assister = this.participants.find(p => assists.includes(p.participantId));
                          if (assister) teamId = assister.teamId;
-                         console.warn(`[DEBUG-INIT] EliteKill Assist: kId=${kId} Team=${teamId} Assists=${JSON.stringify(assists)}`);
+                         // console.warn(`[DEBUG-INIT] EliteKill Assist: kId=${kId} Team=${teamId} Assists=${JSON.stringify(assists)}`);
                      } else {
-                         console.error(`[DEBUG-INIT] EliteKill UNKNOWN: kId=${kId} No Killer/Assists found!`);
+                         // console.error(`[DEBUG-INIT] EliteKill UNKNOWN: kId=${kId} No Killer/Assists found!`);
                      }
                  }
                  
                  const type = e.EliteMonsterKill.monster_type;
                  
-                 console.log(`[DEBUG] Init EliteKill: kId=${kId} Team=${teamId} Type=${type.monsterType}`);
+                 // console.log(`[DEBUG] Init EliteKill: kId=${kId} Team=${teamId} Type=${type.monsterType}`);
                  
                  if (teamId === 100) {
                     if (type.monsterType === "DRAGON") t100_Dragons++;
@@ -1444,7 +1444,7 @@ export default class UI {
         // No mapping needed if IDs are identical, or we can explicit set Identity.
         // Passing undefined to InventoryTimeline makes it use event.pid directly.
         
-        console.log("DEBUG: Using Direct ParticipantID Mapping (No ID Map)");
+        // console.log("DEBUG: Using Direct ParticipantID Mapping (No ID Map)");
         this.timeline = new InventoryTimeline(this.events, data.participants.map(p => p.participantId), undefined);
 
         // Render Header Team Side
@@ -1960,9 +1960,9 @@ export default class UI {
          // Game version for item pricing
          const gameVersion = this.currentGameVersion || getCurrentPatchVersion(); 
          // Debug log once per roughly second to avoid spam
-         if (Math.floor(currentTime / 1000) % 5 === 0 && Math.floor(currentTime) % 10 === 0) {
-             console.log("UpdateTimeline: Version:", gameVersion, "ItemPrice(1001 boots):", getItemPrice(1001, gameVersion));
-         }
+         // if (Math.floor(currentTime / 1000) % 5 === 0 && Math.floor(currentTime) % 10 === 0) {
+         //     console.log("UpdateTimeline: Version:", gameVersion, "ItemPrice(1001 boots):", getItemPrice(1001, gameVersion));
+         // }
 
          this.scoreboardRefs.forEach((refs, pid) => {
              const state = this.timeline!.getStateAt(pid, currentTime);
@@ -2026,12 +2026,12 @@ export default class UI {
              itemGoldMap.set(pid, currentGold);
              
              // DEBUG: Trace Update for PID 4 (Zed) and 5 (Caitlyn)
-             if (pid === 4 || pid === 5) {
-                // Throttle log
-                if (Math.floor(currentTime / 1000) % 10 === 0 && Math.floor(currentTime) % 20 === 0) {
-                    console.log(`DEBUG: UpdateTimeline PID ${pid} Items:`, state ? state.items : "No State", "DOM:", refs.items.length);
-                }
-             }
+             // if (pid === 4 || pid === 5) {
+             //    // Throttle log
+             //    if (Math.floor(currentTime / 1000) % 10 === 0 && Math.floor(currentTime) % 20 === 0) {
+             //        console.log(`DEBUG: UpdateTimeline PID ${pid} Items:`, state ? state.items : "No State", "DOM:", refs.items.length);
+             //    }
+             // }
          });
 
          // Update Gold Diffs
@@ -2209,16 +2209,16 @@ export default class UI {
                          const killer = this.participants.find(p => p.participantId == kId);
                          if (killer) {
                              tId = killer.teamId;
-                             console.warn(`[DEBUG-TL] EliteKill Found: kId=${kId} Team=${tId} Type=${e.EliteMonsterKill.monster_type.monsterType}`);
+                            // console.warn(`[DEBUG-TL] EliteKill Found: kId=${kId} Team=${tId} Type=${e.EliteMonsterKill.monster_type.monsterType}`);
                          } else {
                              // Fallback: If killer is neutral/minion (0), check assists
                              const assists = e.EliteMonsterKill.assisting_participant_ids;
                              if (assists && assists.length > 0) {
                                  const assister = this.participants.find(p => assists.includes(p.participantId));
                                  if (assister) tId = assister.teamId;
-                                 console.warn(`[DEBUG-TL] EliteKill Assist: kId=${kId} Team=${tId}`);
+                                // console.warn(`[DEBUG-TL] EliteKill Assist: kId=${kId} Team=${tId}`);
                              } else {
-                                 console.error(`[DEBUG-TL] EliteKill UNKNOWN: kId=${kId} No Killer/Assists found!`);
+                                // console.error(`[DEBUG-TL] EliteKill UNKNOWN: kId=${kId} No Killer/Assists found!`);
                              }
                          }
                          
@@ -2226,7 +2226,7 @@ export default class UI {
                              const team = tId as 100 | 200;
                              const type = e.EliteMonsterKill.monster_type;
                              
-                             console.log(`[DEBUG] Timeline EliteKill: kId=${kId} Team=${team} Type=${type.monsterType}`);
+                             // console.log(`[DEBUG] Timeline EliteKill: kId=${kId} Team=${team} Type=${type.monsterType}`);
 
                              if (type.monsterType === "DRAGON") dragons[team]++;
                              else if (type.monsterType === "BARON_NASHOR") barons[team]++;
