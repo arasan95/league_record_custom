@@ -510,6 +510,9 @@ export default class UI {
     private lastOnRename: any;
     private lastOnDelete: any;
     private lastRecordingsSizeGb: number = 0;
+    
+    // DOM Cache to prevent image flickering
+    private recordingElementMap = new Map<string, HTMLElement>();
 
     public updateSideBar = (
         recordingsSizeGb: number,
@@ -518,6 +521,7 @@ export default class UI {
         onFavorite: (videoId: string) => Promise<boolean | null>,
         onRename: (videoId: string) => void,
         onDelete: (videoId: string) => void,
+        forceUpdateIds: string[] = []
     ) => {
         // Cache data for local re-filtering
         this.lastRecordingsSizeGb = recordingsSizeGb;
@@ -575,300 +579,400 @@ export default class UI {
         if (this.sizeTotalText) this.sizeTotalText.textContent = recordingsSizeGb.toFixed(1);
         if (this.sizeMaxText) this.sizeMaxText.textContent = this.maxStorageGb > 0 ? this.maxStorageGb.toString() : "∞";
 
-        const videoLiElements = recordings
-            .filter(r => {
-                // FILTER LOGIC
-                // 1. Star Filter
-                if (this.filterStar) {
-                    if (!isFavorite(r.metadata)) return false;
-                }
-                // 2. Clip Filter
-                if (this.filterClip) {
-                    // Check if filename indicates a clip (e.g. ends with -clip.mp4 or has metadata?)
-                    // Current clip logic: `createClip` creates file named `...-clip.mp4`.
-                    // r.videoId is the filename.
-                    if (!r.videoId.includes("-clip")) return false; 
-                }
-                return true;
-            })
-            .map((recording) => {
-            const videoName = toVideoName(recording.videoId);
-            let displayContent: HTMLElement[] = [this.vjs.dom.createEl("span", {}, { class: "video-name" }, videoName) as HTMLElement];
-            let liClass = "recording-item";
-            
-            // Layout Elements
-            const mainContent = document.createElement("div");
-            mainContent.className = "recording-content";
-
+        const videoLiElements = recordings.map((recording, index) => {
+            // STRICT FILTERING: If metadata is missing or "Unknown Queue", do NOT display it.
+            // User requested: "If it can't be acquired, it's fine to display nothing."
+            let shouldHide = true;
             if (recording.metadata && "Metadata" in recording.metadata) {
-                liClass += " has-metadata";
-                const meta = recording.metadata.Metadata;
-                const parts = videoName.split("_");
-                
-                // Date Formatting
-                let dateStr = videoName;
-                if (parts.length === 2) {
-                    const dParts = parts[0].split("-"); // YYYY-MM-DD
-                    const tParts = parts[1].split("-"); // HH-MM-SS
-                    if (dParts.length === 3 && tParts.length >= 2) {
-                         // YYYY/MM/DD HH:MM
-                         dateStr = `${dParts[0]}/${parseInt(dParts[1])}/${parseInt(dParts[2])} ${tParts[0]}:${tParts[1]}`;
-                    }
+                const m = recording.metadata.Metadata;
+                // Broaden check: If queue is missing OR name contains "Unknown" (case insensitive), hide it ONLY IF STATS ARE MISSING.
+                // If stats are present, it's a finished game (e.g. AI game with unmapped ID), so show it.
+                if (m.stats || (m.queue && m.queue.name && !m.queue.name.toLowerCase().includes("unknown"))) {
+                    shouldHide = false;
                 }
-
-                const champion = meta.championName;
-                const kda = `${meta.stats.kills}/${meta.stats.deaths}/${meta.stats.assists}`;
-                const result = meta.stats.gameEndedInEarlySurrender 
-                    ? "Remake" 
-                    : meta.stats.win ? "Victory" : "Defeat";
-                
-                const resultClass = meta.stats.gameEndedInEarlySurrender 
-                    ? "remake-text" 
-                    : meta.stats.win ? "win-text" : "loss-text";
-                
-                let queueName = meta.queue?.name ?? "Custom";
-                // Shorten Names
-                const qLower = queueName.toLowerCase();
-                if (qLower.includes("practice") || qLower.includes("プラクティス")) {
-                    queueName = "Practice";
-                } else if (qLower.includes("custom") || qLower.includes("カスタム")) {
-                    queueName = "Custom";
-                } else if (qLower.includes("bot") || qLower.includes("ai") || qLower.includes("intro") || qLower.includes("intermediate") || qLower.includes("入門") || qLower.includes("初級") || qLower.includes("中級")) {
-                    queueName = "vs AI";
-                } else if (qLower.includes("aram")) {
-                    queueName = "ARAM";
-                } else if (qLower.includes("flex")) {
-                    queueName = "Flex";
-                } else if (qLower.includes("solo")) {
-                    queueName = "Solo/Duo";
-                } else if (qLower.includes("arena")) {
-                    queueName = "Arena";
-                } else if (qLower.includes("draft")) {
-                    queueName = "Draft";
-                } else if (qLower.includes("blind")) {
-                    queueName = "Blind";
-                } else if (qLower.includes("quick")) {
-                    queueName = "Quick";
-                } else if (qLower.includes("tft")) {
-                    queueName = "TFT";
-                } else if (qLower.includes("clash")) {
-                    queueName = "Clash";
-                } else {
-                    // Fallback to simpler truncation if needed, or just keep as is if short enough
-                    queueName = queueName.replace("5v5", "").replace("games", "").trim();
-                }
-
-                if (queueName === "Unknown Queue") {
-                    queueName = "Unknown";
-                }
-
-
-
-                // Determine Side for Border Color and Sidebar Indicator
-                // Priority 1: Check explicit teamId (added in newer versions)
-                // Priority 2: Check list index (0-4 Blue, 5+ Red)
-                // Priority 3: Check participantId (1-5 Blue, 6-10 Red)
-                
-                let isRedSide = false;
-                const selfPart = meta.participants.find(p => p.participantId === meta.participantId);
-                
-                if (selfPart && "teamId" in selfPart) {
-                     // @ts-ignore - teamId might not be in bindings.ts yet
-                     if (selfPart.teamId === 200) isRedSide = true;
-                } else {
-                    // Fallback for old recordings
-                    const pIndex = meta.participants.findIndex(p => p.participantId === meta.participantId);
-                    if (pIndex !== -1) {
-                         if (pIndex >= 5) isRedSide = true;
-                    } else {
-                         if (meta.participantId > 5) isRedSide = true;
-                    }
-                }
-
-                if (isRedSide) {
-                    liClass += " side-red";
-                } else {
-                    liClass += " side-blue"; // Default to blue
-                }
-
-                // --- Game Duration Calculation ---
-                let rawDuration = 0;
-                if ("gameDuration" in meta) {
-                     // @ts-ignore
-                     rawDuration = meta.gameDuration;
-                }
-                
-                // Fallback: Use Gold Timeline timestamp if duration is 0
-                if (rawDuration === 0 && meta.goldTimeline && meta.goldTimeline.length > 0) {
-                     const lastFrame = meta.goldTimeline[meta.goldTimeline.length - 1];
-                     rawDuration = lastFrame.timestamp;
-                }
-                
-                // Heuristic: If > 20000, assume Milliseconds. Else Seconds.
-                // 20000 ms = 20 seconds. 20000 s = 5.5 hours.
-                // League games are usually > 3 mins (180s) and < 2 hours.
-                let durationSec = rawDuration;
-                if (rawDuration > 20000) { 
-                    durationSec = Math.floor(rawDuration / 1000);
-                }
-
-                const minutes = Math.floor(durationSec / 60);
-                const seconds = durationSec % 60;
-                const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-
-                // --- CS Calculation ---
-                const totalCS = meta.stats.totalMinionsKilled + meta.stats.neutralMinionsKilled;
-                const csPerMin = durationSec > 0 ? (totalCS / (durationSec / 60)).toFixed(1) : "0.0";
-
-
-                // --- Flattened Layout Elements (Refactored) ---
-                
-                // 1. Header: Time and Mode
-                // Layout: [Time] [Mode] (Horizontal)
-                const headerRow = this.vjs.dom.createEl("div", {}, { class: "sidebar-header-row" });
-                const timeSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-time" }, timeStr);
-                const modeSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-mode" }, queueName);
-                headerRow.append(timeSpan, modeSpan);
-
-                // 2. Body: Icon + Stats
-                const bodyRow = this.vjs.dom.createEl("div", {}, { class: "sidebar-body-row" });
-                
-                // Icon
-                const mainIconImg = this.vjs.dom.createEl("img", {}, { class: "main-champ-img" }) as HTMLImageElement;
-                
-                // Stats Column (KDA, CS, Result)
-                const statsCol = this.vjs.dom.createEl("div", {}, { class: "sidebar-stats" });
-                const kdaSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-kda" }, kda);
-                const csSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-cs" }, `${totalCS} CS (${csPerMin}/m)`);
-                const resultSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-result " + resultClass }, result);
-                
-                
-                statsCol.append(kdaSpan, csSpan, resultSpan);
-
-                // Add LP Diff if available
-                if (meta.lpDiff !== undefined && meta.lpDiff !== null) {
-                    const diff = meta.lpDiff;
-                    const diffStr = diff >= 0 ? `+${diff} LP` : `${diff} LP`;
-                    const lpClass = "sidebar-lp " + resultClass; // Reuse result color logic
-                    const lpSpan = this.vjs.dom.createEl("span", {}, { class: lpClass }, diffStr);
-                    statsCol.append(lpSpan);
-                }
-
-                bodyRow.append(mainIconImg, statsCol);
-
-                // Main Column (Header + Body)
-                const mainCol = this.vjs.dom.createEl("div", {}, { class: "sidebar-main" });
-                mainCol.append(headerRow, bodyRow);
-
-                // Right: Meta (Date, Participants)
-                const rightCol = this.vjs.dom.createEl("div", {}, { class: "sidebar-right" });
-                
-                // Date Row
-                const dateSpan = this.vjs.dom.createEl("div", {}, { class: "sidebar-date" }, dateStr);
-                
-                // Participants
-                const participantsContainer = this.vjs.dom.createEl("div", {}, { class: "sidebar-participants" });
-                const team1Row = this.vjs.dom.createEl("div", {}, { class: "participant-row" }) as HTMLElement; // Blue
-                const team2Row = this.vjs.dom.createEl("div", {}, { class: "participant-row" }) as HTMLElement; // Red
-                participantsContainer.append(team1Row, team2Row);
-
-                rightCol.append(dateSpan, participantsContainer);
-
-                // Append All to Grid Container
-                // Layout: [Main (Header/Body)] [Right]
-                mainContent.append(mainCol, rightCol);
-
-                // Load Icons Async
-                void (async () => {
-                    try {
-                        // Use Champion ID for consistency and reliability (avoids name mismatches)
-                        const selfParticipant = meta.participants.find((p) => p.participantId === meta.participantId);
-                        if (selfParticipant) {
-                             const url = await getChampionIconUrlById(selfParticipant.championId);
-                             mainIconImg.src = url;
-                             mainIconImg.onerror = () => { console.error("Failed to load main icon:", url); };
-                        } else {
-                            // Fallback to name if participant not found (unlikely)
-                             const url = await getChampionIconUrl(champion);
-                             mainIconImg.src = url;
-                        }
-                    } catch (e) {
-                        console.error("Error fetching main icon:", e);
-                    }
-                    
-                    const p100 = meta.participants.filter(p => p.participantId <= 5);
-                    const p200 = meta.participants.filter(p => p.participantId > 5);
-
-                    // Helper to create and load sub-icon
-                    const appendIcon = async (p: Participant, row: HTMLElement) => {
-                         const img = this.vjs.dom.createEl("img", { src: "" }, { class: "sub-champ-icon" }) as HTMLImageElement;
-                         row.append(img); // Append immediately
-                         try {
-                             const url = await getChampionIconUrlById(p.championId);
-                             img.src = url;
-                             img.onerror = () => { img.style.display = "none"; };
-                         } catch (e) {
-                             img.style.display = "none";
-                         }
-                    };
-
-                    for (const p of p100) void appendIcon(p, team1Row);
-                    for (const p of p200) void appendIcon(p, team2Row);
-
-                })();
-
-                displayContent = [mainContent];
+            }
+            
+            if (shouldHide) {
+                return undefined;
             }
 
-            // Buttons (reuse logic)
-            const favorite = isFavorite(recording.metadata);
-            const favoriteBtn = this.vjs.dom.createEl("span", {
-                    onclick: (e: MouseEvent) => {
-                        e.stopPropagation();
-                        // eslint-disable-next-line always-return
-                        onFavorite(recording.videoId).then((fav) => {
-                            if (fav !== null) {
-                                favoriteBtn.innerHTML = fav ? "★" : "☆";
-                                favoriteBtn.style.color = fav ? "gold" : "";
-                            }
-                        });
-                    },
-                },
-                { class: "favorite", ...(favorite ? { style: "color: gold" } : {}) },
-                favorite ? "★" : "☆",
-            ) as HTMLSpanElement;
-
-            const renameBtn = this.vjs.dom.createEl("span", {
-                    onclick: (e: MouseEvent) => { e.stopPropagation(); onRename(recording.videoId); },
-                }, { class: "rename" }, "✎",
-            );
-            const deleteBtn = this.vjs.dom.createEl("span", {
-                    onclick: (e: MouseEvent) => { e.stopPropagation(); onDelete(recording.videoId); },
-                }, { class: "delete" }, "×",
-            );
+            // Retrieve from cache or create new
+            let li = this.recordingElementMap.get(recording.videoId);
+            const hasMetadata = recording.metadata && ("Metadata" in recording.metadata) && recording.metadata.Metadata.queue.name !== "Unknown Queue";
             
-            // Wrap buttons
-            const actionsDiv = this.vjs.dom.createEl("div", {}, { class: "sidebar-actions" }, [favoriteBtn, renameBtn, deleteBtn]);
+            // Check for forced update OR ALWAYS force update for the latest item (index 0)
+            // This guarantees that the latest recording (which changes from Unknown -> Known) is always fresh.
+            if (forceUpdateIds.includes(recording.videoId) || index === 0) {
+                li = undefined;
+            }
+            // Invalidate cache if metadata state changed (e.g. Unknown -> Known)
+            else if (li) {
+                const cachedHasMeta = li.dataset.hasMetadata === "true";
+                // Helper to check validity
+                const isNowValid = recording.metadata && ("Metadata" in recording.metadata) && 
+                    (recording.metadata.Metadata.stats || (recording.metadata.Metadata.queue.name && !recording.metadata.Metadata.queue.name.toLowerCase().includes("unknown")));
+                
+                if (Boolean(isNowValid) !== cachedHasMeta) {
+                     li = undefined; // Force recreate
+                }
+            }
 
-            // Append everything to LI
-            // displayContent is array of elements (usually just mainContent now if metadata exists)
-            // If No metadata, `displayContent` is `[span]`.
-            // We should append contents.
-            const li = this.vjs.dom.createEl("li", { onclick: () => onVideo(recording.videoId) }, { id: recording.videoId, class: liClass });
-            
-            if (recording.metadata && "Metadata" in recording.metadata) {
-                li.append(mainContent);
+            if (!li) {
+                li = this.createRecordingItem(recording, onVideo, onFavorite, onRename, onDelete);
+                this.recordingElementMap.set(recording.videoId, li);
+            }
+
+            // Apply Filters (Visibility Toggle)
+            let isVisible = true;
+            // 1. Star Filter
+            if (this.filterStar) {
+                if (!isFavorite(recording.metadata)) isVisible = false;
+            }
+            // 2. Clip Filter
+            if (isVisible && this.filterClip) {
+                if (!recording.videoId.includes("-clip")) isVisible = false;
+            }
+
+            if (isVisible) {
+                li.style.display = "";
             } else {
-                 // Fallback for non-metadata
-                 li.append(...displayContent);
+                li.style.display = "none";
             }
-            li.append(actionsDiv);
             
             return li;
-        });
+        }).filter(li => li !== undefined) as HTMLElement[];
+        
+        // Prune Loop: Remove map entries not in current recordings (handle deletion/rename)
+        if (recordings.length !== this.recordingElementMap.size) {
+             const currentIds = new Set(recordings.map(r => r.videoId));
+             for (const id of this.recordingElementMap.keys()) {
+                 if (!currentIds.has(id)) {
+                     this.recordingElementMap.delete(id);
+                 }
+             }
+        }
 
         this.vjs.dom.insertContent(this.sidebar, videoLiElements);
         // this.vjs.dom.insertContent(this.recordingsSize, recordingsSizeGb.toFixed(2).toString()); // Removed
+    };
+
+    public createRecordingItem = (
+        recording: Recording,
+        onVideo: (videoId: string) => void,
+        onFavorite: (videoId: string) => Promise<boolean | null>,
+        onRename: (videoId: string) => void,
+        onDelete: (videoId: string) => void,
+    ) => {
+        const videoName = toVideoName(recording.videoId);
+        let displayContent: HTMLElement[] = [this.vjs.dom.createEl("span", {}, { class: "video-name" }, videoName) as HTMLElement];
+        let liClass = "recording-item";
+        
+        // Layout Elements
+        const mainContent = document.createElement("div");
+        mainContent.className = "recording-content";
+
+        if (recording.metadata && "Metadata" in recording.metadata) {
+            liClass += " has-metadata";
+            const meta = recording.metadata.Metadata;
+            const parts = videoName.split("_");
+            
+            // Date Formatting
+            let dateStr = videoName;
+            if (parts.length === 2) {
+                const dParts = parts[0].split("-"); // YYYY-MM-DD
+                const tParts = parts[1].split("-"); // HH-MM-SS
+                if (dParts.length === 3 && tParts.length >= 2) {
+                        // YYYY/MM/DD HH:MM
+                        dateStr = `${dParts[0]}/${parseInt(dParts[1])}/${parseInt(dParts[2])} ${tParts[0]}:${tParts[1]}`;
+                }
+            }
+
+            const champion = meta.championName;
+            const kda = `${meta.stats.kills}/${meta.stats.deaths}/${meta.stats.assists}`;
+            const result = meta.stats.gameEndedInEarlySurrender 
+                ? "Remake" 
+                : meta.stats.win ? "Victory" : "Defeat";
+            
+            const resultClass = meta.stats.gameEndedInEarlySurrender 
+                ? "remake-text" 
+                : meta.stats.win ? "win-text" : "loss-text";
+            
+            let queueName = meta.queue?.name ?? "Custom";
+            // Shorten Names
+            const qLower = queueName.toLowerCase();
+            if (qLower.includes("practice") || qLower.includes("プラクティス")) {
+                queueName = "Practice";
+            } else if (qLower.includes("custom") || qLower.includes("カスタム")) {
+                queueName = "Custom";
+            } else if (qLower.includes("bot") || qLower.includes("ai") || qLower.includes("intro") || qLower.includes("intermediate") || qLower.includes("入門") || qLower.includes("初級") || qLower.includes("中級")) {
+                queueName = "vs AI";
+            } else if (qLower.includes("aram")) {
+                queueName = "ARAM";
+            } else if (qLower.includes("flex")) {
+                queueName = "Flex";
+            } else if (qLower.includes("solo")) {
+                queueName = "Solo/Duo";
+            } else if (qLower.includes("arena")) {
+                queueName = "Arena";
+            } else if (qLower.includes("draft")) {
+                queueName = "Draft";
+            } else if (qLower.includes("blind")) {
+                queueName = "Blind";
+            } else if (qLower.includes("quick")) {
+                queueName = "Quick";
+            } else if (qLower.includes("clash")) {
+                queueName = "Clash";
+            } else if (qLower.includes("ranked") || qLower.includes("rank")) {
+                queueName = "Ranked";
+            } else if (qLower.includes("normal") || qLower.includes("draft") || qLower.includes("blind")) {
+                queueName = "Normal";
+            }
+
+            if (queueName === "Unknown Queue") {
+                queueName = "Unknown";
+            }
+
+            // Determine Side for Border Color and Sidebar Indicator
+            let isRedSide = false;
+            const selfPart = meta.participants.find(p => p.participantId === meta.participantId);
+            
+            if (selfPart && "teamId" in selfPart) {
+                    // @ts-ignore
+                    if (selfPart.teamId === 200) isRedSide = true;
+            } else {
+                const pIndex = meta.participants.findIndex(p => p.participantId === meta.participantId);
+                if (pIndex !== -1) {
+                        if (pIndex >= 5) isRedSide = true;
+                } else {
+                        if (meta.participantId > 5) isRedSide = true;
+                }
+            }
+
+            if (isRedSide) {
+                liClass += " side-red";
+            } else {
+                liClass += " side-blue"; // Default to blue
+            }
+
+            const dateEl = this.vjs.dom.createEl("div", {}, { class: "rec-date" }, dateStr);
+            const champEl = this.vjs.dom.createEl("div", {}, { class: "rec-champ" }, champion);
+            const kdaEl = this.vjs.dom.createEl("div", {}, { class: "rec-kda" }, kda);
+            const resultEl = this.vjs.dom.createEl("div", {}, { class: `rec-result ${resultClass}` }, result);
+            const queueEl = this.vjs.dom.createEl("div", {}, { class: "rec-queue" }, queueName);
+
+            // --- Game Duration Calculation ---
+            let rawDuration = 0;
+            if ("gameDuration" in meta) {
+                    // @ts-ignore
+                    rawDuration = meta.gameDuration;
+            }
+            
+            // Fallback: Use Gold Timeline timestamp if duration is 0
+            if (rawDuration === 0 && meta.goldTimeline && meta.goldTimeline.length > 0) {
+                    const lastFrame = meta.goldTimeline[meta.goldTimeline.length - 1];
+                    rawDuration = lastFrame.timestamp;
+            }
+            
+            // Heuristic: If > 20000, assume Milliseconds. Else Seconds.
+            let durationSec = rawDuration;
+            if (rawDuration > 20000) { 
+                durationSec = Math.floor(rawDuration / 1000);
+            }
+
+            const minutes = Math.floor(durationSec / 60);
+            const seconds = durationSec % 60;
+            const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+            // --- CS Calculation ---
+            const totalCS = meta.stats.totalMinionsKilled + meta.stats.neutralMinionsKilled;
+            const csPerMin = durationSec > 0 ? (totalCS / (durationSec / 60)).toFixed(1) : "0.0";
+
+            // --- Flattened Layout Elements (Refactored) ---
+            
+            // 1. Header: Time and Mode
+            const headerRow = this.vjs.dom.createEl("div", {}, { class: "sidebar-header-row" });
+            const timeSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-time" }, timeStr);
+            const modeSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-mode" }, queueName);
+            headerRow.append(timeSpan, modeSpan);
+
+            // 2. Body: Icon + Stats
+            const bodyRow = this.vjs.dom.createEl("div", {}, { class: "sidebar-body-row" });
+            
+            // Icon
+            const mainIconImg = this.vjs.dom.createEl("img", {}, { class: "main-champ-img" }) as HTMLImageElement;
+            
+            // Stats Column (KDA, CS, Result)
+            const statsCol = this.vjs.dom.createEl("div", {}, { class: "sidebar-stats" });
+            const kdaSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-kda" }, kda);
+            const csSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-cs" }, `${totalCS} CS (${csPerMin}/m)`);
+            const resultSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-result " + resultClass }, result);
+            
+            statsCol.append(kdaSpan, csSpan, resultSpan);
+
+            // Add LP Diff if available
+            if (meta.lpDiff !== undefined && meta.lpDiff !== null) {
+                const diff = meta.lpDiff;
+                const diffStr = diff >= 0 ? `+${diff} LP` : `${diff} LP`;
+                const lpClass = "sidebar-lp " + resultClass; // Reuse result color logic
+                const lpSpan = this.vjs.dom.createEl("span", {}, { class: lpClass }, diffStr);
+                statsCol.append(lpSpan);
+            }
+
+            bodyRow.append(mainIconImg, statsCol);
+
+            // Main Column (Header + Body)
+            const mainCol = this.vjs.dom.createEl("div", {}, { class: "sidebar-main" });
+            mainCol.append(headerRow, bodyRow);
+
+            // Right: Meta (Date, Participants)
+            const rightCol = this.vjs.dom.createEl("div", {}, { class: "sidebar-right" });
+            
+            // Date Row
+            const dateSpan = this.vjs.dom.createEl("div", {}, { class: "sidebar-date" }, dateStr);
+            
+            // Participants
+            const participantsContainer = this.vjs.dom.createEl("div", {}, { class: "sidebar-participants" });
+            const team1Row = this.vjs.dom.createEl("div", {}, { class: "participant-row" }) as HTMLElement; // Blue
+            const team2Row = this.vjs.dom.createEl("div", {}, { class: "participant-row" }) as HTMLElement; // Red
+            participantsContainer.append(team1Row, team2Row);
+
+            rightCol.append(dateSpan, participantsContainer);
+
+            // Append All to Grid Container
+            mainContent.append(mainCol, rightCol);
+
+            // Load Icons Async
+            void (async () => {
+                try {
+                    const selfParticipant = meta.participants.find((p) => p.participantId === meta.participantId);
+                    if (selfParticipant) {
+                            const url = await getChampionIconUrlById(selfParticipant.championId);
+                            mainIconImg.src = url;
+                            mainIconImg.onerror = () => { console.error("Failed to load main icon:", url); };
+                    } else {
+                            const url = await getChampionIconUrl(champion);
+                            mainIconImg.src = url;
+                    }
+                } catch (e) {
+                    console.error("Error fetching main icon:", e);
+                }
+                
+                const p100 = meta.participants.filter(p => p.participantId <= 5);
+                const p200 = meta.participants.filter(p => p.participantId > 5);
+
+                const appendIcon = async (p: Participant, row: HTMLElement) => {
+                        const img = this.vjs.dom.createEl("img", { src: "" }, { class: "sub-champ-icon" }) as HTMLImageElement;
+                        row.append(img);
+                        try {
+                            const url = await getChampionIconUrlById(p.championId);
+                            img.src = url;
+                            img.onerror = () => { img.style.display = "none"; };
+                        } catch (e) {
+                            img.style.display = "none";
+                        }
+                };
+
+                for (const p of p100) void appendIcon(p, team1Row);
+                for (const p of p200) void appendIcon(p, team2Row);
+            })();
+
+            displayContent = [mainContent];
+
+        } else {
+             // do nothing, just show filename
+        }
+        
+        // Buttons (reuse logic)
+        const favorite = isFavorite(recording.metadata);
+        const favoriteBtn = this.vjs.dom.createEl("span", {
+                onclick: (e: MouseEvent) => {
+                    e.stopPropagation();
+                    // eslint-disable-next-line always-return
+                    onFavorite(recording.videoId).then((fav) => {
+                        if (fav !== null) {
+                            favoriteBtn.innerHTML = fav ? "★" : "☆";
+                            favoriteBtn.style.color = fav ? "gold" : "";
+                        }
+                    });
+                },
+            },
+            { class: "favorite", ...(favorite ? { style: "color: gold" } : {}) },
+            favorite ? "★" : "☆",
+        ) as HTMLSpanElement;
+
+        const renameBtn = this.vjs.dom.createEl("span", {
+                onclick: (e: MouseEvent) => { e.stopPropagation(); onRename(recording.videoId); },
+            }, { class: "rename" }, "✎",
+        );
+        const deleteBtn = this.vjs.dom.createEl("span", {
+                onclick: (e: MouseEvent) => { e.stopPropagation(); onDelete(recording.videoId); },
+            }, { class: "delete" }, "×",
+        );
+
+        // Wrap buttons
+        const actionsDiv = this.vjs.dom.createEl("div", {}, { class: "sidebar-actions" }, [favoriteBtn, renameBtn, deleteBtn]);
+
+        // Append everything to LI
+        const li = this.vjs.dom.createEl("li", { onclick: () => onVideo(recording.videoId) }, { id: recording.videoId, class: liClass }) as HTMLElement;
+        
+        // Add Dataset for ID lookup
+        li.dataset.videoId = recording.videoId;
+
+        if (recording.metadata && "Metadata" in recording.metadata) {
+            // Check for Unknown Queue (treated as no metadata for display purposes? No, we show it but as "Unknown")
+            // But for cache invalidation, we want to know if it's "Rich" metadata.
+            // If "Unknown Queue", we treat it as "incomplete".
+            if (recording.metadata.Metadata.queue.name !== "Unknown Queue") {
+                li.dataset.hasMetadata = "true";
+            } else {
+                li.dataset.hasMetadata = "false";
+            }
+            li.append(mainContent);
+        } else {
+             // Fallback for non-metadata
+             li.dataset.hasMetadata = "false";
+             li.append(...displayContent);
+        }
+        li.append(actionsDiv);
+        
+        return li;
+    };
+
+    public updateRecordingItem = (recording: Recording) => {
+        const existingLi = document.getElementById(recording.videoId);
+        
+        if (existingLi && this.lastOnVideo) {
+            // "Only reload ... the ones that haven't been loaded"
+            // If it already has metadata class, it's loaded.
+            if (existingLi.classList.contains("has-metadata")) {
+               // Skip update if requested by logic (optional, but requested by user to be efficient/minimal)
+               // However, maybe metadata CHANGED? Let's check user intent.
+               // "Sidebar delay... filename only... process to retry... Only reload ones not loaded"
+               // So if it IS loaded (has-metadata), we can skip.
+               // BUT if we just renamed it? Rename calls full updateSidebar usually.
+               // Here we are reacting to MetadataChanged.
+               // If MetadataChanged fires for an already loaded item, it might be a fix or improvement.
+               // But respecting "Only reload ... not loaded":
+               // Let's check if recording has metadata NOW.
+               if (recording.metadata && "Metadata" in recording.metadata) {
+                   // New data is full. Old data was full.
+                   console.log(`Skipping UI update for ${recording.videoId} as it already has metadata.`);
+                   return;
+               }
+            }
+            
+            const newLi = this.createRecordingItem(
+                recording, 
+                this.lastOnVideo, 
+                this.lastOnFavorite, 
+                this.lastOnRename, 
+                this.lastOnDelete
+            );
+            
+            existingLi.replaceWith(newLi);
+            this.recordingElementMap.set(recording.videoId, newLi);
+            console.log(`Updated sidebar item: ${recording.videoId}`);
+        }
     };
 
     public showModal = (content: ContentDescriptor) => {

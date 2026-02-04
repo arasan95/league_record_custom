@@ -479,12 +479,26 @@ async function main() {
     }
 
     const listenerManager = new ListenerManager();
-    listenerManager.listen_app("RecordingsChanged", updateSidebar);
+    listenerManager.listen_app("RecordingsChanged", async () => {
+        const recordings = await updateSidebar();
+        checkLatestAndRetry(recordings);
+    });
     listenerManager.listen_app("MarkerflagsChanged", () =>
         commands.getMarkerFlags().then((flags) => ui.setMarkerFlags(flags)),
     );
     listenerManager.listen_app("MetadataChanged", ({ payload }) => {
         const activeVideoId = ui.getActiveVideoId();
+        
+        // 1. Partial Sidebar Update (Refresh List Items)
+        payload.forEach(videoId => {
+            commands.getMetadata(videoId).then(metadata => {
+                // Construct strictly typed Recording object
+                const recording = { videoId, metadata }; 
+                ui.updateRecordingItem(recording);
+            });
+        });
+
+        // 2. Active Video Update (Refresh Detail View)
         if (activeVideoId !== null && payload.includes(activeVideoId)) {
             // update metadata for currently selected recording
             setMetadata(activeVideoId);
@@ -596,6 +610,7 @@ async function main() {
     });
 
     const videoIds = await updateSidebar();
+    checkLatestAndRetry(videoIds);
     const firstVideo = videoIds[0];
     if (firstVideo) {
         void setVideo(firstVideo.videoId, false);
@@ -609,21 +624,90 @@ async function main() {
 // --- SIDEBAR, VIDEO PLAYER, DESCRIPTION  ---
 
 // use this function to update the sidebar
-async function updateSidebar() {
+async function updateSidebar(forceUpdateIds: string[] = []) {
     const activeVideoId = ui.getActiveVideoId();
 
     const [recordings, recordingsSize] = await Promise.all([
         commands.getRecordingsList(),
         commands.getRecordingsSize(),
     ]);
-    ui.updateSideBar(recordingsSize, recordings, setVideo, commands.toggleFavorite, showRenameModal, showDeleteModal);
+    ui.updateSideBar(recordingsSize, recordings, setVideo, commands.toggleFavorite, showRenameModal, showDeleteModal, forceUpdateIds);
 
     if (!ui.setActiveVideoId(activeVideoId)) {
         void setVideo(null);
     }
 
+    // Check latest recording for Unknown status and retry if needed
+    // Logic moved to checkLatestAndRetry called by consumers
     return recordings;
 }
+
+function checkLatestAndRetry(recordings: any[]) {
+    if (recordings.length > 0) {
+        const latest = recordings[0];
+        let isUnknown = !latest.metadata || ("NoData" in latest.metadata);
+        
+        if (!isUnknown && latest.metadata && "Metadata" in latest.metadata) {
+             const m = latest.metadata.Metadata;
+             // Check if queue is missing OR named Unknown Queue (or contains Unknown)
+             if (!m.queue || !m.queue.name || m.queue.name.toLowerCase().includes("unknown")) {
+                 isUnknown = true;
+             }
+        }
+
+        if (isUnknown) {
+            console.log(`Latest recording ${latest.videoId} is Unknown. Scheduling retries...`);
+            retrySidebarUpdate(10, latest.videoId);
+        }
+    }
+}
+
+async function retrySidebarUpdate(attemptsLeft: number, targetId: string) {
+    if (attemptsLeft <= 0) return;
+
+    setTimeout(async () => {
+        try {
+            console.log(`Retrying Sidebar Update for ${targetId}... Attempts left: ${attemptsLeft}`);
+            // Force update the specific item to bypass cache, ensuring F5-like behavior
+            const recordings = await updateSidebar([targetId]);
+            
+            if (recordings.length > 0) {
+                // 1. Try to find the original target
+                let latest = recordings.find(r => r.videoId === targetId);
+                let currentTargetId = targetId;
+
+                // 2. If lost (renamed?), switch tracking to the ACTUAL latest recording
+                if (!latest) {
+                    console.log(`Target ID ${targetId} lost. Switching focus to latest recording.`);
+                    latest = recordings[0];
+                    currentTargetId = latest.videoId;
+                }
+                
+                if (latest) {
+                    let isUnknown = !latest.metadata || ("NoData" in latest.metadata);
+                    
+                    if (!isUnknown && "Metadata" in latest.metadata) {
+                        const m = latest.metadata.Metadata;
+                        // Queue missing or "Unknown Queue" -> keep retrying
+                        if (!m.queue || m.queue.name === "Unknown Queue") {
+                            isUnknown = true;
+                        }
+                    }
+
+                    if (isUnknown) {
+                        retrySidebarUpdate(attemptsLeft - 1, currentTargetId);
+                    } else {
+                        console.log("Retry successful: Data is valid.");
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Error in retry loop:", e);
+            retrySidebarUpdate(attemptsLeft - 1, targetId);
+        }
+    }, 1000); // 1 second interval
+}
+
 
 // use this function to set the video (null => no video)
 async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
