@@ -770,7 +770,8 @@ export default class UI {
             // Fallback: Use Gold Timeline timestamp if duration is 0
             if (rawDuration === 0 && meta.goldTimeline && meta.goldTimeline.length > 0) {
                     const lastFrame = meta.goldTimeline[meta.goldTimeline.length - 1];
-                    rawDuration = lastFrame.timestamp;
+                    // Timeline is in Milliseconds, convert to Seconds immediately.
+                    rawDuration = Math.floor(lastFrame.timestamp / 1000);
             }
             
             // Heuristic: If > 20000, assume Milliseconds. Else Seconds.
