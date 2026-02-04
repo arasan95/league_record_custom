@@ -46,6 +46,10 @@ export default class UI {
 
     private readonly filterStarBtn;
     private readonly filterClipBtn;
+    private readonly filterRankedBtn;
+    private readonly filterSearchBtn;
+    private readonly searchBarContainer;
+    private readonly searchInput;
 
     // Storage Elements
     private readonly segClip;
@@ -58,6 +62,9 @@ export default class UI {
 
     private filterStar = false;
     private filterClip = false;
+    private filterRanked = false;
+    private filterSearch = false;
+    private searchQuery = "";
     
     // Store latest recordings to re-render locally
     private lastRecordings: ReadonlyArray<Recording> = [];
@@ -251,6 +258,10 @@ export default class UI {
 
         this.filterStarBtn = document.querySelector<HTMLButtonElement>("#filter-star-btn")!;
         this.filterClipBtn = document.querySelector<HTMLButtonElement>("#filter-clip-btn")!;
+        this.filterRankedBtn = document.querySelector<HTMLButtonElement>("#filter-ranked-btn")!;
+        this.filterSearchBtn = document.querySelector<HTMLButtonElement>("#filter-search-btn")!;
+        this.searchBarContainer = document.querySelector<HTMLDivElement>("#search-bar-container")!;
+        this.searchInput = document.querySelector<HTMLInputElement>("#search-input")!;
         
         // Storage Elements
         this.segClip = document.querySelector<HTMLDivElement>(".seg-clip")!;
@@ -299,7 +310,56 @@ export default class UI {
                     this.filterClipBtn.style.color = "";
                 }
                 
-                 if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+                if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+            });
+        }
+
+        if (this.filterRankedBtn) {
+            this.filterRankedBtn.addEventListener("click", () => {
+                this.filterRanked = !this.filterRanked;
+                
+                if (this.filterRanked) {
+                    this.filterRankedBtn.classList.add("active");
+                    this.filterRankedBtn.style.color = "#2de09e"; // Greenish for rank
+                } else {
+                    this.filterRankedBtn.classList.remove("active");
+                    this.filterRankedBtn.style.color = "";
+                }
+                
+                if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+            });
+        }
+
+        if (this.filterSearchBtn) {
+            this.filterSearchBtn.addEventListener("click", () => {
+                this.filterSearch = !this.filterSearch;
+
+                if (this.filterSearch) {
+                    this.filterSearchBtn.classList.add("active");
+                    this.filterSearchBtn.style.color = "#ffaa00"; // Orange for search
+                    if (this.searchBarContainer) {
+                         this.searchBarContainer.style.display = "block";
+                         if (this.searchInput) this.searchInput.focus();
+                    }
+                } else {
+                    this.filterSearchBtn.classList.remove("active");
+                    this.filterSearchBtn.style.color = "";
+                    if (this.searchBarContainer) this.searchBarContainer.style.display = "none";
+                    
+                    // Clear search on close
+                    if (this.searchQuery !== "") {
+                        this.searchQuery = "";
+                        if (this.searchInput) this.searchInput.value = "";
+                        if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+                    }
+                }
+            });
+        }
+        
+        if (this.searchInput) {
+            this.searchInput.addEventListener("input", (e) => {
+                this.searchQuery = (e.target as HTMLInputElement).value.toLowerCase();
+                if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
             });
         }
 
@@ -590,6 +650,15 @@ export default class UI {
                 if (m.stats || (m.queue && m.queue.name && !m.queue.name.toLowerCase().includes("unknown"))) {
                     shouldHide = false;
                 }
+                
+                // Search Filter
+                if (this.searchQuery && this.searchQuery !== "") {
+                    // Check champion name
+                    const champName = m.championName;
+                    if (champName && !champName.toLowerCase().includes(this.searchQuery)) {
+                        shouldHide = true;
+                    }
+                }
             }
             
             if (shouldHide) {
@@ -629,9 +698,22 @@ export default class UI {
                 if (!isFavorite(recording.metadata)) isVisible = false;
             }
             // 2. Clip Filter
-            if (isVisible && this.filterClip) {
-                if (!recording.videoId.includes("-clip")) isVisible = false;
+            if (this.filterClip && !recording.videoId.includes("-clip")) {
+                isVisible = false;
             }
+            // 3. Ranked Filter
+            if (this.filterRanked) {
+                if (recording.metadata && "Metadata" in recording.metadata) {
+                    const m = recording.metadata.Metadata;
+                    if (!m.queue || !m.queue.isRanked) {
+                        isVisible = false;
+                    }
+                } else {
+                    // No metadata = Unknown, assume not ranked
+                    isVisible = false;
+                }
+            }
+
 
             if (isVisible) {
                 li.style.display = "";
