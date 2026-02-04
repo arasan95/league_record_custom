@@ -3,19 +3,10 @@ import { exists, mkdir, writeFile, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { appLocalDataDir, join } from "@tauri-apps/api/path";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
+import { commands } from "./bindings";
+
 // We will store cached images in a subdirectory named 'img_cache' inside AppLocalData
 const CACHE_DIR = "img_cache";
-
-/**
- * Ensures the cache directory exists.
- */
-async function ensureCacheDir() {
-    // console.log("Checking cache dir in:", await appLocalDataDir());
-    const dirExists = await exists(CACHE_DIR, { baseDir: BaseDirectory.AppLocalData });
-    if (!dirExists) {
-        await mkdir(CACHE_DIR, { baseDir: BaseDirectory.AppLocalData, recursive: true });
-    }
-}
 
 /**
  * Downloads a file from a URL and saves it to the cache, or returns the cached path if it exists.
@@ -27,40 +18,25 @@ export async function getCachedAssetUrl(url: string, category: string, filename:
     if (!url) return "";
 
     try {
-        await ensureCacheDir();
-
-        // Ensure category subdirectory
+        // Ensure category subdirectory (Frontend check)
+        // Backend also checks, but checking here allows skipping the invoke if file exists
         const categoryDir = `${CACHE_DIR}/${category}`;
-        const catExists = await exists(categoryDir, { baseDir: BaseDirectory.AppLocalData });
-        if (!catExists) {
-            await mkdir(categoryDir, { baseDir: BaseDirectory.AppLocalData, recursive: true });
-        }
-
         const filePath = `${categoryDir}/${filename}`;
         
         // Check cache
         if (await exists(filePath, { baseDir: BaseDirectory.AppLocalData })) {
-            // Construct absolute path for convertFileSrc
             const appData = await appLocalDataDir();
             const absPath = await join(appData, categoryDir, filename);
             return convertFileSrc(absPath);
         }
 
-        // Download
-        console.log(`Downloading ${url} to ${filePath}...`);
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.error(`Failed to fetch ${url}: ${response.statusText}`);
-            return url; // Fallback to remote if download fails
-        }
-        
-        const blob = await response.blob();
-        const buffer = await blob.arrayBuffer();
-        await writeFile(filePath, new Uint8Array(buffer), { baseDir: BaseDirectory.AppLocalData });
+        // Download via Backend to bypass CORS
+        if (!url.startsWith("http")) return url;
 
-        // Return local src
-        const appData = await appLocalDataDir();
-        const absPath = await join(appData, categoryDir, filename);
+        console.log(`Downloading (Native) ${url} to ${category}/${filename}...`);
+        
+        // Backend returns the absolute path on success
+        const absPath = await commands.downloadImage(url, category, filename);
         return convertFileSrc(absPath);
 
     } catch (err) {
