@@ -686,7 +686,7 @@ async function retrySidebarUpdate(attemptsLeft: number, targetId: string) {
                 if (latest) {
                     let isUnknown = !latest.metadata || ("NoData" in latest.metadata);
                     
-                    if (!isUnknown && "Metadata" in latest.metadata) {
+                    if (!isUnknown && latest.metadata && "Metadata" in latest.metadata) {
                         const m = latest.metadata.Metadata;
                         // Queue missing or "Unknown Queue" -> keep retrying
                         if (!m.queue || m.queue.name === "Unknown Queue") {

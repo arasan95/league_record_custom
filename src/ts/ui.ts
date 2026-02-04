@@ -858,8 +858,16 @@ export default class UI {
                     console.error("Error fetching main icon:", e);
                 }
                 
-                const p100 = meta.participants.filter(p => p.participantId <= 5);
-                const p200 = meta.participants.filter(p => p.participantId > 5);
+                const p100 = meta.participants.filter(p => {
+                    if ("teamId" in p && p.teamId === 200) return false;
+                    if ("teamId" in p && p.teamId === 100) return true;
+                    return p.participantId <= 5;
+                });
+                const p200 = meta.participants.filter(p => {
+                    if ("teamId" in p && p.teamId === 200) return true;
+                    if ("teamId" in p && p.teamId === 100) return false;
+                    return p.participantId > 5;
+                });
 
                 const appendIcon = async (p: Participant, row: HTMLElement) => {
                         const img = this.vjs.dom.createEl("img", { src: "" }, { class: "sub-champ-icon" }) as HTMLImageElement;

@@ -519,11 +519,6 @@ fn merge_live_events(
             (intermediate_name, None)
         };
 
-        println!(
-            "DEBUG: Processing Event Shopper='{}' -> Name='{}' TeamObj={:?} CNAME={:?}",
-            shopper_name, actual_name, target_team_side, target_cname
-        );
-
         // Match Logic
         let identity = participant_identities.iter().find(|pi| {
             let pid = pi.participant_id;
