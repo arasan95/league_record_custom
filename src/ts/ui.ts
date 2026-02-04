@@ -1734,7 +1734,8 @@ export default class UI {
         this.dragonTimerIcon = dTimer.icon as HTMLImageElement;
         this.dragonTimerIcon.src = monoDrake; // Always dragon
 
-        const isSR = SR_QUEUES.includes((data.queue.id as any));
+        const isPractice = data.queue?.name?.toLowerCase().includes("practice") ?? false;
+        const isSR = SR_QUEUES.includes((data.queue.id as any)) || isPractice;
         
         if (!isSR) {
             bTimer.container.style.display = "none";
@@ -2377,9 +2378,8 @@ export default class UI {
              if (this.team200VoidgrubText) this.team200VoidgrubText.textContent = `${grubs[200]}`;
              if (this.team100HeraldText) this.team100HeraldText.textContent = `${heralds[100]}`;
              if (this.team200HeraldText) this.team200HeraldText.textContent = `${heralds[200]}`;
-             if (this.team200HeraldText) this.team200HeraldText.textContent = `${heralds[200]}`;
-
-
+        }
+        
              // --- Update Spawn Timers ---
              // Calculate Next Spawn
              // SYNC FIX: Use raw player time (seconds) + recording offset.
@@ -2620,8 +2620,6 @@ export default class UI {
                      formatTimer(t, this.dragonTimerText, this.dragonTimerIcon, "#ffffffff"); 
                  }
              }
-
-         }
     };
 
     public showBigPlayButton = (show: boolean) => {
