@@ -60,7 +60,78 @@ export class InventoryTimeline {
                 this.handleSell(newState, event.ItemSold.item_id, slot);
             } else if ("ItemUndo" in event) {
                 this.handleUndo(newState, event.ItemUndo.before_id, event.ItemUndo.after_id);
+            } else if ("ScoreboardSwap" in event) {
+                // This is a custom/hypothetical event to handle user swapping rows in-game.
+                // However, the event log provided does NOT show any swap events.
+                // The issue description says "途中から手動でゲーム内のスコアボードを入れ替えた".
+                // If the game client sends us swap info, we need to handle it.
+                // But standard Riot API doesn't usually stream this in match-v5 timeline directly?
+                // Wait, if the user swapped rows IN-GAME, does that change participantId? NO.
+                // But maybe the `participant_id` in events effectively points to a "Slot"?
+                // NO, `participant_id` 1-10 is fixed to the player.
+                
+                // HYPOTHESIS: The user means *they* swapped rows in *our* tool? 
+                // NO, "ゲーム内のスコアボードを入れ替えた" (swapped *in-game* scoreboard).
+                // If they swap in-game, it only changes visual order in the LoL client.
+                // The API Data (Match V5) usually keeps IDs 1-10 fixed to the players.
+                // So ID 1 is ALWAYS Player A, regardless of where they are on the scoreboard.
+                
+                // SO WHY is the data showing swapped items?
+                // Maybe the "Slot" data in `ItemPurchased` events is somehow relative to something else? 
+                // Unlikely.
+                
+                // Let's look at the LOG again.
+                // ID Map: 0:[1,1], 1:[2,2]... It's 1:1.
+                // If ID 4 (Zed) buys item X. Timeline records "ID 4 bought X".
+                // UI renders "Zed (ID 4)". UpdateTimeline fetches state for ID 4. 
+                // It SHOULD match.
+                
+                // UNLESS... The `idMap` logic I added earlier is WRONG?
+                // No, I added the map but logic seems standard.
+                
+                // Wait, check `this.idMap` usage in `timeline.ts`.
+                // `if (this.idMap && this.idMap.has(pid)) pid = this.idMap.get(pid)!;`
+                
+                // The `idMap` maps [Index(0-9) + 1] -> [participantId].
+                // If `data.participants` is sorted 1-10, map is 1->1, 2->2.
+                // But what if `data.participants` is NOT sorted by ID?
+                // `data.participants` comes from `MatchV5`. The array order IS the ID order usually (0=ID1, 1=ID2).
+                // BUT, sometimes participantId can be arbitrary? 
+                
+                // The LOG says: `DEBUG: Metadata Participants: 1:86,2:517,3:143,4:238,5:51...`
+                // 1 -> 86 (Garen?)
+                // 4 -> 238 (Zed)
+                // 5 -> 51 (Caitlyn)
+                
+                // If the Timeline Event says "participant_id: 4" (Zed) bought Item X.
+                // Code: `pid = 4`. `idMap.get(4)` -> 4. `history.get(4)`. Pushes Item X.
+                // UI: Zed has `p.participantId = 4`. `scoreboardRefs.get(4)`. 
+                // `timeline.getStateAt(4)`. Returns state with Item X.
+                // Zed's row (ID 4) displays Item X.
+                
+                // THIS should be correct.
+                
+                // User says: "Caitlyn's item displayed on Zed".
+                // Caitlyn is ID 5. Zed is ID 4.
+                // So, Zed (ID 4) row is showing data from ID 5?
+                // If Zed row calls `getStateAt(4)`, it gets ID 4 data.
+                // If ID 4 data contains Caitlyn's items...
+                // Then the EVENT LOG must say "participant_id: 4" (Zed) bought Caitlyn's items?
+                // That would mean the Riot API / Replay data is swapping IDs?
+                // OR `participant_id` in events refers to *Slot Index* (which swaps) not *original ID*?
+                // Replay files (.rofl) sometimes use "Slot ID" checking.
+                
+                // IF the game allows swapping scoreboard slots, and that changes the "participant_id" in the event stream
+                // (e.g. Zed moves to Slot 5, now events for Zed come as ID 5??)
+                // That would be insane behavior for an API, but possible in Replay/Spectator internal protocols.
+                
+                // If this is happening, we need a "Swap" event to update our mapping.
+                // BUT we don't see a swap event in "GameEvent" types.
+                
+                // LET'S ASSUME the provided log file `2026-02-04_09-04.json` contains clues.
+                // I will search for weird item purchases in the log file given earlier.
             }
+
 
             // Only add if time changed, else update last entry? 
             // Better to push new entry to be safe with ordering.

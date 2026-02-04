@@ -98,8 +98,8 @@ impl GameListener {
     async fn run_info_poller(live_events: Arc<Mutex<Vec<LiveGameEvent>>>) -> Vec<LiveGameEvent> {
         let client = shaco::ingame::IngameClient::new();
         let mut last_event_id = 0;
-        // Cache: SummonerName -> List of Items
-        let mut previous_inventory: HashMap<String, Vec<shaco::model::ingame::PlayerItem>> = HashMap::new();
+        // Cache: ParticipantIndex -> List of Items
+        let mut previous_inventory: HashMap<usize, Vec<shaco::model::ingame::PlayerItem>> = HashMap::new();
 
         loop {
             // Poll every 1 second
@@ -120,18 +120,12 @@ impl GameListener {
                     }
 
                     // 2. Process Inventory Diffs (Synthetic Item Events)
-                    for player in &data.all_players {
+                    for (i, player) in data.all_players.iter().enumerate() {
                         let name = player.summoner_name.clone();
                         let current_items = player.items.clone();
 
-                        let old_items = previous_inventory.entry(name.clone()).or_default();
-
-                        // Simple Diff Logic:
-                        // We compare counts of each itemID.
-                        // Note: This doesn't track slot moves, which is fine.
-                        // But we need to handle "Purchase" vs "Sell".
-                        // If we just use list diff, we might miss swaps?
-                        // Let's rely on itemID presence/count.
+                        // Use Index as key to avoid duplicate name collision (Sivir Bot vs Sivir Bot)
+                        let old_items = previous_inventory.entry(i).or_default();
 
                         let mut old_counts: HashMap<i32, i32> = HashMap::new();
                         for item in old_items.iter() {
@@ -152,14 +146,18 @@ impl GameListener {
                                 // Find the full item struct from old_items
                                 if let Some(item_struct) = old_items.iter().find(|i| i.item_id == *id) {
                                     for _ in 0..diff {
-                                        // Use index-based identifier for robust bot matching
-                                        // Find index of this player in data.all_players since order is fixed (0-9)
-                                        let player_idx = data
-                                            .all_players
-                                            .iter()
-                                            .position(|p| p.summoner_name == name)
-                                            .unwrap_or(0);
-                                        let unique_name = format!("{}#IDX:{}", name, player_idx);
+                                        // Use Name + Team identifier.
+                                        // Team is required to disambiguate bots with same name on different teams.
+                                        let team_intro = match player.team {
+                                            shaco::model::ingame::TeamId::Chaos => "200",
+                                            shaco::model::ingame::TeamId::Order => "100",
+                                            _ => "100", // Default or Neutral?
+                                        };
+                                        // SkinID logic: ChampionID * 1000 + SkinIndex
+                                        let unique_name =
+                                            format!("{}#TEAM:{}#CNAME:{}", name, team_intro, player.champion_name);
+
+                                        // println!("DEBUG: Generated Event ItemSold for {}", unique_name);
 
                                         new_events.push(LiveGameEvent::ItemSold(shaco::model::ingame::ItemSold {
                                             event_id: 0, // Synthetic Only
@@ -181,13 +179,16 @@ impl GameListener {
                                 // Find the full item struct
                                 if let Some(item_struct) = current_items.iter().find(|i| i.item_id == *id) {
                                     for _ in 0..diff {
-                                        // Use index-based identifier for robust bot matching
-                                        let player_idx = data
-                                            .all_players
-                                            .iter()
-                                            .position(|p| p.summoner_name == name)
-                                            .unwrap_or(0);
-                                        let unique_name = format!("{}#IDX:{}", name, player_idx);
+                                        // Use Name + Team identifier.
+                                        let team_intro = match player.team {
+                                            shaco::model::ingame::TeamId::Chaos => "200",
+                                            shaco::model::ingame::TeamId::Order => "100",
+                                            _ => "100",
+                                        };
+                                        let unique_name =
+                                            format!("{}#TEAM:{}#CNAME:{}", name, team_intro, player.champion_name);
+
+                                        // println!("DEBUG: Generated Event ItemPurchased for {}", unique_name);
 
                                         new_events.push(LiveGameEvent::ItemPurchased(
                                             shaco::model::ingame::ItemPurchased {

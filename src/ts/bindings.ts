@@ -65,6 +65,12 @@ async createClip(videoId: string, start: number, end: number) : Promise<Result<s
 },
 async pickFfmpegPath() : Promise<string | null> {
     return await TAURI_INVOKE("pick_ffmpeg_path");
+},
+async clearCache() : Promise<void> {
+    await TAURI_INVOKE("clear_cache");
+},
+async downloadImage(url: string, category: string, filename: string) : Promise<string> {
+    return await TAURI_INVOKE("download_image", { url, category, filename });
 }
 }
 

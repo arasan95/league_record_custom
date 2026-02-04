@@ -114,7 +114,32 @@ pub async fn process_data(
         })
         .collect();
 
-    let merged_events = merge_live_events(events, live_events, &game.participant_identities);
+    // Create PID -> Champion Map
+    let mut pid_to_champ = std::collections::HashMap::new();
+    if let Some(sum_id) = player.summoner_id {
+        for p in &game.participants {
+            // We need to fetch champion info for each participant to get Name/Alias
+            // Note: This is 10 async calls. Should be fast enough.
+            let result = lcu_rest_client
+                .get::<Champion>(format!(
+                    "/lol-champions/v1/inventories/{}/champions/{}",
+                    sum_id, p.champion_id
+                ))
+                .await;
+
+            if let Ok(champ) = result {
+                pid_to_champ.insert(p.participant_id, champ);
+            }
+        }
+    }
+
+    let merged_events = merge_live_events(
+        events,
+        live_events,
+        &game.participant_identities,
+        &game.participants,
+        &pid_to_champ,
+    );
 
     let participants = game
         .participants
@@ -317,7 +342,31 @@ pub async fn process_data_with_retry(
         })
         .collect();
 
-    let merged_events = merge_live_events(events, live_events, &game.participant_identities);
+    // Create PID -> Champion Map for retry logic
+    let mut pid_to_champ = std::collections::HashMap::new();
+    if let Some(sum_id) = player.summoner_id {
+        for p in &game.participants {
+            // Fetch Alias/Name
+            let result = lcu_rest_client
+                .get::<Champion>(format!(
+                    "/lol-champions/v1/inventories/{}/champions/{}",
+                    sum_id, p.champion_id
+                ))
+                .await;
+
+            if let Ok(champ) = result {
+                pid_to_champ.insert(p.participant_id, champ);
+            }
+        }
+    }
+
+    let merged_events = merge_live_events(
+        events,
+        live_events,
+        &game.participant_identities,
+        &game.participants,
+        &pid_to_champ,
+    );
 
     let participants = game
         .participants
@@ -396,6 +445,8 @@ fn merge_live_events(
     mut current_events: Vec<GameEvent>,
     live_events: Vec<LiveGameEvent>,
     participant_identities: &[riot_datatypes::lcu::ParticipantIdentity],
+    participants_info: &[riot_datatypes::lcu::Participant],
+    pid_to_champ: &std::collections::HashMap<riot_datatypes::ParticipantId, riot_datatypes::Champion>,
 ) -> Vec<GameEvent> {
     // Open log file for debugging
     let log_file = std::fs::OpenOptions::new()
@@ -416,66 +467,121 @@ fn merge_live_events(
         }
     }
 
+    // Create PID -> TeamID Map for fast lookup
+    let mut pid_to_team = std::collections::HashMap::new();
+    for p in participants_info {
+        pid_to_team.insert(p.participant_id, p.team_id);
+    }
+
     for live_event in live_events {
         let (event_time, shopper_name, item, is_undo, is_sell, undo_gold_gain, undo_item_before) = match &live_event {
-            LiveGameEvent::ItemPurchased(e) => (e.event_time, &e.shopper_name, Some(&e.item), false, false, 0, None),
-            LiveGameEvent::ItemSold(e) => (e.event_time, &e.shopper_name, Some(&e.item), false, true, 0, None),
+            LiveGameEvent::ItemPurchased(e) => (e.event_time, &e.shopper_name, &e.item, false, false, None, None),
+            LiveGameEvent::ItemSold(e) => (e.event_time, &e.shopper_name, &e.item, false, true, None, None),
             LiveGameEvent::ItemUndo(e) => (
                 e.event_time,
                 &e.shopper_name,
-                Some(&e.item_after),
+                &e.item_after,
                 true,
                 false,
-                e.gold_gain as i64,
+                Some(e.gold_gain as i64),
                 Some(&e.item_before),
             ),
             _ => continue,
         };
 
-        // Parse optional index suffix: "Name#IDX:<Number>"
-        let (actual_name, target_idx) = if let Some(idx_start) = shopper_name.rfind("#IDX:") {
-            let (name_part, idx_part) = shopper_name.split_at(idx_start);
-            if let Some(idx_str) = idx_part.strip_prefix("#IDX:") {
-                if let Ok(idx) = idx_str.parse::<usize>() {
-                    (name_part, Some(idx))
-                } else {
-                    (shopper_name.as_str(), None)
-                }
+        // Parse optional tags: "Name#TEAM:<Side>#CNAME:<Name>"
+        // CNAME Check
+        let (intermediate_name, target_cname) = if let Some(idx_start) = shopper_name.rfind("#CNAME:") {
+            let (name_part, cname_part) = shopper_name.split_at(idx_start);
+            if let Some(cname_str) = cname_part.strip_prefix("#CNAME:") {
+                (name_part, Some(cname_str))
             } else {
-                (shopper_name.as_str(), None)
+                (name_part, None)
             }
         } else {
             (shopper_name.as_str(), None)
         };
 
-        // Try to match by summoner name (game_name) OR index if provided
+        // Team Check
+        let (actual_name, target_team_side) = if let Some(idx_start) = intermediate_name.rfind("#TEAM:") {
+            let (name_part, team_part) = intermediate_name.split_at(idx_start);
+            if let Some(team_str) = team_part.strip_prefix("#TEAM:") {
+                let team_id = match team_str {
+                    "100" | "ORDER" | "Order" => Some(100i64),
+                    "200" | "CHAOS" | "Chaos" => Some(200i64),
+                    _ => None,
+                };
+                (name_part, team_id)
+            } else {
+                (intermediate_name, None)
+            }
+        } else {
+            (intermediate_name, None)
+        };
+
+        println!(
+            "DEBUG: Processing Event Shopper='{}' -> Name='{}' TeamObj={:?} CNAME={:?}",
+            shopper_name, actual_name, target_team_side, target_cname
+        );
+
+        // Match Logic
         let identity = participant_identities.iter().find(|pi| {
-            // 1. Match by Index if available (Strongest Match)
-            // Live Client Data list order (0-9) corresponds to participantId (1-10)
-            if let Some(t_idx) = target_idx {
-                // participant_id is 1-based, index is 0-based
-                if (pi.participant_id as usize) == (t_idx + 1) {
-                    return true;
+            let pid = pi.participant_id;
+
+            // 1. CNAME Check (Primary Identity)
+            if let Some(req_cname) = target_cname {
+                if let Some(champ) = pid_to_champ.get(&pid) {
+                    // Check if requested CNAME matches Alias (Key) or Name (Localized)
+                    let cname_match = champ.alias == req_cname || champ.name == req_cname;
+
+                    if cname_match {
+                        // Check Team as well for sanity
+                        if let Some(req_team) = target_team_side {
+                            if let Some(&real_team) = pid_to_team.get(&pid) {
+                                if real_team == req_team {
+                                    return true;
+                                }
+                            }
+                        } else {
+                            // If exact CNAME match, we trust it.
+                            return true;
+                        }
+                    }
                 }
-                // If index is provided, we STRICTLY match by index.
-                // But just in case logic differs, we could check name, but for bots index is safer.
+                // If CNAME is present, we strict match on it.
                 return false;
             }
 
-            // 2. Normal Name Matching (fallback for non-synthetic events)
+            // 2. Fallback: Name + Team Check
             let full_riot_id = format!("{}#{}", pi.player.game_name, pi.player.tag_line);
-            if pi.player.game_name == actual_name || full_riot_id == actual_name {
-                return true;
+            let name_matches = pi.player.game_name == actual_name || full_riot_id == actual_name;
+            let partial_match = !actual_name.is_empty()
+                && (actual_name.contains(&pi.player.game_name) || pi.player.game_name.contains(actual_name));
+
+            if !name_matches && !partial_match {
+                return false;
             }
 
-            // Heuristic for bots (Partial Match) - Only if no index was provided
-            if actual_name.contains(&pi.player.game_name) || pi.player.game_name.contains(actual_name) {
-                return true;
+            if let Some(req_team) = target_team_side {
+                if let Some(&real_team) = pid_to_team.get(&pid) {
+                    if real_team == req_team {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                } else {
+                    let inferred_team = if pid <= 5 { 100 } else { 200 };
+                    return inferred_team == req_team;
+                }
             }
 
-            false
+            // Legacy
+            true
         });
 
+        if identity.is_none() {
+            println!("   -> NO MATCH FOUND for '{}'", shopper_name);
+        }
         if let Ok(mut file) = log_file.as_ref() {
             let status = if identity.is_some() { "MATCHED" } else { "NO MATCH" };
             let _ = writeln!(
@@ -489,23 +595,23 @@ fn merge_live_events(
             let timestamp = (event_time * 1000.0) as i64;
 
             let event_enum = if is_undo {
-                let item_after = item.unwrap();
+                let item_after = item;
                 let item_before = undo_item_before.unwrap();
                 riot_datatypes::Event::ItemUndo {
                     participant_id: identity.participant_id,
                     before_id: item_before.item_id as i64,
                     after_id: item_after.item_id as i64,
-                    gold_gain: undo_gold_gain,
+                    gold_gain: undo_gold_gain.unwrap_or(0),
                 }
             } else if is_sell {
-                let item = item.unwrap();
+                let item = item;
                 riot_datatypes::Event::ItemSold {
                     participant_id: identity.participant_id,
                     item_id: item.item_id as i64,
                     slot: Some(item.slot as i64),
                 }
             } else {
-                let item = item.unwrap();
+                let item = item;
                 riot_datatypes::Event::ItemPurchased {
                     participant_id: identity.participant_id,
                     item_id: item.item_id as i64,

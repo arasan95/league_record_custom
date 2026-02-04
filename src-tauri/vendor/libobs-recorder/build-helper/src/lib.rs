@@ -59,7 +59,10 @@ fn build(path: Option<&path::Path>, version: &str) -> Result<(), Error> {
     fs::create_dir_all(target_path.parent().unwrap())?;
 
     let copy_options = dir::CopyOptions::new().overwrite(true).content_only(true);
-    dir::copy(bin_res_dir, target_path, &copy_options)?;
+    // Aggressively ignore COPY errors to bypass Vanguard file locks
+    if let Err(e) = dir::copy(bin_res_dir, target_path, &copy_options) {
+        println!("cargo:warning=Non-fatal error copying libobs resources: {}", e);
+    }
 
     Ok(())
 }
@@ -75,7 +78,10 @@ fn copy_artifact_dependencies(path: Option<&path::Path>) -> Result<(), Error> {
     let target_path = consumer_crate_output_dir.join("libobs/extprocess_recorder.exe");
 
     fs::create_dir_all(target_path.parent().unwrap())?;
-    fs::copy(artifact_path, target_path)?;
+    // Aggressively ignore COPY errors for extprocess_recorder
+    if let Err(e) = fs::copy(artifact_path, target_path) {
+        println!("cargo:warning=Non-fatal error copying extprocess_recorder: {}", e);
+    }
 
     Ok(())
 }

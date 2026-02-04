@@ -187,7 +187,7 @@ export default class UI {
     }
 
     private timeline: InventoryTimeline | null = null;
-    private scoreboardRefs: Map<number, { items: HTMLImageElement[], trinket: HTMLImageElement, goldText: HTMLElement }> = new Map();
+    private scoreboardRefs: Map<number, { items: HTMLImageElement[], trinket: HTMLImageElement, goldText: HTMLElement, participantId: number }> = new Map();
     private goldTimeline: GoldFrame[] = [];
     private goldDiffRefs: HTMLElement[] = [];
     private participants: Participant[] = [];
@@ -1149,8 +1149,13 @@ export default class UI {
         this.team200VoidgrubText = null;
         this.kdaRefs = [];
         this.csRefs = [];
+        this.scoreboardRefs.clear();
         this.events = data.events;
         this.recordingOffset = data.ingameTimeRecStartOffset;
+        
+        // DEBUG: Trace ID Map and Refs
+        console.log("DEBUG: Metadata Participants:", data.participants.map(p => `${p.participantId}:${p.championId}`));
+        console.log("DEBUG: ID Map:", Array.from(idMap.entries()));
 
         // Note: The rest of this function renders the *final* state as the initial view.
         // We will then start updating it on timeupdate.
@@ -1213,10 +1218,25 @@ export default class UI {
             // Support Items including upgrades
             const supportItems = [3865, 3866, 3867, 3869, 3870, 3871, 3876, 3877];
             const hasSmite = (p: Participant) => p.spell1Id === 11 || p.spell2Id === 11;
+            
+            // Check Stats AND Events for Items (Role Detection Stability)
             const hasSupportItem = (p: Participant) => {
+                 // Check current stats
                  const items = [p.stats.item0, p.stats.item1, p.stats.item2, p.stats.item3, p.stats.item4, p.stats.item5];
-                 return items.some(id => supportItems.includes(id));
+                 if (items.some(id => supportItems.includes(id))) return true;
+                 
+                 // Check full event log (for initial rendering stability)
+                 if (this.events) {
+                     const boughtSupport = this.events.some(e => 
+                        "ItemPurchased" in e && 
+                        e.ItemPurchased.participant_id === p.participantId && 
+                        supportItems.includes(e.ItemPurchased.item_id)
+                     );
+                     if (boughtSupport) return true;
+                 }
+                 return false;
             };
+            
             // Marksman List (Heuristic)
             const marksmen = [22, 51, 119, 81, 202, 145, 18, 29, 110, 67, 11, 21, 15, 236, 429, 203, 498, 96, 222, 221, 523, 134, 496, 711]; 
 
@@ -1314,6 +1334,9 @@ export default class UI {
             });
             return result;
         };
+        
+        // Remove ID Map (it was based on incorrect assumption about Event ID = Slot ID)
+        this.timeline = new InventoryTimeline(this.events, data.participants.map(p => p.participantId), undefined);
 
         const sorted100 = sortParticipants(participants100);
         const sorted200 = sortParticipants(participants200);
@@ -1413,6 +1436,16 @@ export default class UI {
                  }
             }
         });
+
+
+        // DIRECT MAPPING: Use participantId as requested.
+        // Assumes Event ID matches Metadata ID exactly.
+        idMap.clear();
+        // No mapping needed if IDs are identical, or we can explicit set Identity.
+        // Passing undefined to InventoryTimeline makes it use event.pid directly.
+        
+        console.log("DEBUG: Using Direct ParticipantID Mapping (No ID Map)");
+        this.timeline = new InventoryTimeline(this.events, data.participants.map(p => p.participantId), undefined);
 
         // Render Header Team Side
         const createStat = (val: string | number, sub: string, iconUrl?: string, isGold = false, side?: "blue" | "red", useMask = false, iconClass?: string) => {
@@ -1675,7 +1708,13 @@ export default class UI {
                 if (this.metadataRenderId !== currentRenderId) return null;
 
                 const row = this.vjs.dom.createEl("div", {}, { class: "player-row" }) as HTMLElement;
-                const img = this.vjs.dom.createEl("img", { src: cachedChampIcon }, { class: "champ-icon" }) as HTMLElement;
+                const img = this.vjs.dom.createEl("img", { src: cachedChampIcon }, { class: "champ-icon" }) as HTMLImageElement;
+                img.onerror = () => {
+                    if (img.src !== cDragonUrl) {
+                        console.warn(`Local cache failed for champion ${p.championId}, retrying remote: ${cDragonUrl}`);
+                        img.src = cDragonUrl;
+                    }
+                };
                 
                 const spells = this.vjs.dom.createEl("div", {}, { class: "spells" }, [
                     this.vjs.dom.createEl("img", { src: spell1Url }, { class: "spell-icon" }),
@@ -1741,10 +1780,15 @@ export default class UI {
                 
                 const goldDiv = this.vjs.dom.createEl("div", {}, { class: "total-gold" }, "0") as HTMLElement;
 
+                // DATA-BINDING ROBUSTNESS
+                // Embed PID in the DOM row for easy debugging
+                row.dataset.pid = p.participantId.toString();
+
                 this.scoreboardRefs.set(p.participantId, {
                     items: itemImgs,
                     trinket: trinketImg,
-                    goldText: goldDiv
+                    goldText: goldDiv,
+                    participantId: p.participantId // Validate with explicit ID
                 });
                 
                 const isMe = p.participantId === data.participantId;
@@ -1980,6 +2024,14 @@ export default class UI {
              }
 
              itemGoldMap.set(pid, currentGold);
+             
+             // DEBUG: Trace Update for PID 4 (Zed) and 5 (Caitlyn)
+             if (pid === 4 || pid === 5) {
+                // Throttle log
+                if (Math.floor(currentTime / 1000) % 10 === 0 && Math.floor(currentTime) % 20 === 0) {
+                    console.log(`DEBUG: UpdateTimeline PID ${pid} Items:`, state ? state.items : "No State", "DOM:", refs.items.length);
+                }
+             }
          });
 
          // Update Gold Diffs
@@ -2009,8 +2061,27 @@ export default class UI {
                  const p200 = this.participants.filter(p => p.teamId === 200);
 
                  // Update CS and Calculate Team Gold Totals
-                 this.participants.forEach((p, i) => {
-                     const ref = this.csRefs[i];
+                 this.participants.forEach((p) => {
+                     // Find the correct CS/KDA ref for this participant
+                     // csRefs / kdaRefs are pushed in order of *rendering* (sorted)
+                     // this.participants is now also SORTED (due to sync at line ~1322)
+                     // So index 'i' should match 'p' if everything is consistent.
+                     // BUT, let's verify if p matches the rendering order.
+
+                     // In renderTeam:
+                     // this.csRefs.push(csDiv);
+                     // this.kdaRefs.push(kdaDiv);
+                     
+                     // We iterate renderTeam(100) then renderTeam(200).
+                     // this.participants = [...sorted100, ...sorted200];
+                     
+                     // So this.participants[i] corresponds to this.csRefs[i].
+                     
+                     // However, we need to ensure we are updating the UI with the DATA for 'p'.
+                     
+                     const idx = this.participants.indexOf(p);
+                     const ref = this.csRefs[idx];
+                     
                      if (ref) {
                          const data = frameDataMap.get(p.participantId);
                          const cs = data?.minions || 0;
@@ -2167,12 +2238,16 @@ export default class UI {
              }
              
              // Update DOM
-             for (let i = 0; i < 10; i++) {
+             // Update DOM
+             // Update DOM (KDA) based on sorted participants
+             this.participants.forEach((p, i) => {
                  const ref = this.kdaRefs[i];
-                 if (ref) {
-                     ref.textContent = `${kda[i].k} / ${kda[i].d} / ${kda[i].a}`;
+                 // KDA array is indexed 0-9 corresponding to Participant ID 1-10
+                 const stats = kda[p.participantId - 1]; 
+                 if (ref && stats) {
+                     ref.textContent = `${stats.k} / ${stats.d} / ${stats.a}`;
                  }
-             }
+             });
              
              // Update Header KDA
              if (this.team100KillsText) this.team100KillsText.textContent = `${t100K}`;
@@ -3032,6 +3107,26 @@ export default class UI {
         ]);
 
         // Grid Layout
+        const clearCacheBtn = this.vjs.dom.createEl("button", {
+             onclick: async () => {
+                 // eslint-disable-next-line no-alert
+                 if (confirm("Clear image and item cache? This will re-download assets on next use.")) {
+                      try {
+                         await commands.clearCache();
+                         // eslint-disable-next-line no-alert
+                         alert("Cache cleared successfully.");
+                      } catch (e) {
+                          // eslint-disable-next-line no-alert
+                          alert("Failed to clear cache: " + e);
+                      }
+                 }
+             }
+        }, { class: "btn", style: "width: 100%; color: #ff6b6b; border-color: #ff6b6b;" }, "Clear Asset Cache");
+
+        const cacheContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; align-items: center; width: 100%;" }, [
+             clearCacheBtn
+        ]);
+
         // Populate General Grid
         generalGrid.append(
             createGroup("Recordings Folder", folderContainer as HTMLElement, true),
@@ -3043,6 +3138,7 @@ export default class UI {
             createGroup("Max Age (Days)", maxAgeInput),
             createGroup("Max Size (GB)", maxSizeInput),
             createGroup("FFmpeg Path", ffmpegContainer as HTMLElement, true),
+            createGroup("Troubleshooting", cacheContainer as HTMLElement, true),
             markerFlagsContainer as HTMLElement,
             gameModesContainer as HTMLElement,
             switchesContainer,

@@ -17,6 +17,7 @@ pub type SpellId = i64;
 pub struct Champion {
     pub id: ChampionId,
     pub name: String,
+    pub alias: String,
 }
 
 impl PartialEq for Champion {
