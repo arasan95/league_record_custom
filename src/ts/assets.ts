@@ -33,11 +33,17 @@ export async function getCachedAssetUrl(url: string, category: string, filename:
         // Download via Backend to bypass CORS
         if (!url.startsWith("http")) return url;
 
-        console.log(`Downloading (Native) ${url} to ${category}/${filename}...`);
+        // console.log(`Downloading (Native) ${url} to ${category}/${filename}...`);
         
         // Backend returns the absolute path on success
-        const absPath = await commands.downloadImage(url, category, filename);
-        return convertFileSrc(absPath);
+        const result = await commands.downloadImage(url, category, filename);
+
+        if (result.status === "ok") {
+            return convertFileSrc(result.data);
+        } else {
+            console.error(`Failed to download image (${url}):`, result.error);
+            return url;
+        }
 
     } catch (err) {
         console.error("Error in asset caching:", err);
