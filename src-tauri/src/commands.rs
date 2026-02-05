@@ -309,3 +309,29 @@ pub async fn download_image(
 
     Ok(file_path.to_string_lossy().to_string())
 }
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub async fn save_scoreboard_cache(video_id: String, content: String) -> Result<(), String> {
+    use std::io::Write;
+    let video_path = PathBuf::from(&video_id);
+    let cache_path = video_path.with_extension("sb.json");
+
+    let mut file = std::fs::File::create(&cache_path).map_err(|e| e.to_string())?;
+    file.write_all(content.as_bytes()).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub async fn load_scoreboard_cache(video_id: String) -> Result<String, String> {
+    let video_path = PathBuf::from(&video_id);
+    let cache_path = video_path.with_extension("sb.json");
+
+    if !cache_path.exists() {
+        return Err("Cache file not found".to_string());
+    }
+
+    let content = std::fs::read_to_string(cache_path).map_err(|e| e.to_string())?;
+    Ok(content)
+}

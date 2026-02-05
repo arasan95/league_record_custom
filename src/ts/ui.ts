@@ -1996,9 +1996,9 @@ export default class UI {
             
             if (cachePath) {
                 try {
-                     if (await exists(cachePath)) {
-                         const raw = await readTextFile(cachePath);
-                         cacheData = JSON.parse(raw);
+                     const res = await commands.loadScoreboardCache(activeVideoId!);
+                     if (res.status === "ok") {
+                         cacheData = JSON.parse(res.data);
                      }
                 } catch (e) { 
                     // console.warn("Cache load failed", e); 
@@ -2250,12 +2250,10 @@ export default class UI {
                  
                  if (hasData) {
                      try {
-                         // Asynchronous save, don't await the result to block UI rendering? 
-                         // Better to just let it happen in background or await it quickly.
-                         // Given FS is fast for small JSON, await is fine to ensure integrity before moving on, 
-                         // but we put it in a fire-and-forget or just void promise?
-                         // Let's await it to be safe, it shouldn't block much.
-                         await writeTextFile(cachePath, JSON.stringify(newCache));
+                         // Asynchronous save, fire and forget or await
+                         if (activeVideoId) {
+                            await commands.saveScoreboardCache(activeVideoId, JSON.stringify(newCache));
+                         }
                      } catch(e) {
                          console.warn("Failed to write scoreboard cache:", e);
                      }
