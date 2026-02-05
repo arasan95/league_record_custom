@@ -21,8 +21,12 @@ pub fn process_app_event(app_handle: &tauri::AppHandle, event: tauri::RunEvent) 
             ..
         } => {
             // triggered on window close (X Button)
+            // Set shutdown flag to true so the app exits completely
+            app_handle.state::<Shutdown>().set();
+
             if let Some(window) = app_handle.get_webview_window(AppWindow::Main.into()) {
                 app_handle.save_window_state(&window);
+                let _ = window.close();
             }
         }
         RunEvent::ExitRequested { api, .. } => {
