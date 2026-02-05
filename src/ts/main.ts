@@ -509,16 +509,33 @@ async function main() {
     listenerManager.listen_app("RecordingFinished", ({ payload }) => {
         const [videoId, isManualStop] = payload;
         if (!isManualStop) {
-             commands.getSettings().then(settings => {
+             commands.getSettings().then(async settings => {
                  if (settings.autoSelectRecording) {
-                     console.log(`Auto-selecting recording: ${videoId}`);
-                     void setVideo(videoId);
+                     let fullPath = videoId;
+                     // Simple heuristic: if no path separator, it's a filename
+                     if (!videoId.includes("\\") && !videoId.includes("/")) {
+                         // We need to resolve the full path.
+                         // Using Tauri's join is async.
+                         try {
+                            fullPath = await join(settings.recordingsFolder, videoId);
+                         } catch (e) {
+                             console.error("Failed to join path:", e);
+                             // Fallback: simple string concatenation if join fails? 
+                             // Or just use videoId and hope for the best.
+                         }
+                     }
+
+                     console.log(`Auto-selecting recording: ${fullPath}`);
+                     
+                     // Add a small delay to ensure file handle is released and file is ready for reading
+                     setTimeout(() => {
+                         void setVideo(fullPath);
+                     }, 500);
                  }
                  if (settings.autoPopupOnEnd) {
                      console.log("Auto-popup triggered");
                      ui.showWindow();
-                     // Also unminimize if needed (show() does that usually)
-                     ui.setFullscreen(false); // Maybe exit fullscreen to see handled window?
+                     ui.setFullscreen(false); 
                  }
              });
         }
