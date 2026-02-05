@@ -703,8 +703,13 @@ export default class UI {
                 if (!isFavorite(recording.metadata)) isVisible = false;
             }
             // 2. Clip Filter
-            if (this.filterClip && !recording.videoId.includes("_clip")) {
-                isVisible = false;
+            const isClip = recording.videoId.includes("_clip");
+            if (this.filterClip) {
+                // If filter is ON, show ONLY clips
+                if (!isClip) isVisible = false;
+            } else {
+                // If filter is OFF, show ONLY normal recordings (hide clips)
+                if (isClip) isVisible = false;
             }
             // 3. Ranked Filter
             if (this.filterRanked) {
