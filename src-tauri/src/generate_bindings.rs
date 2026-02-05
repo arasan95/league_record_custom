@@ -24,7 +24,9 @@ fn generate_bindings() -> anyhow::Result<()> {
             commands::create_clip,
             commands::pick_ffmpeg_path,
             commands::clear_cache,
-            commands::download_image
+            commands::download_image,
+            commands::save_scoreboard_cache,
+            commands::load_scoreboard_cache
         ])
         .events(collect_events![AppEvent])
         .export(
