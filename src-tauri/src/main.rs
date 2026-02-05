@@ -58,7 +58,9 @@ fn main() {
             commands::pick_clips_folder,
             commands::pick_ffmpeg_path,
             commands::clear_cache,
-            commands::download_image
+            commands::download_image,
+            commands::save_scoreboard_cache,
+            commands::load_scoreboard_cache
         ])
         .setup(|app| app.app_handle().setup().map_err(anyhow::Error::into))
         .build(tauri::generate_context!());

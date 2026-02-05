@@ -81,6 +81,22 @@ async downloadImage(url: string, category: string, filename: string) : Promise<R
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async saveScoreboardCache(videoId: string, content: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_scoreboard_cache", { videoId, content }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async loadScoreboardCache(videoId: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_scoreboard_cache", { videoId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
