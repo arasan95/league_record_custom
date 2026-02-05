@@ -66,6 +66,17 @@ impl SettingsWrapper {
             log::error!("unable to create recordings_folder");
         }
 
+        if settings.clips_folder.is_relative() {
+            settings.clips_folder = app_handle
+                .path()
+                .video_dir()
+                .expect("video_dir doesn't exist")
+                .join(settings.clips_folder);
+        }
+        if fs::create_dir_all(settings.clips_folder.as_path()).is_err() {
+            log::error!("unable to create clips_folder");
+        }
+
         *self.0.write().unwrap() = settings;
         // write parsed settings back to file so the internal settings and the content of the file stay in sync
         // to avoid confusing the user when editing the file
@@ -154,6 +165,10 @@ impl SettingsWrapper {
 
     pub fn get_recordings_path(&self) -> PathBuf {
         self.0.read().unwrap().recordings_folder.clone()
+    }
+
+    pub fn get_clips_path(&self) -> PathBuf {
+        self.0.read().unwrap().clips_folder.clone()
     }
 
     pub fn get_filename_format(&self) -> String {
@@ -273,6 +288,7 @@ pub struct Settings {
 
     pub debug_log: bool,
     pub recordings_folder: PathBuf,
+    pub clips_folder: PathBuf,
     pub filename_format: String,
     pub encoding_quality: u32,
     pub output_resolution: Option<StdResolution>,
@@ -319,6 +335,11 @@ fn default_recordings_folder() -> PathBuf {
 }
 
 #[inline]
+fn default_clips_folder() -> PathBuf {
+    PathBuf::from("league_recordings/clips")
+}
+
+#[inline]
 fn default_filename_format() -> String {
     String::from("%Y-%m-%d_%H-%M.mp4")
 }
@@ -334,6 +355,7 @@ impl Default for Settings {
             marker_flags: MarkerFlags::default(),
             debug_log: DEFAULT_DEBUG_LOG,
             recordings_folder: default_recordings_folder(),
+            clips_folder: default_clips_folder(),
             filename_format: default_filename_format(),
             encoding_quality: DEFAULT_ENCODING_QUALITY,
             output_resolution: None,
@@ -390,6 +412,9 @@ impl<'de> Deserialize<'de> for Settings {
                             settings.recordings_folder =
                                 map.next_value().unwrap_or_else(|_| default_recordings_folder());
                         }
+                        "clipsFolder" => {
+                            settings.clips_folder = map.next_value().unwrap_or_else(|_| default_clips_folder());
+                        }
                         "filenameFormat" => {
                             settings.filename_format = map.next_value().unwrap_or_else(|_| default_filename_format());
                         }
@@ -405,7 +430,6 @@ impl<'de> Deserialize<'de> for Settings {
                         "recordAudio" => {
                             settings.record_audio = map.next_value().unwrap_or(DEFAULT_RECORD_AUDIO);
                         }
-
                         "autostart" => {
                             settings.autostart = map.next_value().unwrap_or(DEFAULT_AUTOSTART);
                         }

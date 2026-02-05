@@ -61,10 +61,7 @@ pub fn get_recordings_list(app_handle: AppHandle) -> Vec<Recording> {
     recordings.sort_by(|a, b| compare_time(a, b).unwrap_or(Ordering::Equal));
     let mut ret = Vec::new();
     for path in recordings {
-        if let Some(video_id) = path
-            .file_name()
-            .and_then(|fname| fname.to_os_string().into_string().ok())
-        {
+        if let Some(video_id) = path.to_str().map(|s| s.to_string()) {
             let metadata = action::get_recording_metadata(&path, true).ok();
             ret.push(Recording { video_id, metadata });
         }
@@ -86,8 +83,8 @@ pub fn open_recordings_folder(state: State<SettingsWrapper>) {
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub fn rename_video(video_id: String, new_video_id: String, state: State<SettingsWrapper>) -> bool {
-    let recording = state.get_recordings_path().join(video_id);
+pub fn rename_video(video_id: String, new_video_id: String, _state: State<SettingsWrapper>) -> bool {
+    let recording = PathBuf::from(video_id);
     action::rename_recording(recording, new_video_id).unwrap_or_else(|e| {
         log::error!("failed to rename video: {e}");
         false
@@ -96,8 +93,8 @@ pub fn rename_video(video_id: String, new_video_id: String, state: State<Setting
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub fn delete_video(video_id: String, state: State<SettingsWrapper>) -> bool {
-    let recording = state.get_recordings_path().join(video_id);
+pub fn delete_video(video_id: String, _state: State<SettingsWrapper>) -> bool {
+    let recording = PathBuf::from(video_id);
 
     match action::delete_recording(recording) {
         Ok(_) => true,
@@ -110,15 +107,15 @@ pub fn delete_video(video_id: String, state: State<SettingsWrapper>) -> bool {
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub fn get_metadata(video_id: String, state: State<SettingsWrapper>) -> Option<MetadataFile> {
-    let path = state.get_recordings_path().join(video_id);
+pub fn get_metadata(video_id: String, _state: State<SettingsWrapper>) -> Option<MetadataFile> {
+    let path = PathBuf::from(video_id);
     action::get_recording_metadata(&path, true).ok()
 }
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub fn toggle_favorite(video_id: String, state: State<SettingsWrapper>) -> Option<bool> {
-    let path = state.get_recordings_path().join(video_id);
+pub fn toggle_favorite(video_id: String, _state: State<SettingsWrapper>) -> Option<bool> {
+    let path = PathBuf::from(video_id);
 
     let mut metadata = action::get_recording_metadata(&path, true).ok()?;
     let favorite = !metadata.is_favorite();
@@ -175,14 +172,31 @@ pub async fn pick_recordings_folder(app_handle: AppHandle) -> Option<PathBuf> {
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
+pub async fn pick_clips_folder(app_handle: AppHandle) -> Option<PathBuf> {
+    use tauri_plugin_dialog::DialogExt;
+    app_handle
+        .dialog()
+        .file()
+        .blocking_pick_folder()
+        .map(|d| d.into_path().ok())
+        .flatten()
+}
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
 pub async fn create_clip(
     video_id: String,
     start: f64,
     end: f64,
     state: State<'_, SettingsWrapper>,
 ) -> Result<String, String> {
-    let recordings_path = state.get_recordings_path();
-    let video_path = recordings_path.join(&video_id);
+    let recordings_path = state.get_clips_path();
+    let video_path = state.get_recordings_path().join(&video_id);
+
+    // Ensure clips directory exists
+    if !recordings_path.exists() {
+        std::fs::create_dir_all(&recordings_path).map_err(|e| format!("Failed to create clips directory: {}", e))?;
+    }
 
     // Output filename
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
