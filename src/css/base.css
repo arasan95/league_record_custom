@@ -71,6 +71,10 @@ input, textarea, [contenteditable] {
     background: #2c2f3e; /* User requested background color */
 }
 
+*::-webkit-scrollbar-button {
+    display: none;
+}
+
 *::-webkit-scrollbar-track {
     background: #2c2f3e;
 }

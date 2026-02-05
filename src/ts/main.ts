@@ -912,10 +912,16 @@ async function deleteVideo(videoId: string) {
     if (videoId === ui.getActiveVideoId()) {
         player.src(null);
     }
+    
+    // Optimistic UI update: Remove immediately
+    ui.removeRecordingItem(videoId);
 
+    // Run deletion in background
     const ok = await commands.deleteVideo(videoId);
     if (!ok) {
         ui.showErrorModal("Error deleting video!");
+        // If failed, refresh sidebar to restore the item
+        void updateSidebar(); 
     }
 }
 
