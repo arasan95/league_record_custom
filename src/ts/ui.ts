@@ -1,4 +1,5 @@
 import type videojs from "video.js";
+import { exists, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { SR_QUEUES } from "./queues";
 import type { ContentDescriptor } from "video.js/dist/types/utils/dom";
 import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -1319,6 +1320,43 @@ export default class UI {
         return true;
     };
 
+    public playNextVideo = () => {
+        const activeLi = this.sidebar.querySelector<HTMLLIElement>("li.active");
+        if (!activeLi) return;
+        
+        let next = activeLi.nextElementSibling as HTMLLIElement;
+        // Skip hidden elements or non-recording items (e.g. headers)
+        while (next) {
+            if (next.style.display !== "none" && next.tagName === "LI" && next.id) {
+                break;
+            }
+            next = next.nextElementSibling as HTMLLIElement;
+        }
+
+        if (next) {
+            next.click();
+            next.scrollIntoView({ block: "center", behavior: "smooth" });
+        }
+    };
+
+    public playPrevVideo = () => {
+        const activeLi = this.sidebar.querySelector<HTMLLIElement>("li.active");
+        if (!activeLi) return;
+        
+        let prev = activeLi.previousElementSibling as HTMLLIElement;
+        while (prev) {
+            if (prev.style.display !== "none" && prev.tagName === "LI" && prev.id) {
+                break;
+            }
+            prev = prev.previousElementSibling as HTMLLIElement;
+        }
+
+        if (prev) {
+            prev.click();
+            prev.scrollIntoView({ block: "center", behavior: "smooth" });
+        }
+    };
+
 
 
 
@@ -1914,19 +1952,56 @@ export default class UI {
 
             const teamDiv = this.vjs.dom.createEl("div", {}, { class: `team team-${teamId}` });
             
+            // Cache Logic
+            const activeVideoId = this.getActiveVideoId();
+            let cacheData: any = null;
+            const cachePath = activeVideoId ? activeVideoId.replace(/\.mp4$/i, "") + ".sb.json" : null;
+            
+            if (cachePath) {
+                try {
+                     if (await exists(cachePath)) {
+                         const raw = await readTextFile(cachePath);
+                         cacheData = JSON.parse(raw);
+                     }
+                } catch (e) { 
+                    // console.warn("Cache load failed", e); 
+                }
+            }
+
             // Parallelize fetching and rendering
             const rowPromises = participants.slice(0, 5).map(async (p) => {
-                // Fetch all assets parallel
                 const cDragonUrl = `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/${p.championId}.png`;
-                const cachedChampIcon = await import("./assets").then(m => m.getCachedAssetUrl(cDragonUrl, "champion", `${p.championId}.png`));
                 
-                const spell1Url = await getSpellIconUrl(p.spell1Id);
-                const spell2Url = await getSpellIconUrl(p.spell2Id);
-                const runeUrl = await getRuneIconUrl(p.stats.perk0 ?? 0);
-                
-                const itemUrls = await Promise.all([
-                    p.stats.item0, p.stats.item1, p.stats.item2, p.stats.item3, p.stats.item4, p.stats.item5, p.stats.item6
-                ].map(id => getItemIconUrl(id)));
+                let cachedChampIcon: string, spell1Url: string, spell2Url: string, runeUrl: string, itemUrls: string[];
+                let assetsToSave: any = null;
+
+                if (cacheData && cacheData[p.participantId]) {
+                    const c = cacheData[p.participantId];
+                    cachedChampIcon = c.champ;
+                    spell1Url = c.sp1;
+                    spell2Url = c.sp2;
+                    runeUrl = c.rune;
+                    itemUrls = c.items;
+                } else {
+                    // Fetch all assets parallel
+                    cachedChampIcon = await import("./assets").then(m => m.getCachedAssetUrl(cDragonUrl, "champion", `${p.championId}.png`));
+                    
+                    spell1Url = await getSpellIconUrl(p.spell1Id);
+                    spell2Url = await getSpellIconUrl(p.spell2Id);
+                    runeUrl = await getRuneIconUrl(p.stats.perk0 ?? 0);
+                    
+                    itemUrls = await Promise.all([
+                        p.stats.item0, p.stats.item1, p.stats.item2, p.stats.item3, p.stats.item4, p.stats.item5, p.stats.item6
+                    ].map(id => getItemIconUrl(id)));
+
+                    assetsToSave = {
+                        champ: cachedChampIcon,
+                        sp1: spell1Url,
+                        sp2: spell2Url,
+                        rune: runeUrl,
+                        items: itemUrls
+                    };
+                }
 
                 // Check cancel info
                 if (this.metadataRenderId !== currentRenderId) return null;
@@ -2113,7 +2188,8 @@ export default class UI {
                     trinketImg,
                     goldDiv,
                     participantId: p.participantId,
-                    p
+                    p,
+                    assets: assetsToSave
                 };
             });
 
@@ -2121,6 +2197,33 @@ export default class UI {
             
             // Race check
             if (this.metadataRenderId !== currentRenderId) return null;
+
+
+            // Save Cache if new data was fetched
+            // We only save if we didn't start with cache, and we have valid results
+            if (!cacheData && cachePath && results.length > 0) {
+                 const newCache: Record<string, any> = {};
+                 let hasData = false;
+                 results.forEach(r => {
+                     if (r && r.assets) {
+                         newCache[r.participantId.toString()] = r.assets;
+                         hasData = true;
+                     }
+                 });
+                 
+                 if (hasData) {
+                     try {
+                         // Asynchronous save, don't await the result to block UI rendering? 
+                         // Better to just let it happen in background or await it quickly.
+                         // Given FS is fast for small JSON, await is fine to ensure integrity before moving on, 
+                         // but we put it in a fire-and-forget or just void promise?
+                         // Let's await it to be safe, it shouldn't block much.
+                         await writeTextFile(cachePath, JSON.stringify(newCache));
+                     } catch(e) {
+                         console.warn("Failed to write scoreboard cache:", e);
+                     }
+                 }
+            }
 
             for (const res of results) {
                 if (!res) continue;
@@ -2935,7 +3038,12 @@ export default class UI {
             setLoopA: "Set Loop Start (A)",
             setLoopB: "Set Loop End (B)",
             toggleLoop: "Toggle Loop (L)",
-            exitFullscreen: "Exit Fullscreen (Esc)"
+            exitFullscreen: "Exit Fullscreen (Esc)",
+            stepForward: "Frame Step Forward (.)",
+            stepBackward: "Frame Step Backward (,)",
+            resetSpeed: "Reset Playback Speed (BS)",
+            nextVideo: "Next Recording (Shift+N)",
+            prevVideo: "Previous Recording (Shift+P)"
         };
 
         const createKeybindRow = (action: ActionName) => {
@@ -3004,12 +3112,14 @@ export default class UI {
         const bindOrder: ActionName[] = [
             "playPause", "fullscreen",
             "seekForward", "seekBackward",
+            "stepForward", "stepBackward",
             "nextEvent", "prevEvent", 
             "volUp", "volDown",
             "speedUp", "speedDown",
-            "speedUp", "speedDown",
+            "resetSpeed",
             "setLoopA", "setLoopB", "toggleLoop",
-            "mute", "exitFullscreen"
+            "mute", "exitFullscreen",
+            "nextVideo", "prevVideo"
         ];
 
 
@@ -3416,13 +3526,19 @@ export default class UI {
             createGroup("Record Audio", audioSelect),
             createGroup("Max Age (Days)", maxAgeInput),
             createGroup("Max Size (GB)", maxSizeInput),
-            createGroup("FFmpeg Path", ffmpegContainer as HTMLElement, true),
-            createGroup("Troubleshooting", cacheContainer as HTMLElement, true),
+            createGroup("FFmpeg Path", ffmpegContainer as HTMLElement, true)
+        );
+
+        generalGrid.append(
             markerFlagsContainer as HTMLElement,
             gameModesContainer as HTMLElement,
             switchesContainer,
             assetsContainer as HTMLElement
         );
+
+        if (settings.developerMode) {
+            generalGrid.append(createGroup("Troubleshooting", cacheContainer as HTMLElement, true));
+        }
 
         // Tab Buttons
         const createTabBtn = (label: string, active: boolean, onClick: () => void) => {

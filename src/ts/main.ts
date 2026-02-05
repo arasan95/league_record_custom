@@ -919,7 +919,7 @@ async function deleteVideo(videoId: string) {
     }
 }
 
-function showTimestamps() {
+async function showTimestamps() {
     const timelineEvents = new Array<{ timestamp: number; text: string }>();
 
     if (highlightEvents !== null) {
@@ -939,6 +939,7 @@ function showTimestamps() {
         }
     }
 
+    const settings = await commands.getSettings();
     ui.showTimelineModal(
         timelineEvents.toSorted((a, b) => a.timestamp - b.timestamp),
         (secs) => player.currentTime(secs / 1000 - EVENT_DELAY),
@@ -1053,6 +1054,26 @@ function handleKeyboardEvents(event: KeyboardEvent) {
             loopEnabledCheckbox.checked = !loopEnabledCheckbox.checked;
             isLooping = loopEnabledCheckbox.checked;
         }
+        handled = true;
+    }
+    else if (isAction(event, "stepForward", binds)) {
+        player.currentTime(player.currentTime()! + 0.03);
+        handled = true;
+    }
+    else if (isAction(event, "stepBackward", binds)) {
+        player.currentTime(player.currentTime()! - 0.03);
+        handled = true;
+    }
+    else if (isAction(event, "resetSpeed", binds)) {
+        player.playbackRate(1.0);
+        handled = true;
+    }
+    else if (isAction(event, "nextVideo", binds)) {
+        ui.playNextVideo();
+        handled = true;
+    }
+    else if (isAction(event, "prevVideo", binds)) {
+        ui.playPrevVideo();
         handled = true;
     }
     

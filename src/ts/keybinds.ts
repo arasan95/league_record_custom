@@ -21,7 +21,12 @@ export type ActionName =
     | "setLoopA"
     | "setLoopB"
     | "toggleLoop"
-    | "exitFullscreen";
+    | "exitFullscreen"
+    | "stepForward"
+    | "stepBackward"
+    | "resetSpeed"
+    | "nextVideo"
+    | "prevVideo";
 
 export type KeybindMap = Record<ActionName, KeyCombo | null>;
 
@@ -41,6 +46,11 @@ export const DEFAULT_KEYBINDS: KeybindMap = {
     setLoopB: { key: "b", shift: false, ctrl: false, alt: false, meta: false },
     toggleLoop: { key: "l", shift: false, ctrl: false, alt: false, meta: false },
     exitFullscreen: { key: "Escape", shift: false, ctrl: false, alt: false, meta: false },
+    stepForward: { key: ".", shift: false, ctrl: false, alt: false, meta: false },
+    stepBackward: { key: ",", shift: false, ctrl: false, alt: false, meta: false },
+    resetSpeed: { key: "Backspace", shift: false, ctrl: false, alt: false, meta: false },
+    nextVideo: { key: "n", shift: true, ctrl: false, alt: false, meta: false },
+    prevVideo: { key: "p", shift: true, ctrl: false, alt: false, meta: false },
 };
 
 const STORAGE_KEY = "app_keybinds";
