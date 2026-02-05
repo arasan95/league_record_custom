@@ -1,7 +1,10 @@
 import type { MetadataFile } from "./bindings";
 
 export function toVideoName(videoId: string): string {
-    return videoId.slice(0, videoId.lastIndexOf("."));
+    const nameWithExt = videoId.split(/[/\\]/).pop() || videoId;
+    // ensure we don't return an empty string if there is no extension
+    if (nameWithExt.lastIndexOf(".") === -1) return nameWithExt;
+    return nameWithExt.slice(0, nameWithExt.lastIndexOf("."));
 }
 
 export function toVideoId(videoName: string): string {

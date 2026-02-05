@@ -243,14 +243,6 @@ async function main() {
             ui.showBigPlayButton(false);
             player.controls(false);
         } else {
-            // split src ('https://asset.localhost/{path_to_file}') at the last '/' to get the video path from the src
-            // to get the videoId split path/to/file.mp4 at the last directory separator which can be '/' or '\' (=> sep)
-            // since videoId has to be a valid filename and filenames can't contain '/' this works always
-            const videoPath = decodeURIComponent(splitRight(src, "/"));
-            const videoId = splitRight(videoPath, sep());
-            ui.setActiveVideoId(videoId);
-            setMetadata(videoId);
-
             // re-show the bigplaybutton and controlbar when a new video src is set
             ui.showBigPlayButton(true);
             player.controls(true);
@@ -645,6 +637,11 @@ async function updateSidebar(forceUpdateIds: string[] = []) {
 function checkLatestAndRetry(recordings: any[]) {
     if (recordings.length > 0) {
         const latest = recordings[0];
+        // Clips never have metadata, so don't retry for them
+        if (latest.videoId.includes("_clip_")) {
+            return;
+        }
+
         let isUnknown = !latest.metadata || ("NoData" in latest.metadata);
         
         if (!isUnknown && latest.metadata && "Metadata" in latest.metadata) {
@@ -718,9 +715,11 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
     if (videoId === null) {
         player.src("");
     } else {
-        const recordingsPath = await commands.getRecordingsPath();
         const settings = await commands.getSettings();
-        player.src({ type: "video/mp4", src: convertFileSrc(await join(recordingsPath, videoId)) });
+        // VideoId is now an absolute path, so we use it directly
+        ui.setActiveVideoId(videoId);
+        setMetadata(videoId);
+        player.src({ type: "video/mp4", src: convertFileSrc(videoId) });
         if (settings.autoplayVideo && allowAutoplay) {
             void player.play()?.catch(() => {});
         }

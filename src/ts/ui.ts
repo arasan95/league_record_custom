@@ -603,7 +603,7 @@ export default class UI {
              // A clip is small, but let's count it.
              // If we really want accurate size, we need file size.
              // We fallback to counts.
-             if (r.videoId.includes("-clip")) {
+             if (r.videoId.includes("_clip")) {
                  clipCount++;
              } else if (isFavorite(r.metadata)) {
                  starCount++;
@@ -661,6 +661,11 @@ export default class UI {
                 }
             }
             
+            // Allow clips to be visible even without metadata
+            if (recording.videoId.includes("_clip")) {
+                shouldHide = false;
+            }
+            
             if (shouldHide) {
                 return undefined;
             }
@@ -698,7 +703,7 @@ export default class UI {
                 if (!isFavorite(recording.metadata)) isVisible = false;
             }
             // 2. Clip Filter
-            if (this.filterClip && !recording.videoId.includes("-clip")) {
+            if (this.filterClip && !recording.videoId.includes("_clip")) {
                 isVisible = false;
             }
             // 3. Ranked Filter
@@ -1113,9 +1118,24 @@ export default class UI {
             },
         ) as HTMLInputElement;
 
+        // Helper to extract directory
+        const getDir = (p: string) => {
+             const last = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+             return last === -1 ? "" : p.substring(0, last + 1);
+        };
+        const currentDir = getDir(videoId);
+
         // set validity checker initial value and add 'input' event listener
         const validityChecker = (_e: Event) => {
-            if (videoIds.includes(toVideoId(input.value))) {
+            const newName = toVideoId(input.value);
+            // Check if any existing video (in the same directory) matches the new name
+            const exists = videoIds.some(id => {
+                if (getDir(id) !== currentDir) return false;
+                const name = id.split(/[/\\]/).pop();
+                return name === newName;
+            });
+
+            if (exists) {
                 input.setCustomValidity("there is already a file with this name");
                 saveButton.setAttribute("disabled", "true");
             } else {
@@ -1282,9 +1302,13 @@ export default class UI {
     public setActiveVideoId = (videoId: string | null) => {
         this.sidebar.querySelector<HTMLLIElement>("li.active")?.classList.remove("active");
         if (videoId !== null) {
-            const videoLi = this.sidebar.querySelector<HTMLLIElement>(`[id='${videoId}']`);
-            videoLi?.classList.add("active");
-            return videoLi !== null;
+            // querySelector fails with backslashes in IDs (absolute paths), so use getElementById
+            const videoLi = document.getElementById(videoId) as HTMLLIElement | null;
+            if (videoLi && this.sidebar.contains(videoLi)) {
+                videoLi.classList.add("active");
+                return true;
+            }
+            return false;
         }
 
         return true;
@@ -1885,10 +1909,8 @@ export default class UI {
 
             const teamDiv = this.vjs.dom.createEl("div", {}, { class: `team team-${teamId}` });
             
-            // Limit to 5 players per team to be safe
-            for (let i = 0; i < participants.length && i < 5; i++) {
-                const p = participants[i];
-                
+            // Parallelize fetching and rendering
+            const rowPromises = participants.slice(0, 5).map(async (p) => {
                 // Fetch all assets parallel
                 const cDragonUrl = `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/${p.championId}.png`;
                 const cachedChampIcon = await import("./assets").then(m => m.getCachedAssetUrl(cDragonUrl, "champion", `${p.championId}.png`));
@@ -1901,6 +1923,7 @@ export default class UI {
                     p.stats.item0, p.stats.item1, p.stats.item2, p.stats.item3, p.stats.item4, p.stats.item5, p.stats.item6
                 ].map(id => getItemIconUrl(id)));
 
+                // Check cancel info
                 if (this.metadataRenderId !== currentRenderId) return null;
 
                 const row = this.vjs.dom.createEl("div", {}, { class: "player-row" }) as HTMLElement;
@@ -1923,9 +1946,8 @@ export default class UI {
                 
                 // Separation of Stats
                 const csDiv = this.vjs.dom.createEl("div", {}, { class: "cs-stat" }, `${p.stats.totalMinionsKilled}`) as HTMLElement;
-                this.csRefs.push(csDiv);
+
                 const kdaDiv = this.vjs.dom.createEl("div", {}, { class: "kda" }, `${p.stats.kills} / ${p.stats.deaths} / ${p.stats.assists}`) as HTMLElement;
-                this.kdaRefs.push(kdaDiv);
 
                 // Separation of Items (0-5) and Trinket (6)
                 const coreItemUrls = itemUrls.slice(0, 6);
@@ -1979,13 +2001,6 @@ export default class UI {
                 // DATA-BINDING ROBUSTNESS
                 // Embed PID in the DOM row for easy debugging
                 row.dataset.pid = p.participantId.toString();
-
-                this.scoreboardRefs.set(p.participantId, {
-                    items: itemImgs,
-                    trinket: trinketImg,
-                    goldText: goldDiv,
-                    participantId: p.participantId // Validate with explicit ID
-                });
                 
                 const isMe = p.participantId === data.participantId;
                 // Priority: 1. Populated summonerName (New recordings), 2. data.player (Old recordings - Me), 3. Fallback ID
@@ -2085,7 +2100,36 @@ export default class UI {
                 // Append all to row (Order doesn't matter for append if style.order is set, but keeping logical is good)
                 row.append(img, csDiv, kdaDiv, itemsGrid, trinketDiv, spells, runesDiv, goldDiv, name);
                 
-                teamDiv.append(row);
+                return {
+                    row,
+                    csDiv,
+                    kdaDiv,
+                    itemImgs,
+                    trinketImg,
+                    goldDiv,
+                    participantId: p.participantId,
+                    p
+                };
+            });
+
+            const results = await Promise.all(rowPromises);
+            
+            // Race check
+            if (this.metadataRenderId !== currentRenderId) return null;
+
+            for (const res of results) {
+                if (!res) continue;
+
+                teamDiv.append(res.row);
+                this.csRefs.push(res.csDiv);
+                this.kdaRefs.push(res.kdaDiv);
+
+                this.scoreboardRefs.set(res.participantId, {
+                    items: res.itemImgs,
+                    trinket: res.trinketImg,
+                    goldText: res.goldDiv,
+                    participantId: res.participantId 
+                });
             }
             return teamDiv;
         };
@@ -2801,6 +2845,31 @@ export default class UI {
             browseBtn
         ]);
 
+        // Clips Folder
+        const clipsFolderInput = this.vjs.dom.createEl("input", {}, {
+            class: "settings-input",
+            type: "text",
+            value: settings.clipsFolder || "",
+            style: "flex: 1;"
+        }) as HTMLInputElement;
+
+        const browseClipsBtn = this.vjs.dom.createEl("button", {
+            onclick: () => {
+                invoke<string | null>("pick_clips_folder")
+                    .then((path) => {
+                        if (path) {
+                            clipsFolderInput.value = path;
+                        }
+                    })
+                    .catch((err) => console.error("Failed to pick folder:", err));
+            }
+        }, { class: "btn", style: "margin-left: 10px;" }, "Browse");
+
+        const clipsFolderContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; align-items: center; width: 100%;" }, [
+            clipsFolderInput,
+            browseClipsBtn
+        ]);
+
         // Filename Format
         const filenameInput = this.vjs.dom.createEl("input", {}, {
             class: "settings-input",
@@ -3334,6 +3403,7 @@ export default class UI {
         // Populate General Grid
         generalGrid.append(
             createGroup("Recordings Folder", folderContainer as HTMLElement, true),
+            createGroup("Clips Folder", clipsFolderContainer as HTMLElement, true),
             createGroup("Filename Format", filenameInput, true),
             createGroup("Encoding Quality (0-50)", qualityContainer as HTMLElement),
             createGroup("Output Resolution", resSelect),
@@ -3389,6 +3459,7 @@ export default class UI {
                 const newSettings: Settings = {
                     ...settings,
                     recordingsFolder: folderInput.value,
+                    clipsFolder: clipsFolderInput.value,
                     filenameFormat: filenameInput.value,
                     encodingQuality: parseInt(qualityInput.value, 10),
                     outputResolution: resSelect.value || null as any,

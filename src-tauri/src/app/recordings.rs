@@ -19,25 +19,33 @@ impl RecordingManager for AppHandle {
     fn get_recordings(&self) -> Vec<PathBuf> {
         // get all mp4 files in ~/Videos/%folder-name%
         let mut recordings = Vec::<PathBuf>::new();
-        let Ok(read_dir) = self.state::<SettingsWrapper>().get_recordings_path().read_dir() else {
-            return vec![];
-        };
-
+        let settings = self.state::<SettingsWrapper>();
         let currently_recording = self.state::<CurrentlyRecording>().get();
 
-        for entry in read_dir.flatten() {
-            let path = entry.path();
+        let paths_to_scan = vec![settings.get_recordings_path(), settings.get_clips_path()];
 
-            if !path.is_file() || Some(&path) == currently_recording.as_ref() {
-                continue;
-            }
+        for dir_path in paths_to_scan {
+            if let Ok(read_dir) = dir_path.read_dir() {
+                for entry in read_dir.flatten() {
+                    let path = entry.path();
 
-            if let Some(ext) = path.extension() {
-                if ext == "mp4" {
-                    recordings.push(path);
+                    if !path.is_file() || Some(&path) == currently_recording.as_ref() {
+                        continue;
+                    }
+
+                    if let Some(ext) = path.extension() {
+                        if ext == "mp4" {
+                            recordings.push(path);
+                        }
+                    }
                 }
             }
         }
+
+        // Remove duplicates in case folders are the same or nested
+        recordings.sort();
+        recordings.dedup();
+
         recordings
     }
 

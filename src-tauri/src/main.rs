@@ -55,6 +55,7 @@ fn main() {
             commands::save_settings,
             commands::pick_recordings_folder,
             commands::create_clip,
+            commands::pick_clips_folder,
             commands::pick_ffmpeg_path,
             commands::clear_cache,
             commands::download_image
