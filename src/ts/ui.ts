@@ -89,6 +89,7 @@ export default class UI {
     
     private sidebarContainer: HTMLDivElement | null = null;
     private scoreboardEl: HTMLElement | null = null;
+    private scoreboardScale: number | null = null;
     
     // Core methods
     
@@ -177,6 +178,16 @@ export default class UI {
         const SB_BASE = 220;
         const SCALE_START_H = 850; // Above this, max size
         const SCALE_END_H = 600;   // Below this, collapse
+
+        if (this.scoreboardScale !== null && this.scoreboardScale > 0) {
+            this.setScoreboardHeight(this.scoreboardScale * SB_BASE, SB_BASE);
+            // If we want to strictly enforce "zoom", setScoreboardHeight does that via zoom property.
+            // But we might want to respect the "Force collapse" if window is TINY?
+            // "height returns to prescribed" - User dislikes the auto-reset.
+            // Let's assume user setting overrides everything except maybe extreme cases?
+            // Actually, simply returning here ensures user setting sticks.
+            return;
+        }
 
         if (h <= SCALE_END_H) {
             this.setScoreboardHeight(30, SB_BASE); // Force collapse
@@ -428,6 +439,9 @@ export default class UI {
                 this.maxStorageGb = s.maxRecordingsSizeGb;
             } else {
                 this.maxStorageGb = 0; // Unlimited or unknown
+            }
+            if (s.scoreboardScale) {
+                this.scoreboardScale = s.scoreboardScale;
             }
         }).catch(err => console.error("Failed to load settings:", err));
     }
@@ -1040,6 +1054,14 @@ export default class UI {
         return li;
     };
 
+    public removeRecordingItem = (videoId: string) => {
+        const li = document.getElementById(videoId);
+        if (li) {
+            li.remove();
+        }
+        this.recordingElementMap.delete(videoId);
+    };
+            
     public updateRecordingItem = (recording: Recording) => {
         const existingLi = document.getElementById(recording.videoId);
         
@@ -1908,6 +1930,9 @@ export default class UI {
 
         // Scoreboard (Bottom)
         this.scoreboardEl = this.vjs.dom.createEl("div", {}, { class: "scoreboard" }) as HTMLElement;
+        if (this.scoreboardScale) {
+            (this.scoreboardEl.style as any).zoom = this.scoreboardScale.toFixed(3);
+        }
         
         // --- Scoreboard Resizing Logic ---
         const resizeHandle = this.vjs.dom.createEl("div", {}, { class: "scoreboard-resize-handle" });
@@ -1928,6 +1953,18 @@ export default class UI {
              window.removeEventListener("mousemove", onMouseMove);
              window.removeEventListener("mouseup", stopDrag);
              document.body.style.cursor = "";
+             
+             // Save Setting
+             if (this.scoreboardEl) {
+                 const finalZoom = (this.scoreboardEl.style as any).zoom;
+                 if (finalZoom) {
+                     this.scoreboardScale = parseFloat(finalZoom);
+                     commands.getSettings().then(s => {
+                         s.scoreboardScale = this.scoreboardScale;
+                         commands.saveSettings(s);
+                     });
+                 }
+             }
         };
 
         resizeHandle.addEventListener("mousedown", (e: Event) => {

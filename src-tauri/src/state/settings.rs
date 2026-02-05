@@ -311,6 +311,7 @@ pub struct Settings {
     pub developer_mode: bool,
     pub match_history_base_url: Option<String>,
     pub scroll_frame_step_modifier: Option<String>,
+    pub scoreboard_scale: Option<f64>,
 }
 
 const DEFAULT_DEBUG_LOG: bool = false;
@@ -378,6 +379,7 @@ impl Default for Settings {
             developer_mode: false,
             match_history_base_url: DEFAULT_MATCH_HISTORY_BASE_URL,
             scroll_frame_step_modifier: Some("Shift".to_string()),
+            scoreboard_scale: None,
         }
     }
 }
@@ -479,6 +481,9 @@ impl<'de> Deserialize<'de> for Settings {
                         }
                         "scrollFrameStepModifier" => {
                             settings.scroll_frame_step_modifier = map.next_value().ok();
+                        }
+                        "scoreboardScale" => {
+                            settings.scoreboard_scale = map.next_value().ok();
                         }
                         _ => { /* ignored */ }
                     }
