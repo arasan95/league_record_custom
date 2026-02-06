@@ -133,6 +133,11 @@ pub async fn process_data(
         }
     }
 
+    let merged_events = merge_live_events(
+        events,
+        live_events,
+        &game.participant_identities,
+        &game.participants,
         &pid_to_champ,
     );
 
@@ -358,6 +363,11 @@ pub async fn process_data_with_retry(
         }
     }
 
+    let merged_events = merge_live_events(
+        events,
+        live_events,
+        &game.participant_identities,
+        &game.participants,
         &pid_to_champ,
     );
 
@@ -639,19 +649,19 @@ fn calculate_lane_scores(events: &[GameEvent]) -> std::collections::HashMap<i64,
             position,
         } = &event.event
         {
-             // Update logic
-             let mut update = |pid: i64, sums: &mut std::collections::HashMap<i64, (f64, f64, i32)>| {
-                 let entry = sums.entry(pid).or_insert((0.0, 0.0, 0));
-                 entry.0 += position.x as f64;
-                 entry.1 += position.y as f64;
-                 entry.2 += 1;
-             };
+            // Update logic
+            let update = |pid: i64, sums: &mut std::collections::HashMap<i64, (f64, f64, i32)>| {
+                let entry = sums.entry(pid).or_insert((0.0, 0.0, 0));
+                entry.0 += position.x as f64;
+                entry.1 += position.y as f64;
+                entry.2 += 1;
+            };
 
-             update(*victim_id, &mut pos_sums);
-             update(*killer_id, &mut pos_sums);
-             for assist_id in assisting_participant_ids {
-                 update(*assist_id, &mut pos_sums);
-             }
+            update(*victim_id, &mut pos_sums);
+            update(*killer_id, &mut pos_sums);
+            for assist_id in assisting_participant_ids {
+                update(*assist_id, &mut pos_sums);
+            }
         }
     }
 
