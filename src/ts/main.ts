@@ -8,7 +8,7 @@ import { join, sep } from "@tauri-apps/api/path";
 import { commands, type GameEvent, type MarkerFlags } from "./bindings";
 import ListenerManager from "./listeners";
 import UI from "./ui";
-import { splitRight, UnreachableError } from "./util";
+import { splitRight, UnreachableError, playNotificationSound } from "./util";
 import { DEFAULT_KEYBINDS, isAction, loadKeybinds, loadMouseConfig, type KeybindMap, type MouseConfig } from "./keybinds";
 import { TitleBar } from "./titlebar";
 import { initPatchVersion } from "./version";
@@ -499,6 +499,7 @@ async function main() {
     
     listenerManager.listen_app("RecordingStarted", () => {
         commands.getSettings().then(settings => {
+            if (settings.playRecordingSounds) playNotificationSound('start');
             if (settings.autoStopPlayback) {
                 player.pause();
                 console.log("Auto-stopped playback due to new game start.");
@@ -507,6 +508,10 @@ async function main() {
     });
 
     listenerManager.listen_app("RecordingFinished", ({ payload }) => {
+        commands.getSettings().then(settings => {
+            if (settings.playRecordingSounds) playNotificationSound('stop');
+        });
+
         const [videoId, isManualStop] = payload;
         if (!isManualStop) {
              commands.getSettings().then(async settings => {
