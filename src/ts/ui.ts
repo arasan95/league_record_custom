@@ -900,7 +900,16 @@ export default class UI {
             // 1. Header: Time and Mode
             const headerRow = this.vjs.dom.createEl("div", {}, { class: "sidebar-header-row" });
             const timeSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-time" }, timeStr);
-            const modeSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-mode" }, queueName);
+            
+            // Rename Swiftplay -> Swift
+            // Rename Swiftplay -> Swift based on ID 480
+            let displayMode = queueName;
+            const queueId = meta.queue?.id;
+            
+            if (displayMode.toLowerCase() === "swiftplay" || queueId === 480) {
+                displayMode = "Swift";
+            }
+            const modeSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-mode" }, displayMode);
             headerRow.append(timeSpan, modeSpan);
 
             // 2. Body: Icon + Stats
@@ -1995,14 +2004,14 @@ export default class UI {
             const cachePath = activeVideoId ? activeVideoId.replace(/\.mp4$/i, "") + ".sb.json" : null;
             
             if (cachePath) {
-                try {
-                     const res = await commands.loadScoreboardCache(activeVideoId!);
-                     if (res.status === "ok") {
-                         cacheData = JSON.parse(res.data);
-                     }
-                } catch (e) { 
-                    // console.warn("Cache load failed", e); 
-                }
+                // try {
+                //      const res = await commands.loadScoreboardCache(activeVideoId!);
+                //      if (res.status === "ok") {
+                //          cacheData = JSON.parse(res.data);
+                //      }
+                // } catch (e) { 
+                //     // console.warn("Cache load failed", e); 
+                // }
             }
 
             // Parallelize fetching and rendering
@@ -2238,6 +2247,7 @@ export default class UI {
 
             // Save Cache if new data was fetched
             // We only save if we didn't start with cache, and we have valid results
+            /*
             if (!cacheData && cachePath && results.length > 0) {
                  const newCache: Record<string, any> = {};
                  let hasData = false;
@@ -2259,6 +2269,7 @@ export default class UI {
                      }
                  }
             }
+            */
 
             for (const res of results) {
                 if (!res) continue;
