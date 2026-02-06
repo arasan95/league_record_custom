@@ -664,14 +664,18 @@ function checkLatestAndRetry(recordings: any[]) {
         if (!isUnknown && latest.metadata && "Metadata" in latest.metadata) {
              const m = latest.metadata.Metadata;
              // Check if queue is missing OR named Unknown Queue (or contains Unknown)
-             if (!m.queue || !m.queue.name || m.queue.name.toLowerCase().includes("unknown")) {
+             // Also check if gameMode is missing or Unknown
+             // Some AI games might have queueId but data isn't fully ready?
+             const qName = m.queue?.name?.toLowerCase() ?? "";
+             // Check strict "unknown" or empty
+             if (!m.queue || !m.queue.name || qName.includes("unknown") || qName === "") {
                  isUnknown = true;
              }
         }
 
         if (isUnknown) {
             console.log(`Latest recording ${latest.videoId} is Unknown. Scheduling retries...`);
-            retrySidebarUpdate(10, latest.videoId);
+            retrySidebarUpdate(3, latest.videoId);
         }
     }
 }
@@ -702,8 +706,9 @@ async function retrySidebarUpdate(attemptsLeft: number, targetId: string) {
                     
                     if (!isUnknown && latest.metadata && "Metadata" in latest.metadata) {
                         const m = latest.metadata.Metadata;
-                        // Queue missing or "Unknown Queue" -> keep retrying
-                        if (!m.queue || m.queue.name === "Unknown Queue") {
+                        const qName = m.queue?.name?.toLowerCase() ?? "";
+                        // Same strict check
+                        if (!m.queue || !m.queue.name || qName.includes("unknown") || qName === "") {
                             isUnknown = true;
                         }
                     }
