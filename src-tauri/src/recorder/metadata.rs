@@ -133,13 +133,10 @@ pub async fn process_data(
         }
     }
 
-    let merged_events = merge_live_events(
-        events,
-        live_events,
-        &game.participant_identities,
-        &game.participants,
         &pid_to_champ,
     );
+
+    let lane_scores = calculate_lane_scores(&merged_events);
 
     let participants = game
         .participants
@@ -170,6 +167,7 @@ pub async fn process_data(
                     .map(|t| t.role.clone())
                     .unwrap_or_else(|| "NONE".to_string()),
                 summoner_name: name,
+                lane_score: *lane_scores.get(&p.participant_id).unwrap_or(&0.0),
             }
         })
         .collect();
@@ -360,13 +358,10 @@ pub async fn process_data_with_retry(
         }
     }
 
-    let merged_events = merge_live_events(
-        events,
-        live_events,
-        &game.participant_identities,
-        &game.participants,
         &pid_to_champ,
     );
+
+    let lane_scores = calculate_lane_scores(&merged_events);
 
     let participants = game
         .participants
@@ -397,6 +392,7 @@ pub async fn process_data_with_retry(
                     .map(|t| t.role.clone())
                     .unwrap_or_else(|| "NONE".to_string()),
                 summoner_name: name,
+                lane_score: *lane_scores.get(&p.participant_id).unwrap_or(&0.0),
             }
         })
         .collect();
@@ -622,4 +618,50 @@ fn merge_live_events(
 
     current_events.sort_by_key(|e| e.timestamp);
     current_events
+}
+
+fn calculate_lane_scores(events: &[GameEvent]) -> std::collections::HashMap<i64, f64> {
+    let mut scores = std::collections::HashMap::new();
+    let mut pos_sums = std::collections::HashMap::new(); // PID -> (x, y, count)
+
+    // 14 minutes in milliseconds
+    let time_limit = 14 * 60 * 1000;
+
+    for event in events {
+        if event.timestamp > time_limit {
+            break; // Events are presumably sorted by timestamp
+        }
+
+        if let super::Event::ChampionKill {
+            victim_id,
+            killer_id,
+            assisting_participant_ids,
+            position,
+        } = &event.event
+        {
+             // Update logic
+             let mut update = |pid: i64, sums: &mut std::collections::HashMap<i64, (f64, f64, i32)>| {
+                 let entry = sums.entry(pid).or_insert((0.0, 0.0, 0));
+                 entry.0 += position.x as f64;
+                 entry.1 += position.y as f64;
+                 entry.2 += 1;
+             };
+
+             update(*victim_id, &mut pos_sums);
+             update(*killer_id, &mut pos_sums);
+             for assist_id in assisting_participant_ids {
+                 update(*assist_id, &mut pos_sums);
+             }
+        }
+    }
+
+    for (pid, (sum_x, sum_y, count)) in pos_sums {
+        if count > 0 {
+            let avg_x = sum_x / count as f64;
+            let avg_y = sum_y / count as f64;
+            scores.insert(pid, avg_y - avg_x);
+        }
+    }
+
+    scores
 }

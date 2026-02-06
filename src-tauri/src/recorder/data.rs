@@ -45,6 +45,8 @@ pub struct Participant {
     pub role: String,
     #[serde(default)]
     pub summoner_name: String,
+    #[serde(default)]
+    pub lane_score: f64,
 }
 
 #[cfg_attr(test, derive(specta::Type))]
