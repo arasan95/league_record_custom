@@ -1502,7 +1502,7 @@ export default class UI {
         const participants200 = data.participants.filter(p => p.teamId === 200);
 
         // Sort by Role: TOP, JUNGLE, MID, BOT, SUPPORT
-        // New Sorting Logic: Team Composition Fitting
+        // New Sorting Logic: Team Composition Fitting & Standard Mode Participant ID Priority
         const sortParticipants = (team: Participant[]) => {
             const slots: { [key: number]: Participant } = {};
             const remaining: Participant[] = [];
@@ -1530,9 +1530,21 @@ export default class UI {
                  return false;
             };
             
-            // Marksman List (Heuristic)
+            // Marksman List (Heuristic) for Fallback
             const marksmen = [22, 51, 119, 81, 202, 145, 18, 29, 110, 67, 11, 21, 15, 236, 429, 203, 498, 96, 222, 221, 523, 134, 496, 711]; 
 
+            // --- STANDARD QUEUE MODE CHECK ---
+            const queueName = data.queue?.name || "";
+            const qId = data.queue?.id || 0;
+            const qLower = queueName.toLowerCase();
+            
+            const isStandardMode = 
+                qLower.includes("ranked") || qLower.includes("rank") || // Ranked
+                qLower.includes("normal") || qLower.includes("draft") || qLower.includes("blind") || // Normal
+                qLower.includes("swift") || qLower.includes("swiftplay") || qId === 480; // Swiftplay
+
+            
+            // Step A: Assign Jungle & Support (Universal Priority)
             team.forEach(p => {
                 // Priority: Smite > Support Item > Others
                 if (hasSmite(p)) {
@@ -1546,82 +1558,194 @@ export default class UI {
                 }
             });
 
-             // 2. Identify BOT (ADC) from remaining
-            // Traits: Heal(7), Barrier(21), Cleanse(1). Marksman Class.
-            const getBotScore = (p: Participant) => {
-                let score = 0;
-                if (p.spell1Id === 7 || p.spell2Id === 7) score += 50; // Heal
-                if (p.spell1Id === 21 || p.spell2Id === 21) score += 20; // Barrier
-                if (p.spell1Id === 1 || p.spell2Id === 1) score += 20; // Cleanse
-                if (marksmen.includes(p.championId)) score += 30;
-                return score;
-            };
-
-            // If Slot 4 (Bot) is empty, find best candidate
-            if (!slots[4]) {
-                let bestBot: Participant | null = null;
-                let maxScore = -1;
-                let bestIdx = -1;
-
-                remaining.forEach((p, i) => {
-                    const score = getBotScore(p);
-                    // Threshold > 0 to avoid random assignment if no signals
-                    if (score > maxScore && score > 0) {
-                        maxScore = score;
-                        bestBot = p;
-                        bestIdx = i;
+            if (isStandardMode) {
+                // Step B: Native Slot Assignment for Standard Modes
+                // Logic: Assign remaining players to their "Native" slot (based on ID) if empty.
+                // Native Slots:
+                // 1-5 (Blue): 1=Top, 2=Jg, 3=Mid, 4=Bot, 5=Sup
+                // 6-10 (Red): 6=Top, 7=Jg, 8=Mid, 9=Bot, 10=Sup
+                // Target Slots in UI: 1=Top, 2=Jg, 3=Mid, 4=Bot, 5=Sup
+                
+                // We iterate using a standard loop to handle potential modification of `remaining` if needed,
+                // but simpler to just filter/find.
+                
+                // Clone remaining to avoid mutation issues during iteration
+                const currentRemaining = [...remaining];
+                
+                currentRemaining.forEach(p => {
+                    // Calculate Native UI Slot (1-5)
+                    // (p.id - 1) % 5 gives 0..4. +1 gives 1..5.
+                    const nativeSlot = ((p.participantId - 1) % 5) + 1;
+                    
+                    // We only care about Top(1), Mid(3), Bot(4) here.
+                    // Jg(2) and Sup(5) are already handled or will be filled by fallback.
+                    if ([1, 3, 4].includes(nativeSlot)) {
+                        if (!slots[nativeSlot]) {
+                            slots[nativeSlot] = p;
+                            // Remove from remaining
+                            const idx = remaining.indexOf(p);
+                            if (idx > -1) remaining.splice(idx, 1);
+                        }
                     }
                 });
-
-                if (bestBot && bestIdx !== -1) {
-                    slots[4] = bestBot;
-                    remaining.splice(bestIdx, 1);
-                }
-            }
-
-            // 3. Identify TOP vs MID from remaining
-            // Top: Teleport(12) preferred. Ghost(6).
-            // Mid: Ignite(14) preferred. Ghost(6). 
-            const getTopScore = (p: Participant) => {
-                let score = 0;
-                if (p.spell1Id === 12 || p.spell2Id === 12) score += 20; // Teleport
-                if (p.spell1Id === 6 || p.spell2Id === 6) score += 10; // Ghost
-                return score;
-            };
-            // const getMidScore = (p: Participant) => { ... }; // Implicitly compared against Top
-
-            // Fill Slots 1 (Top) and 3 (Mid)
-            // If we have 2 remaining, compare them.
-            if (remaining.length === 2 && !slots[1] && !slots[3]) {
-                 const pA = remaining[0];
-                 const pB = remaining[1];
-                 const aTop = getTopScore(pA);
-                 const bTop = getTopScore(pB);
-                 
-                 // If A has higher Top score, A=Top.
-                 if (aTop >= bTop) {
-                     slots[1] = pA;
-                     slots[3] = pB;
-                 } else {
-                     slots[1] = pB;
-                     slots[3] = pA;
-                 }
+                
+                // Step C: Fallback for any still empty slots
+                // (e.g. Swapped roles or Off-meta picks that didn't match Jg/Sup logic)
             } else {
-                // Fallback: fill sequentially 1, 3, 4
-                const emptySlots = [1, 3, 4].filter(s => !slots[s]);
-                remaining.forEach((p, i) => {
-                    if (i < emptySlots.length) {
-                        slots[emptySlots[i]] = p;
+                // --- SPATIAL SORTING FOR AI/CUSTOM ---
+                // User Request: Use average X,Y from events < 14 mins to determine lane.
+                // Score = AvgY - AvgX.
+                // Top: High Y, Low X -> High Positive.
+                // Mid: Y ~ X -> Near Zero.
+                // Bot: Low Y, High X -> High Negative.
+                
+                const posSums = new Map<number, { x: number, y: number, count: number }>();
+                const TIME_LIMIT = 14 * 60 * 1000; // 14 mins
+
+                // Initialize sums for remaining participants
+                remaining.forEach(p => posSums.set(p.participantId, { x: 0, y: 0, count: 0 }));
+
+                // Aggregate positions
+                if (this.events) {
+                    for (const e of this.events) {
+                        if (e.timestamp > TIME_LIMIT) break; 
+                        
+                        if ("ChampionKill" in e) {
+                            const kill = e.ChampionKill;
+                            const pos = kill.position;
+                            
+                            // Helper to update
+                            const update = (pid: number) => {
+                                const entry = posSums.get(pid);
+                                if (entry) {
+                                    entry.x += pos.x;
+                                    entry.y += pos.y;
+                                    entry.count++;
+                                }
+                            };
+
+                            update(kill.victim_id);
+                            update(kill.killer_id);
+                            kill.assisting_participant_ids.forEach(aid => update(aid));
+                        }
                     }
+                }
+
+                // Calculate Scores
+                const getSpatialScore = (p: Participant) => {
+                    // Check for Server-Side Persisted Score (laneScore)
+                    // We need to cast 'p' to any because 'laneScore' is not yet in type definition in bindings.ts
+                    // stored locally until we update bindings.
+                    const pAny = p as any;
+                    if (typeof pAny.laneScore === 'number' && pAny.laneScore !== 0) {
+                         return pAny.laneScore;
+                    }
+
+                    const entry = posSums.get(p.participantId);
+                    // If no data, return 0 (Neutral).
+                    if (!entry || entry.count === 0) return 0;
+                    
+                    const avgX = entry.x / entry.count;
+                    const avgY = entry.y / entry.count;
+                    return avgY - avgX;
+                };
+
+                // Sort Remaining by Score Descending (Top -> Mid -> Bot)
+                // If scores are equal (e.g. 0), keep original order (stable sort ideally).
+                remaining.sort((a, b) => {
+                    const sA = getSpatialScore(a);
+                    const sB = getSpatialScore(b);
+                    return sB - sA; // Descending
                 });
+
+                // Assign to Empty Target Slots [1, 3, 4]
+                // 1=Top (Highest Score), 3=Mid, 4=Bot (Lowest Score)
+                const targetSlots = [1, 3, 4].filter(s => !slots[s]);
+                
+                remaining.forEach((p, i) => {
+                     if (i < targetSlots.length) {
+                         slots[targetSlots[i]] = p;
+                     }
+                });
+                /*
+                // --- LEGACY / FALLBACK LOGIC for non-standard modes (ARAM, Arena, etc) ---
+                // Or if user wants Standard Logic everywhere? Request said "Ranked, Normal, Swiftplay".
+                // We keep the heuristic sorts for unknown modes.
+                
+                // 2. Identify BOT (ADC) from remaining
+                // Traits: Heal(7), Barrier(21), Cleanse(1). Marksman Class.
+                const getBotScore = (p: Participant) => {
+                    let score = 0;
+                    if (p.spell1Id === 7 || p.spell2Id === 7) score += 50; // Heal
+                    if (p.spell1Id === 21 || p.spell2Id === 21) score += 20; // Barrier
+                    if (p.spell1Id === 1 || p.spell2Id === 1) score += 20; // Cleanse
+                    if (marksmen.includes(p.championId)) score += 30;
+                    return score;
+                };
+
+                // If Slot 4 (Bot) is empty, find best candidate
+                if (!slots[4]) {
+                    let bestBot: Participant | null = null;
+                    let maxScore = -1;
+                    let bestIdx = -1;
+
+                    remaining.forEach((p, i) => {
+                        const score = getBotScore(p);
+                        if (score > maxScore && score > 0) {
+                            maxScore = score;
+                            bestBot = p;
+                            bestIdx = i;
+                        }
+                    });
+
+                    if (bestBot && bestIdx !== -1) {
+                        slots[4] = bestBot;
+                        remaining.splice(bestIdx, 1);
+                    }
+                }
+
+                // 3. Identify TOP vs MID from remaining
+                const getTopScore = (p: Participant) => {
+                    let score = 0;
+                    if (p.spell1Id === 12 || p.spell2Id === 12) score += 20; // Teleport
+                    if (p.spell1Id === 6 || p.spell2Id === 6) score += 10; // Ghost
+                    return score;
+                };
+
+                // Fill Slots 1 (Top) and 3 (Mid)
+                if (remaining.length === 2 && !slots[1] && !slots[3]) {
+                     const pA = remaining[0];
+                     const pB = remaining[1];
+                     const aTop = getTopScore(pA);
+                     const bTop = getTopScore(pB);
+                     
+                     if (aTop >= bTop) {
+                         slots[1] = pA;
+                         slots[3] = pB;
+                     } else {
+                         slots[1] = pB;
+                         slots[3] = pA;
+                     }
+                     // Clear remaining as we assigned both
+                     remaining.length = 0; 
+                }
+                */
             }
+            
+            // Universal Fallback: Fill sequentially 1, 3, 4 (and 2, 5 if somehow missed)
+            const emptySlots = [1, 2, 3, 4, 5].filter(s => !slots[s]);
+            remaining.forEach((p, i) => {
+                if (i < emptySlots.length) {
+                    slots[emptySlots[i]] = p;
+                }
+            });
 
             // Construct Final Array [1, 2, 3, 4, 5]
             const result: Participant[] = [];
             [1, 2, 3, 4, 5].forEach(i => {
                 if (slots[i]) result.push(slots[i]);
             });
-            // Append any left over
+            // Append any left over (should vary rarely happen unless >5 players)
             remaining.forEach(p => {
                  if (!Object.values(slots).includes(p)) result.push(p);
             });
