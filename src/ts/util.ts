@@ -28,3 +28,36 @@ export class UnreachableError extends Error {
         super(`unreachable case: ${JSON.stringify(val)}`);
     }
 }
+
+export function playNotificationSound(type: 'start' | 'stop') {
+    try {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        const now = ctx.currentTime;
+        
+        if (type === 'start') {
+            // High pitch, short "ding"
+            osc.frequency.setValueAtTime(880, now); // A5
+            gain.gain.setValueAtTime(0.05, now); // Low volume (Subtle)
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc.start(now);
+            osc.stop(now + 0.3);
+        } else {
+            // Lower pitch, short "bloop"
+            osc.frequency.setValueAtTime(440, now); // A4
+            gain.gain.setValueAtTime(0.05, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc.start(now);
+            osc.stop(now + 0.3);
+        }
+    } catch (e) {
+        console.warn("Failed to play notification sound:", e);
+    }
+}

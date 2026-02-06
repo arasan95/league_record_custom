@@ -1667,6 +1667,11 @@ export default class UI {
                          slots[targetSlots[i]] = p;
                      }
                 });
+                
+                // Remove assigned participants from remaining to prevent double assignment in fallback
+                if (remaining.length > 0 && targetSlots.length > 0) {
+                     remaining.splice(0, Math.min(remaining.length, targetSlots.length));
+                }
                 /*
                 // --- LEGACY / FALLBACK LOGIC for non-standard modes (ARAM, Arena, etc) ---
                 // Or if user wants Standard Logic everywhere? Request said "Ranked, Normal, Swiftplay".
@@ -3558,12 +3563,13 @@ export default class UI {
         const gmCustom = createModeSwitch("Custom", "CUSTOM");
         const gmCoop = createModeSwitch("vs AI", "COOP_VS_AI");
         const gmTft = createModeSwitch("TFT", "TFT");
+        const gmSwiftplay = createModeSwitch("Swiftplay", "SWIFTPLAY");
 
         const gameModesContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width" }, [
             this.vjs.dom.createEl("label", {}, {}, "Allowed Game Modes (Uncheck All = Record All)"),
             this.vjs.dom.createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 5px;" }, [
                 gmRanked.container, gmNormal.container, gmAram.container, gmArena.container,
-                gmPractice.container, gmCustom.container, gmCoop.container, gmTft.container
+                gmPractice.container, gmCustom.container, gmCoop.container, gmTft.container, gmSwiftplay.container
             ])
         ]) as HTMLDivElement;
 
@@ -3588,6 +3594,7 @@ export default class UI {
         const autoSelectRecording = createSwitch("Auto Select Recording", settings.autoSelectRecording);
         const confirmDel = createSwitch("Confirm Delete", settings.confirmDelete);
         const devMode = createSwitch("Developer Mode", settings.developerMode);
+        const playSounds = createSwitch("Play Recording Sounds", settings.playRecordingSounds ?? false);
 
         const matchHistoryUrlInput = this.vjs.dom.createEl("input", {}, {
             class: "settings-input",
@@ -3606,7 +3613,8 @@ export default class UI {
                 autoStopPlayback.container,
                 autoSelectRecording.container,
                 confirmDel.container, 
-                devMode.container
+                devMode.container,
+                playSounds.container
             ]),
             this.vjs.dom.createEl("div", {}, { style: "margin-top: 15px;" }, [
                 this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, "Tracking Site URL (Use {q} for ID placeholder)"),
@@ -3784,6 +3792,7 @@ export default class UI {
                         if (gmCustom.input.checked) modes.push(gmCustom.modeId);
                         if (gmCoop.input.checked) modes.push(gmCoop.modeId);
                         if (gmTft.input.checked) modes.push(gmTft.modeId);
+                        if (gmSwiftplay.input.checked) modes.push(gmSwiftplay.modeId);
                         return modes.length > 0 ? modes : null;
                     })(),
 
@@ -3793,6 +3802,7 @@ export default class UI {
                     autoSelectRecording: autoSelectRecording.input.checked,
                     confirmDelete: confirmDel.input.checked,
                     developerMode: devMode.input.checked,
+                    playRecordingSounds: playSounds.input.checked,
                     matchHistoryBaseUrl: matchHistoryUrlInput.value.trim() || null
                 };
                 
