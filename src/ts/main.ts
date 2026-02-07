@@ -1019,7 +1019,48 @@ function handleKeyboardEvents(event: KeyboardEvent) {
         handled = true;
     }
     else if (isAction(event, "prevEvent", binds)) {
-        player.markers().prev();
+        // Custom logic for prevEvent with tolerance
+        // If we are close to a marker (e.g. within 4 seconds), jump to the prev-prev marker.
+        // Copy array because getMarkers might return readonly
+        const markers = [...player.markers().getMarkers()];
+        const currentTime = player.currentTime() || 0;
+        const tolerance = 4; // seconds
+
+        // Sort markers by time to be safe
+        markers.sort((a: any, b: any) => a.time - b.time);
+
+        let targetMarkerIndex = -1;
+
+        // Find the index of the marker immediately preceding the current time
+        // We use a small epsilon (0.1) to handle cases where we are exactly ON the marker
+        for (let i = markers.length - 1; i >= 0; i--) {
+            if (markers[i].time < currentTime - 0.1) {
+                targetMarkerIndex = i;
+                break;
+            }
+        }
+
+        if (targetMarkerIndex !== -1) {
+            const currentPrevMarker = markers[targetMarkerIndex];
+            
+            // Check if we are within the tolerance window of this marker
+            if (currentTime - currentPrevMarker.time < tolerance) {
+                // We are "just after" this marker. The user likely wants to go to the one BEFORE it.
+                if (targetMarkerIndex > 0) {
+                    player.currentTime(markers[targetMarkerIndex - 1].time);
+                } else {
+                    // Start of video or first marker
+                    player.currentTime(currentPrevMarker.time); 
+                }
+            } else {
+                // We are far enough away, just go to this marker
+                player.currentTime(currentPrevMarker.time);
+            }
+        } else {
+            // No markers before us. Go to start.
+            player.currentTime(0);
+        }
+        
         handled = true;
     }
     else if (isAction(event, "seekForward", binds)) {
