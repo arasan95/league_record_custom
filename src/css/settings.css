@@ -15,16 +15,16 @@
 
 #settings-modal-content {
   text-align: left;
-  max-width: 600px;
-  width: 90%;
+  max-width: 800px; /* Widened for Discord-like appearance */
+  width: 95%;
   margin: 0 auto; /* Center the modal horizontally */
   display: flex; /* Turn into flex container for sticky footer layout */
   flex-direction: column;
   max-height: 85vh; /* Limit height to viewport to ensure buttons are visible */
   
   /* Restore Window Styling here */
-  background-color: #2e2e2e;
-  padding: 20px;
+  background-color: #1d1d1d;
+  padding: 20px 0; /* Vertical padding only, allows scrollbar to be at the edge */
   border-radius: 8px;
   border: 1px solid #444;
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);
@@ -32,38 +32,73 @@
   box-sizing: border-box;
 }
 
+/* Scroll Container - Handles the scrollbar at the edge */
+.settings-scroll-container {
+  overflow-y: auto !important; /* Override .settings-tab-content overflow: hidden */
+  flex: 1; /* Take up remaining vertical space */
+  min-height: 0; /* Ensures flex item shrinks properly */
+  width: 100%;
+}
+
+/* Custom Scrollbar with margin */
+.settings-scroll-container::-webkit-scrollbar {
+  width: 12px;
+}
+
+.settings-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-scroll-container::-webkit-scrollbar-thumb {
+  background-color: #555;
+  border-radius: 5px;
+  border: 2px solid transparent; /* Creates margin */
+  background-clip: content-box; /* Clips background to content box (inside border) */
+}
+
+.settings-scroll-container::-webkit-scrollbar-thumb:hover {
+  background-color: #888;
+}
+
+/* Content Wrapper - Handles the padding */
+.settings-content-wrapper {
+  padding: 0 100px 40px 100px; /* Generous horizontal padding + bottom padding */
+  box-sizing: border-box;
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 15px;
-  margin-bottom: 20px;
   font-size: 16px;
-  overflow-y: auto; /* Make grid scrollable */
-  flex: 1; /* Take up remaining vertical space */
-  padding-right: 10px; /* Space for scrollbar */
-  padding-bottom: 10px;
+  /* overflow and padding moved to wrapper/scroll-container */
 }
 
-/* Custom Scrollbar for settings grid */
-.settings-grid::-webkit-scrollbar {
-    width: 8px;
+/* Standard padding for header, footer, and tabs (keep them at normal width */
+#settings-modal-content > h2,
+#settings-modal-content > div:nth-child(2), /* Patch version div */
+.settings-tabs,
+.settings-actions {
+  padding-left: 20px;
+  padding-right: 20px;
 }
-.settings-grid::-webkit-scrollbar-track {
-    background: transparent; 
-    border-radius: 4px;
-}
-.settings-grid::-webkit-scrollbar-thumb {
-    background: #555; 
-    border-radius: 4px;
-}
-.settings-grid::-webkit-scrollbar-thumb:hover {
-    background: #777; 
-}
-
 
 .settings-group {
   display: flex;
   flex-direction: column;
+}
+
+/* Prevent buttons inside groups from stretching full width */
+.settings-group button {
+  width: fit-content;
+  align-self: flex-start;
+}
+
+.settings-group-styled {
+  background-color: #2a2a2a; /* Discord-like section background */
+  padding: 12px 20px; /* Balanced vertical/horizontal padding */
+  border-radius: 8px;
+  margin-bottom: 20px;
 }
 
 .settings-group.full-width {
@@ -91,7 +126,8 @@
 .settings-input:focus,
 .settings-select:focus {
   outline: none;
-  border-color: #007acc;
+  border-color: #4785FF; /* Modern Blue */
+  box-shadow: 0 0 0 2px rgba(71, 133, 255, 0.2); /* Add subtle glow */
 }
 
 .settings-checkbox-group {
@@ -141,11 +177,11 @@
 }
 
 input:checked + .slider {
-  background-color: #2196f3;
+  background-color: #4785FF; /* Modern Blue */
 }
 
 input:focus + .slider {
-  box-shadow: 0 0 1px #2196f3;
+  box-shadow: 0 0 1px #4785FF;
 }
 
 input:checked + .slider:before {
@@ -183,22 +219,39 @@ input:checked + .slider:before {
 }
 
 .btn-save {
-  background-color: #007acc;
+  background-color: #4785FF; /* Modern Blue */
   color: white;
+  transition: background-color 0.2s;
 }
 
 .btn-save:hover {
-  background-color: #006bb3;
+  background-color: #3370E6; /* Slightly Darker on hover */
 }
 
 .btn-browse {
-  background-color: #555;
-  color: white;
-  padding: 8px 12px;
-  margin-left: 5px;
-  border: none;
+  background-color: #3a4047; /* Darker grey base */
+  color: #ddd;
+  padding: 6px 16px;
+  margin-left: 8px;
+  border: 1px solid #555;
   border-radius: 4px;
   cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-browse:hover {
+  background-color: #4785FF; /* Pop to Blue on hover */
+  color: white;
+  border-color: #4785FF;
+  transform: translateY(-1px);
+}
+
+.btn-browse:active {
+  background-color: #2b95ed; /* Darker on click */
+  transform: translateY(0);
 }
 
 input[type="range"] {
@@ -229,9 +282,21 @@ input[type="range"] {
   color: #fff;
 }
 
+.btn-danger {
+  border-color: #ff4d4d;
+  color: #ff4d4d;
+  background-color: transparent;
+}
+
+.btn-danger:hover {
+  background-color: #ff4d4d;
+  color: white;
+  border-color: #ff4d4d;
+}
+
 .tab-btn.active {
-  color: #2196f3;
-  border-bottom-color: #2196f3;
+  color: #4785FF; /* Modern Blue */
+  border-bottom-color: #4785FF;
 }
 
 .settings-tab-content {
@@ -246,17 +311,7 @@ input[type="range"] {
 }
 
 /* Adjust grid within tab content */
-.settings-tab-content .settings-grid {
-    display: grid;
-    /* Grid properties inherited/restored */
-    grid-template-columns: 1fr 1fr;
-    gap: 15px;
-    margin-bottom: 20px;
-    overflow-y: auto;
-    flex: 1;
-    padding-right: 10px;
-    padding-bottom: 10px;
-}
+/* Legacy grid styles removed to prevent conflict */
 
 /* Hotkey Separator */
 .hotkey-separator {
@@ -277,22 +332,18 @@ input[type="range"] {
     font-size: 0.8em;
 }
 
-/* Assets Section */
-.assets-container {
-    margin-top: 20px;
-    padding-top: 10px;
-    border-top: 1px solid #444;
-    grid-column: 1 / -1; /* Ensure it spans full width in grid */
+/* Section Titles (Marker Flags, Game Modes, etc.) */
+.settings-section-title {
+  margin-top: 20px;
+  margin-bottom: 5px; /* Reduced gap */
+  color: #ccc; /* Unified color */
+  font-size: 0.95em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  grid-column: 1 / -1;
 }
 
-.assets-title {
-    margin-bottom: 5px;
-    color: #ccc;
-    font-weight: bold;
-}
-
-.assets-status {
-    margin-left: 10px;
-    color: #888;
-    font-size: 0.9em;
+.settings-section-title:first-of-type {
+  margin-top: 0;
 }

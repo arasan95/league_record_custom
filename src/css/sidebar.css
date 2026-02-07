@@ -3,7 +3,7 @@
     grid-template-columns: 1fr;
     grid-template-rows: [header] 1fr [list] 11fr;
 
-    border-right: 1px solid #333;
+    /* border-right: 1px solid #333; */
     border-left: 1px solid #1e1e1e; /* 1px Invisible Safety Buffer for DWM */
     background-color: #1e1e1e;
     isolation: isolate;
@@ -134,21 +134,45 @@
     list-style: none;
     font-size: 14px;
     color: #ccc;
-    background-color: #1e1e1e;
+    background-color: #000000; /* Black background for separation */
     overflow-y: auto;
     overflow-x: hidden; /* Prevent horizontal scrollbar */
+}
+
+/* Specific Scrollbar for Sidebar - Black Background */
+#sidebar #sidebar-content::-webkit-scrollbar {
+    width: 12px; /* Increased to accommodate borders */
+}
+
+#sidebar #sidebar-content::-webkit-scrollbar-track {
+    background-color: #000000 !important;
+    border-left: 1px solid transparent; /* Left spacing */
+    border-right: 1px solid transparent; /* Right spacing */
+    background-clip: padding-box; /* Clip background to padding box */
+}
+
+#sidebar #sidebar-content::-webkit-scrollbar-thumb {
+    background-clip: padding-box; /* Clip background to padding box */
+    border-left: 2px solid transparent; /* Left spacing */
+    border-right: 2px solid transparent; /* Right spacing */
+    border-radius: 4px; /* Rounded scrollbar thumb */
 }
 
 /* List Item Base */
 #sidebar #sidebar-content li {
     position: relative;
-    border-bottom: 3px solid #000000;
     padding: 10px;
     padding-left: 15px; /* Add space for the bar */
     cursor: pointer;
     transition: background-color 0.1s;
+    border-radius: 8px; /* Rounded corners for each item */
+    margin-bottom: 4px; /* Gap between items (shows black background) */
+    background-color: #1e1e1e; /* Item background */
+    overflow: hidden; /* Clip ::before bar to rounded corners */
     /* Removed border-left, using ::before for the bar */
 }
+
+/* Remove the ::after separator line */
 
 #sidebar #sidebar-content li:hover {
     background-color: #3f3f3f;
@@ -162,11 +186,10 @@
 #sidebar #sidebar-content li::before {
     content: "";
     position: absolute;
-    left: 0px; /* Slight inset from edge */
-    top: 0px; /* Match top padding */
-    bottom: 0px; /* Match bottom padding */
+    left: 0px;
+    top: 0px;
+    bottom: 0px;
     width: 2px;
-    border-radius: 2px;
     background-color: transparent; /* Default hidden */
     transition: background-color 0.2s, box-shadow 0.2s;
 }
