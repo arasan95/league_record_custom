@@ -3121,7 +3121,7 @@ export default class UI {
                     })
                     .catch((err) => console.error("Failed to pick folder:", err));
             }
-        }, { class: "btn", style: "margin-left: 10px;" }, "Browse");
+        }, { class: "btn-browse" }, "Browse");
 
         const folderContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; align-items: center; width: 100%;" }, [
             folderInput,
@@ -3146,7 +3146,7 @@ export default class UI {
                     })
                     .catch((err) => console.error("Failed to pick folder:", err));
             }
-        }, { class: "btn", style: "margin-left: 10px;" }, "Browse");
+        }, { class: "btn-browse" }, "Browse");
 
         const clipsFolderContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; align-items: center; width: 100%;" }, [
             clipsFolderInput,
@@ -3163,35 +3163,45 @@ export default class UI {
 
         // --- Assets Section ---
         // --- Assets Section ---
-        const assetsContainer = this.vjs.dom.createEl("div", {}, { class: "assets-container" });
-        const assetsTitle = this.vjs.dom.createEl("div", {}, { class: "assets-title" }, "Local Assets");
-        
-        const downloadAssetsBtn = this.vjs.dom.createEl("button", {}, { class: "btn small-btn" }, "Download All Icons (Champions/Items)") as HTMLButtonElement;
-        const assetsStatus = this.vjs.dom.createEl("span", {}, { class: "assets-status" }, "");
+        // --- Assets Section ---
+        const downloadAssetsBtn = this.vjs.dom.createEl("button", {}, { class: "btn-browse" }, "Download All Icons (Champions/Items)") as HTMLButtonElement;
+        const assetsStatus = this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #888; margin-top: 5px; text-align: center; min-height: 1.2em;" }, "");
 
         downloadAssetsBtn.onclick = async () => {
             downloadAssetsBtn.disabled = true;
+            downloadAssetsBtn.textContent = "Downloading...";
             await downloadAllAssets((msg) => {
                 assetsStatus.textContent = msg;
             });
-            downloadAssetsBtn.disabled = false;
+            downloadAssetsBtn.textContent = "Download Complete";
+            setTimeout(() => { 
+                downloadAssetsBtn.disabled = false; 
+                downloadAssetsBtn.textContent = "Download All Icons (Champions/Items)";
+                assetsStatus.textContent = "";
+            }, 3000);
         };
-
-        assetsContainer.append(assetsTitle, downloadAssetsBtn, assetsStatus);
+        
+        const assetsWrapper = this.vjs.dom.createEl("div", {}, { style: "width: 100%;" }, [downloadAssetsBtn, assetsStatus]);
 
         // --- Keybinds Section ---
         // --- Tab Containers ---
-        const generalTabContent = this.vjs.dom.createEl("div", {}, { class: "settings-tab-content" });
-        const hotkeysTabContent = this.vjs.dom.createEl("div", {}, { class: "settings-tab-content hidden" });
+        // Scroll containers (handle scrollbar at edge)
+        const generalTabContent = this.vjs.dom.createEl("div", {}, { class: "settings-tab-content settings-scroll-container" });
+        const hotkeysTabContent = this.vjs.dom.createEl("div", {}, { class: "settings-tab-content settings-scroll-container hidden" });
+
+        // Content Wrappers (handle padding)
+        const generalWrapper = this.vjs.dom.createEl("div", {}, { class: "settings-content-wrapper" });
+        const hotkeysWrapper = this.vjs.dom.createEl("div", {}, { class: "settings-content-wrapper" });
 
         // Hotkeys Grid
-        const hotkeysGrid = this.vjs.dom.createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: repeat(2, 1fr); gap: 10px;" });
-        hotkeysTabContent.append(hotkeysGrid);
+        const hotkeysGrid = this.vjs.dom.createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: 1fr; gap: 8px;" });
+        hotkeysWrapper.append(hotkeysGrid);
+        hotkeysTabContent.append(hotkeysWrapper);
 
         // General Grid
         const generalGrid = this.vjs.dom.createEl("div", {}, { class: "settings-grid" });
-        generalTabContent.append(generalGrid);
-        generalTabContent.append(generalGrid);
+        generalWrapper.append(generalGrid);
+        generalTabContent.append(generalWrapper);
         // assetsContainer appended to generalGrid below
 
         // Local copy of binds and mouse config to edit before saving
@@ -3200,39 +3210,42 @@ export default class UI {
 
         const labels: Record<ActionName, string> = {
             playPause: "Play / Pause",
-            seekForward: "Seek Forward (+5s)",
-            seekBackward: "Seek Backward (-5s)",
-            nextEvent: "Next Event (Shift+Right)",
-            prevEvent: "Prev Event (Shift+Left)",
+            seekForward: "Seek Forward",
+            seekBackward: "Seek Backward",
+            nextEvent: "Next Event",
+            prevEvent: "Prev Event",
             volUp: "Volume Up",
             volDown: "Volume Down",
             fullscreen: "Toggle Fullscreen",
             mute: "Toggle Mute",
-            speedUp: "Speed Up (+0.25)",
-            speedDown: "Speed Down (-0.25)",
-            setLoopA: "Set Loop Start (A)",
-            setLoopB: "Set Loop End (B)",
-            toggleLoop: "Toggle Loop (L)",
-            exitFullscreen: "Exit Fullscreen (Esc)",
-            stepForward: "Frame Step Forward (.)",
-            stepBackward: "Frame Step Backward (,)",
-            resetSpeed: "Reset Playback Speed (BS)",
-            nextVideo: "Next Recording (Shift+N)",
-            prevVideo: "Previous Recording (Shift+P)"
+            speedUp: "Speed Up",
+            speedDown: "Speed Down",
+            setLoopA: "Set Loop Start",
+            setLoopB: "Set Loop End",
+            toggleLoop: "Toggle Loop",
+            exitFullscreen: "Exit Fullscreen",
+            stepForward: "Frame Step Forward",
+            stepBackward: "Frame Step Backward",
+            resetSpeed: "Reset Playback Speed",
+            nextVideo: "Next Recording",
+            prevVideo: "Previous Recording"
         };
 
         const createKeybindRow = (action: ActionName) => {
              const labelText = labels[action];
-             const container = this.vjs.dom.createEl("div", {}, { style: "display: flex; flex-direction: column;" });
+             // Discord-like Row: Flex Row, Space Between, Border Bottom
+             const container = this.vjs.dom.createEl("div", {}, { 
+                 style: "display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #40444b;" 
+             });
              
-             const label = this.vjs.dom.createEl("span", {}, { style: "font-size: 0.9em; margin-bottom: 2px; color: #ccc;" }, labelText);
+             const label = this.vjs.dom.createEl("span", {}, { style: "font-size: 0.95em; color: #dcddde; font-weight: 500;" }, labelText);
              
              // Use a closure variable to track the handler for removal
              let keydownHandler: ((kEvent: KeyboardEvent) => void) | null = null;
 
              const btn = this.vjs.dom.createEl("button", {}, { 
-                 class: "settings-input", 
-                 style: "text-align: center; cursor: pointer; width: 100%;" 
+                 class: "settings-input keybind-btn", 
+                 style: "text-align: center; cursor: pointer; width: 140px; padding: 6px 10px; background-color: #202225; border: 1px solid #202225; color: #dcddde; border-radius: 3px; font-size: 0.9em;" 
              }, formatKeyCombo(pendingBinds[action])) as HTMLButtonElement;
 
              btn.onclick = (e: MouseEvent) => {
@@ -3300,13 +3313,15 @@ export default class UI {
 
         // Backend Hotkeys
         const createBackendHotkeyRow = (label: string, initialValue: string | null, onUpdate: (val: string | null) => void) => {
-            // Match styles of createKeybindRow
-            const container = this.vjs.dom.createEl("div", {}, { style: "display: flex; flex-direction: column;" });
-            const labelEl = this.vjs.dom.createEl("span", {}, { style: "font-size: 0.9em; margin-bottom: 2px; color: #ccc;" }, label);
+            // Match styles of createKeybindRow (Discord-like)
+            const container = this.vjs.dom.createEl("div", {}, { 
+                style: "display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #40444b;" 
+            });
+            const labelEl = this.vjs.dom.createEl("span", {}, { style: "font-size: 0.95em; color: #dcddde; font-weight: 500;" }, label);
             
             const btn = this.vjs.dom.createEl("button", {}, { 
-                class: "settings-input",
-                style: "text-align: center; cursor: pointer; width: 100%;"
+                class: "settings-input keybind-btn",
+                style: "text-align: center; cursor: pointer; width: 140px; padding: 6px 10px; background-color: #202225; border: 1px solid #202225; color: #dcddde; border-radius: 3px; font-size: 0.9em;"
             }, initialValue || "None") as HTMLButtonElement;
             
             let keydownHandler: ((kEvent: KeyboardEvent) => void) | null = null;
@@ -3367,60 +3382,73 @@ export default class UI {
         let stopRecHotkeyValue = settings.stopRecordingHotkey;
         
         // 1. In-Game Hotkeys Section
-        hotkeysGrid.append(this.vjs.dom.createEl("h3", {}, { style: "grid-column: 1/-1; margin-top: 0; margin-bottom: 5px; border-bottom: 1px solid #555; padding-bottom: 5px;" }, "In-Game Hotkeys"));
-        hotkeysGrid.append(createBackendHotkeyRow("Highlight", highlightHotkeyValue, (val) => { highlightHotkeyValue = val; }));
-        hotkeysGrid.append(createBackendHotkeyRow("Start Record", startRecHotkeyValue, (val) => { startRecHotkeyValue = val; }));
-        hotkeysGrid.append(createBackendHotkeyRow("Stop Record", stopRecHotkeyValue, (val) => { stopRecHotkeyValue = val; }));
+        const inGameTitle = this.vjs.dom.createEl("h3", {}, { 
+            style: "margin-top: 0; margin-bottom: 10px; color: #b9bbbe; font-size: 1em; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;" 
+        }, "In-Game Hotkeys");
+        
+        const inGameContainer = this.vjs.dom.createEl("div", {}, { 
+            class: "hotkey-section-container",
+            style: "background-color: #2a2a2a; border-radius: 8px; padding: 0 20px; margin-bottom: 20px;" 
+        });
+        inGameContainer.append(
+            createBackendHotkeyRow("Highlight", highlightHotkeyValue, (val) => { highlightHotkeyValue = val; }),
+            createBackendHotkeyRow("Start Record", startRecHotkeyValue, (val) => { startRecHotkeyValue = val; }),
+            createBackendHotkeyRow("Stop Record", stopRecHotkeyValue, (val) => { stopRecHotkeyValue = val; })
+        );
+        
+        hotkeysGrid.append(inGameTitle, inGameContainer);
 
         // 2. Replay Shortcuts Section
-        hotkeysGrid.append(this.vjs.dom.createEl("h3", {}, { style: "grid-column: 1/-1; margin-top: 15px; margin-bottom: 5px; border-bottom: 1px solid #555; padding-bottom: 5px;" }, "Replay Shortcuts"));
-
-        // 3. Replay Hotkeys Section
-        // (Header implied by separator, or add plain header if preferred. User asked for separator)
+        const replayTitle = this.vjs.dom.createEl("h3", {}, { 
+            style: "margin-top: 15px; margin-bottom: 8px; color: #b9bbbe; font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;" 
+        }, "Replay Shortcuts");
+        
+        const replayContainer = this.vjs.dom.createEl("div", {}, { 
+            class: "hotkey-section-container",
+            style: "background-color: #2a2a2a; border-radius: 8px; padding: 0 20px; margin-bottom: 20px;" 
+        });
         
         bindOrder.forEach(action => {
-            hotkeysGrid.append(createKeybindRow(action));
+            replayContainer.append(createKeybindRow(action));
         });
+        
+        hotkeysGrid.append(replayTitle, replayContainer);
 
         // 3. Mouse Controls Section
-        hotkeysGrid.append(this.vjs.dom.createEl("h3", {}, { style: "grid-column: 1/-1; margin-top: 15px; margin-bottom: 5px; border-bottom: 1px solid #555; padding-bottom: 5px;" }, "Mouse Controls"));
+        const mouseTitle = this.vjs.dom.createEl("h3", {}, { 
+            style: "margin-top: 15px; margin-bottom: 8px; color: #b9bbbe; font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;" 
+        }, "Mouse Controls");
+        
+        const mouseContainer = this.vjs.dom.createEl("div", {}, { 
+            class: "hotkey-section-container",
+            style: "background-color: #2a2a2a; border-radius: 8px; padding: 0 20px; margin-bottom: 20px;" 
+        });
 
         const createMouseSwitch = (label: string, checked: boolean, onClick: (checked: boolean) => void) => {
              const input = this.vjs.dom.createEl("input", {
                  onchange: (e: Event) => onClick((e.target as HTMLInputElement).checked)
              }, { type: "checkbox", ...(checked ? {checked: "true"} : {}) }) as HTMLInputElement;
              
-             const labelEl = this.vjs.dom.createEl("label", {}, { class: "switch" }, [
+             const switchEl = this.vjs.dom.createEl("label", {}, { class: "switch" }, [
                  input,
                  this.vjs.dom.createEl("span", {}, { class: "slider round" })
              ]);
-             return this.vjs.dom.createEl("div", {}, { class: "settings-checkbox-group" }, [
-                 labelEl,
-                 this.vjs.dom.createEl("span", {}, {}, label)
+
+             // Discord-like Row
+             return this.vjs.dom.createEl("div", {}, { 
+                 style: "display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #40444b;" 
+             }, [
+                 this.vjs.dom.createEl("span", {}, { style: "font-size: 0.95em; color: #dcddde; font-weight: 500;" }, label),
+                 switchEl
              ]);
         };
 
-        hotkeysGrid.append(createMouseSwitch(
-            "Wheel adjusts Speed (±0.1)", 
-            pendingMouseConfig.wheelAction === "speed",
-            (checked) => { pendingMouseConfig.wheelAction = checked ? "speed" : "none"; }
-        ));
-
-        hotkeysGrid.append(createMouseSwitch(
-            "Middle Click resets Speed", 
-            pendingMouseConfig.middleClickAction === "resetSpeed",
-            (checked) => { pendingMouseConfig.middleClickAction = checked ? "resetSpeed" : "none"; }
-        ));
-
-        hotkeysGrid.append(createMouseSwitch(
-            "Side Button Seek (Back/Fwd)", 
-            pendingMouseConfig.sideButtonSeek,
-            (checked) => { pendingMouseConfig.sideButtonSeek = checked; }
-        ));
-
         // Scroll Frame Step Modifier
-        const scrollModLabel = this.vjs.dom.createEl("span", {}, { style: "font-size: 0.9em; margin-bottom: 2px; color: #ccc;" }, "Scroll Frame Step Modifier");
-        const scrollModSelect = this.vjs.dom.createEl("select", {}, { class: "settings-input", style: "width: 100%;" }, [
+        const scrollModLabel = this.vjs.dom.createEl("span", {}, { style: "font-size: 0.95em; color: #dcddde; font-weight: 500;" }, "Scroll Frame Step Modifier");
+        const scrollModSelect = this.vjs.dom.createEl("select", {}, { 
+             class: "settings-input", 
+             style: "width: 140px; padding: 6px; background-color: #202225; border: 1px solid #202225; color: #dcddde; border-radius: 3px;" 
+        }, [
              this.vjs.dom.createEl("option", { value: "Shift" }, {}, "Shift"),
              this.vjs.dom.createEl("option", { value: "Ctrl" }, {}, "Ctrl"),
              this.vjs.dom.createEl("option", { value: "Alt" }, {}, "Alt"),
@@ -3433,11 +3461,33 @@ export default class UI {
              this.scrollFrameStepModifier = scrollModSelect.value; // Update live
         };
 
-        const scrollModContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; flex-direction: column;" }, [
+        const scrollModContainer = this.vjs.dom.createEl("div", {}, { 
+             style: "display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #40444b;" 
+        }, [
              scrollModLabel,
              scrollModSelect
         ]);
-        hotkeysGrid.append(scrollModContainer);
+        
+        mouseContainer.append(
+            createMouseSwitch(
+                "Wheel adjusts Speed (±0.1)", 
+                pendingMouseConfig.wheelAction === "speed",
+                (checked) => { pendingMouseConfig.wheelAction = checked ? "speed" : "none"; }
+            ),
+            createMouseSwitch(
+                "Middle Click resets Speed", 
+                pendingMouseConfig.middleClickAction === "resetSpeed",
+                (checked) => { pendingMouseConfig.middleClickAction = checked ? "resetSpeed" : "none"; }
+            ),
+            createMouseSwitch(
+                "Side Button Seek (Back/Fwd)", 
+                pendingMouseConfig.sideButtonSeek,
+                (checked) => { pendingMouseConfig.sideButtonSeek = checked; }
+            ),
+            scrollModContainer
+        );
+        
+        hotkeysGrid.append(mouseTitle, mouseContainer);
 
         // Encoding Quality (Slider)
         const qualityInput = this.vjs.dom.createEl("input", {
@@ -3532,9 +3582,16 @@ export default class UI {
 
         const mfBaron = createMarkerSwitch("Baron", flags.baron);
 
-        const markerFlagsContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width" }, [
-            this.vjs.dom.createEl("label", {}, {}, "Marker Flags (Default Visibility)"),
-            this.vjs.dom.createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 5px;" }, [
+        // Marker Flags - Title outside, content with background
+        const markerFlagsTitle = this.vjs.dom.createEl("h3", {}, { 
+            class: "settings-section-title"
+        }, "Marker Flags (Default Visibility)");
+        
+        const markerFlagsContent = this.vjs.dom.createEl("div", {}, { 
+            class: "settings-group-styled",
+            style: "grid-column: 1 / -1;"
+        }, [
+            this.vjs.dom.createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: repeat(4, 1fr); gap: 10px;" }, [
                 mfKill.container, mfDeath.container, mfAssist.container, mfStructure.container,
                 mfDragon.container, mfVoidgrub.container, mfHerald.container, mfBaron.container
             ])
@@ -3565,9 +3622,16 @@ export default class UI {
         const gmTft = createModeSwitch("TFT", "TFT");
         const gmSwiftplay = createModeSwitch("Swiftplay", "SWIFTPLAY");
 
-        const gameModesContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width" }, [
-            this.vjs.dom.createEl("label", {}, {}, "Allowed Game Modes (Uncheck All = Record All)"),
-            this.vjs.dom.createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 5px;" }, [
+        // Game Modes - Title outside, content with background
+        const gameModesTitle = this.vjs.dom.createEl("h3", {}, {
+            class: "settings-section-title"
+        }, "Allowed Game Modes (Uncheck All = Record All)");
+        
+        const gameModesContent = this.vjs.dom.createEl("div", {}, { 
+            class: "settings-group-styled",
+            style: "grid-column: 1 / -1;"
+        }, [
+            this.vjs.dom.createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: repeat(2, 1fr); gap: 10px;" }, [
                 gmRanked.container, gmNormal.container, gmAram.container, gmArena.container,
                 gmPractice.container, gmCustom.container, gmCoop.container, gmTft.container, gmSwiftplay.container
             ])
@@ -3604,10 +3668,16 @@ export default class UI {
             style: "flex: 1;"
         }) as HTMLInputElement;
 
-        const switchesContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width" }, [
-            this.vjs.dom.createEl("label", {}, {}, "Other Options"),
-            this.vjs.dom.createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 5px;" }, [
-
+        // Other Options - Title outside, Switches Section (Auto Record, etc.)
+        const switchesTitle = this.vjs.dom.createEl("h3", {}, { 
+            class: "settings-section-title"
+        }, "Other Options");
+        
+        const switchesContent = this.vjs.dom.createEl("div", {}, { 
+            class: "settings-group-styled",
+            style: "grid-column: 1 / -1;"
+        }, [
+            this.vjs.dom.createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: repeat(2, 1fr); gap: 10px;" }, [
                 autostart.container, 
                 autoplayVideo.container,
                 autoStopPlayback.container,
@@ -3615,12 +3685,14 @@ export default class UI {
                 confirmDel.container, 
                 devMode.container,
                 playSounds.container
-            ]),
-            this.vjs.dom.createEl("div", {}, { style: "margin-top: 15px;" }, [
-                this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, "Tracking Site URL (Use {q} for ID placeholder)"),
-                this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, "Example: https://www.deeplol.gg/summoner/jp/{q}"),
-                matchHistoryUrlInput
             ])
+        ]) as HTMLDivElement;
+        
+        // Tracking Site URL - separate container without background
+        const trackingUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width" }, [
+            this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, "Tracking Site URL (Use {q} for ID placeholder)"),
+            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, "Example: https://www.deeplol.gg/summoner/jp/{q}"),
+            matchHistoryUrlInput
         ]) as HTMLDivElement;
         
         // Hotkeys
@@ -3665,14 +3737,14 @@ export default class UI {
                      }
                  });
              }
-        }, { class: "btn", style: "margin-left: 10px;" }, "Browse") as HTMLButtonElement;
+        }, { class: "btn-browse" }, "Browse") as HTMLButtonElement;
 
         const ffmpegContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; align-items: center; width: 100%;" }, [
              ffmpegPathInput,
              ffmpegBtn
         ]);
 
-        // Grid Layout
+        // Troubleshooting Section
         const clearCacheBtn = this.vjs.dom.createEl("button", {
              onclick: async () => {
                  // eslint-disable-next-line no-alert
@@ -3687,11 +3759,7 @@ export default class UI {
                       }
                  }
              }
-        }, { class: "btn", style: "width: 100%; color: #ff6b6b; border-color: #ff6b6b;" }, "Clear Asset Cache");
-
-        const cacheContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; align-items: center; width: 100%;" }, [
-             clearCacheBtn
-        ]);
+        }, { class: "btn-browse btn-danger" }, "Clear Asset Cache");
 
         // Populate General Grid
         generalGrid.append(
@@ -3708,14 +3776,21 @@ export default class UI {
         );
 
         generalGrid.append(
-            markerFlagsContainer as HTMLElement,
-            gameModesContainer as HTMLElement,
-            switchesContainer,
-            assetsContainer as HTMLElement
+            markerFlagsTitle,
+            markerFlagsContent,
+            gameModesTitle,
+            gameModesContent,
+            switchesTitle,
+            switchesContent,
+            trackingUrlContainer,
+            
+            // Modernized Sections (Moved to bottom)
+            createGroup("Local Assets", assetsWrapper as HTMLElement, true),
+            createGroup("Troubleshooting", clearCacheBtn as HTMLElement, true)
         );
 
         if (settings.developerMode) {
-            generalGrid.append(createGroup("Troubleshooting", cacheContainer as HTMLElement, true));
+            // Already added Troubleshooting section above
         }
 
         // Tab Buttons
@@ -3830,8 +3905,8 @@ export default class UI {
         const actions = this.vjs.dom.createEl("div", {}, { class: "settings-actions" }, [cancelBtn, saveBtn]);
 
         const content = this.vjs.dom.createEl("div", {}, { id: "settings-modal-content" }, [
-            this.vjs.dom.createEl("h2", {}, { style: "text-align: center; margin-bottom: 5px;" }, "Settings"),
-            this.vjs.dom.createEl("div", {}, { style: "text-align: center; margin-bottom: 20px; color: #888; font-size: 0.8em;" }, `Patch ${getCurrentPatchVersion()}`),
+            this.vjs.dom.createEl("h2", {}, { style: "text-align: center; margin-top: 5px; margin-bottom: 0px; font-size: 1.2em;" }, "Settings"),
+            this.vjs.dom.createEl("div", {}, { style: "text-align: center; margin-bottom: 10px; color: #888; font-size: 0.8em;" }, `Patch ${getCurrentPatchVersion()}`),
             modalBody,
             actions
         ]);

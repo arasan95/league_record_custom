@@ -31,7 +31,7 @@
 }
 
 * {
-    scrollbar-color: #555 #111111;
+    /* scrollbar-color removed - using webkit customization instead */
     font-family: "BeaufortW01-Bold";
 }
 
@@ -65,25 +65,29 @@ input, textarea, [contenteditable] {
     cursor: text;
 }
 
-/* Custom Scrollbar for WebKit (Chrome, Edge, Tauri) */
+/* Custom Scrollbar for WebKit (Chrome, Edge, Tauri) - Minimal / Discord-like */
 *::-webkit-scrollbar {
-    width: 10px;
-    background: #2c2f3e; /* User requested background color */
+    width: 8px; /* Slightly thinner */
+    height: 8px; /* For horizontal scrollbars */
+    background: transparent; /* Transparent background by default */
 }
 
 *::-webkit-scrollbar-button {
-    display: none;
+    display: none !important;
+    height: 0 !important;
+    width: 0 !important;
 }
 
 *::-webkit-scrollbar-track {
-    background: #2c2f3e;
+    background-color: transparent;
+    border-radius: 4px;
 }
 
 *::-webkit-scrollbar-thumb {
-    background: #555; 
-    border-radius: 5px;
+    background-color: #383838; /* Darker thumb */
+    border-radius: 4px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-    background: #777; 
+    background-color: #5d5d5d; /* Lighter on hover */
 }
