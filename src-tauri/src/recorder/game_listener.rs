@@ -344,31 +344,29 @@ impl GameListener {
                     let mut is_mode_allowed = true;
 
                     if let Some(modes) = allowed_modes {
-                        if !modes.is_empty() {
-                            // Prioritize QueueID mapping for known queues to ensure consistency
-                            let mode_val = match queue.id {
-                                420 | 440 => "RANKED".to_string(),
-                                400 | 430 | 490 => "NORMAL".to_string(),
-                                450 | 100 => "ARAM".to_string(),
-                                3140 => "PRACTICE_TOOL".to_string(),
-                                1700 => "CHERRY".to_string(),
-                                830 | 840 | 850 | 890 => "COOP_VS_AI".to_string(),
-                                1090 | 1100 | 1130 | 1160 => "TFT".to_string(),
-                                0 => "CUSTOM".to_string(),
-                                _ => match game_mode.clone() {
-                                    Some(s) => s,
-                                    None => "UNKNOWN".to_string(),
-                                },
-                            };
+                        // Prioritize QueueID mapping for known queues to ensure consistency
+                        let mode_val = match queue.id {
+                            420 | 440 => "RANKED".to_string(),
+                            400 | 430 | 490 => "NORMAL".to_string(),
+                            450 | 100 => "ARAM".to_string(),
+                            3140 => "PRACTICE_TOOL".to_string(),
+                            1700 => "CHERRY".to_string(),
+                            830 | 840 | 850 | 890 => "COOP_VS_AI".to_string(),
+                            1090 | 1100 | 1130 | 1160 => "TFT".to_string(),
+                            0 => "CUSTOM".to_string(),
+                            _ => match game_mode.clone() {
+                                Some(s) => s,
+                                None => "UNKNOWN".to_string(),
+                            },
+                        };
 
-                            let mode_upper = mode_val.to_uppercase();
-                            is_mode_allowed = modes.iter().any(|m| m.to_uppercase() == mode_upper);
+                        let mode_upper = mode_val.to_uppercase();
+                        is_mode_allowed = modes.iter().any(|m| m.to_uppercase() == mode_upper);
 
-                            if !is_mode_allowed {
-                                log::info!("Game Mode '{}' NOT in allowed list. Skipping recording.", mode_upper);
-                            } else {
-                                log::info!("Game Mode '{}' ALLOWED. Starting...", mode_upper);
-                            }
+                        if !is_mode_allowed {
+                            log::info!("Game Mode '{}' NOT in allowed list. Skipping recording.", mode_upper);
+                        } else {
+                            log::info!("Game Mode '{}' ALLOWED. Starting...", mode_upper);
                         }
                     }
 

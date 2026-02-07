@@ -439,7 +439,9 @@ async function main() {
     });
 
     // handle keybord shortcuts
+    // handle keybord shortcuts
     addEventListener("keydown", handleKeyboardEvents);
+    addEventListener("keyup", handleKeyUpEvents);
 
     // Mouse Controls (Wheel & Middle Click)
     const playerEl = document.getElementById("video_player");
@@ -993,7 +995,33 @@ function formatTimestamp(timestamp: number): string {
 
 // --- KEYBOARD SHORTCUTS ---
 
-function handleKeyboardEvents(event: KeyboardEvent) {
+let isSteppingForward = false;
+let isSteppingBackward = false;
+let activeStepBackwardInterval: number | null = null;
+let originalPlaybackRate = 1.0;
+
+function handleKeyUpEvents(event: KeyboardEvent) {
+    // Since we don't have preventDefault in keyup usually, we just check our states
+    if (isSteppingForward && isAction(event, "stepForward", currentKeybinds)) {
+        isSteppingForward = false;
+        player.pause();
+        player.playbackRate(originalPlaybackRate);
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
+    if (isSteppingBackward && isAction(event, "stepBackward", currentKeybinds)) {
+        isSteppingBackward = false;
+        if (activeStepBackwardInterval) {
+            clearInterval(activeStepBackwardInterval);
+            activeStepBackwardInterval = null;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+    }
+}
+
+async function handleKeyboardEvents(event: KeyboardEvent) {
     if (ui.modalIsOpen()) {
         // Allow Escape to close modal, unless captured by rebind logic (which should stop prop before here)
         if (event.key === "Escape") {
@@ -1131,11 +1159,31 @@ function handleKeyboardEvents(event: KeyboardEvent) {
         handled = true;
     }
     else if (isAction(event, "stepForward", binds)) {
-        player.currentTime(player.currentTime()! + 0.03);
+        if (!event.repeat && !isSteppingForward) {
+            isSteppingForward = true;
+            originalPlaybackRate = player.playbackRate() || 1.0;
+            player.playbackRate(0.25); // Slow motion (0.25x)
+            player.play();
+        }
         handled = true;
     }
     else if (isAction(event, "stepBackward", binds)) {
-        player.currentTime(player.currentTime()! - 0.03);
+        if (!event.repeat && !isSteppingBackward) {
+            isSteppingBackward = true;
+            player.pause(); // Enable manual seeking by pausing
+
+            // Backward logic: Slower interval for stability
+            if (activeStepBackwardInterval) clearInterval(activeStepBackwardInterval);
+            
+            // Initial step - 200ms interval with 0.1s steps for reliability
+            const stepAmount = 0.1; // 0.5x speed (0.1s per 200ms)
+            player.currentTime(Math.max(0, (player.currentTime() || 0) - stepAmount));
+
+            activeStepBackwardInterval = setInterval(() => {
+                const t = player.currentTime() || 0;
+                player.currentTime(Math.max(0, t - stepAmount));
+            }, 200) as any;
+        }
         handled = true;
     }
     else if (isAction(event, "resetSpeed", binds)) {
