@@ -19,6 +19,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
 
 import { toVideoId, toVideoName, isFavorite } from "./util";
+import { getText, type Language } from "./i18n";
 
 import monoTower from "../assets/match-history-icons/mono-tower.png";
 import monoVoidgrub from "../assets/match-history-icons/mono-voidgrub.png";
@@ -3103,6 +3104,39 @@ export default class UI {
             return div;
         };
 
+        const lang = ((settings as any).language || "en") as Language;
+
+        // Language Selector
+        const langSelect = this.vjs.dom.createEl("select", {}, { class: "settings-select" }) as HTMLSelectElement;
+        const languages = [
+            { value: "en", label: "English" },
+            { value: "ja", label: "日本語" },
+            { value: "zh", label: "简体中文" },
+            { value: "ko", label: "한국어" },
+            { value: "vi", label: "Tiếng Việt" },
+            { value: "pt", label: "Português" },
+            { value: "es", label: "Español" },
+            { value: "fr", label: "Français" },
+            { value: "de", label: "Deutsch" },
+            { value: "ru", label: "Русский" },
+            { value: "tr", label: "Türkçe" },
+            { value: "pl", label: "Polski" },
+            { value: "it", label: "Italiano" }
+        ];
+        languages.forEach(l => {
+            const opt = this.vjs.dom.createEl("option", {}, { value: l.value }, l.label) as HTMLOptionElement;
+            if (l.value === lang) opt.selected = true;
+            langSelect.append(opt);
+        });
+        
+        langSelect.onchange = () => {
+            const newLang = langSelect.value;
+            (settings as any).language = newLang;
+            // Re-render modal to apply language change immediately
+            this.modalContent.innerHTML = "";
+            this.showSettingsModal(settings, saveCallback);
+        };
+
         // Recordings Folder
         const folderInput = this.vjs.dom.createEl("input", {}, {
             class: "settings-input",
@@ -3121,7 +3155,7 @@ export default class UI {
                     })
                     .catch((err) => console.error("Failed to pick folder:", err));
             }
-        }, { class: "btn-browse" }, "Browse");
+        }, { class: "btn-browse" }, getText(lang, "browse"));
 
         const folderContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; align-items: center; width: 100%;" }, [
             folderInput,
@@ -3146,7 +3180,7 @@ export default class UI {
                     })
                     .catch((err) => console.error("Failed to pick folder:", err));
             }
-        }, { class: "btn-browse" }, "Browse");
+        }, { class: "btn-browse" }, getText(lang, "browse"));
 
         const clipsFolderContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; align-items: center; width: 100%;" }, [
             clipsFolderInput,
@@ -3164,19 +3198,19 @@ export default class UI {
         // --- Assets Section ---
         // --- Assets Section ---
         // --- Assets Section ---
-        const downloadAssetsBtn = this.vjs.dom.createEl("button", {}, { class: "btn-browse" }, "Download All Icons (Champions/Items)") as HTMLButtonElement;
+        const downloadAssetsBtn = this.vjs.dom.createEl("button", {}, { class: "btn-browse" }, getText(lang, "downloadIcons")) as HTMLButtonElement;
         const assetsStatus = this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #888; margin-top: 5px; text-align: center; min-height: 1.2em;" }, "");
 
         downloadAssetsBtn.onclick = async () => {
             downloadAssetsBtn.disabled = true;
-            downloadAssetsBtn.textContent = "Downloading...";
+            downloadAssetsBtn.textContent = getText(lang, "downloading");
             await downloadAllAssets((msg) => {
                 assetsStatus.textContent = msg;
             });
-            downloadAssetsBtn.textContent = "Download Complete";
+            downloadAssetsBtn.textContent = getText(lang, "downloadComplete");
             setTimeout(() => { 
                 downloadAssetsBtn.disabled = false; 
-                downloadAssetsBtn.textContent = "Download All Icons (Champions/Items)";
+                downloadAssetsBtn.textContent = getText(lang, "downloadIcons");
                 assetsStatus.textContent = "";
             }, 3000);
         };
@@ -3209,26 +3243,26 @@ export default class UI {
         const pendingMouseConfig: MouseConfig = loadMouseConfig();
 
         const labels: Record<ActionName, string> = {
-            playPause: "Play / Pause",
-            seekForward: "Seek Forward",
-            seekBackward: "Seek Backward",
-            nextEvent: "Next Event",
-            prevEvent: "Prev Event",
-            volUp: "Volume Up",
-            volDown: "Volume Down",
-            fullscreen: "Toggle Fullscreen",
-            mute: "Toggle Mute",
-            speedUp: "Speed Up",
-            speedDown: "Speed Down",
-            setLoopA: "Set Loop Start",
-            setLoopB: "Set Loop End",
-            toggleLoop: "Toggle Loop",
-            exitFullscreen: "Exit Fullscreen",
-            stepForward: "Frame Step Forward",
-            stepBackward: "Frame Step Backward",
-            resetSpeed: "Reset Playback Speed",
-            nextVideo: "Next Recording",
-            prevVideo: "Previous Recording"
+            playPause: getText(lang, "playPause"),
+            seekForward: getText(lang, "seekForward"),
+            seekBackward: getText(lang, "seekBackward"),
+            nextEvent: getText(lang, "nextEvent"),
+            prevEvent: getText(lang, "prevEvent"),
+            volUp: getText(lang, "volUp"),
+            volDown: getText(lang, "volDown"),
+            fullscreen: getText(lang, "fullscreen"),
+            mute: getText(lang, "mute"),
+            speedUp: getText(lang, "speedUp"),
+            speedDown: getText(lang, "speedDown"),
+            setLoopA: getText(lang, "setLoopA"),
+            setLoopB: getText(lang, "setLoopB"),
+            toggleLoop: getText(lang, "toggleLoop"),
+            exitFullscreen: getText(lang, "exitFullscreen"),
+            stepForward: getText(lang, "stepForward"),
+            stepBackward: getText(lang, "stepBackward"),
+            resetSpeed: getText(lang, "resetSpeed"),
+            nextVideo: getText(lang, "nextVideo"),
+            prevVideo: getText(lang, "prevVideo")
         };
 
         const createKeybindRow = (action: ActionName) => {
@@ -3384,16 +3418,16 @@ export default class UI {
         // 1. In-Game Hotkeys Section
         const inGameTitle = this.vjs.dom.createEl("h3", {}, { 
             style: "margin-top: 0; margin-bottom: 10px; color: #b9bbbe; font-size: 1em; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;" 
-        }, "In-Game Hotkeys");
+        }, getText(lang, "inGameHotkeys"));
         
         const inGameContainer = this.vjs.dom.createEl("div", {}, { 
             class: "hotkey-section-container",
             style: "background-color: #2a2a2a; border-radius: 8px; padding: 0 20px; margin-bottom: 20px;" 
         });
         inGameContainer.append(
-            createBackendHotkeyRow("Highlight", highlightHotkeyValue, (val) => { highlightHotkeyValue = val; }),
-            createBackendHotkeyRow("Start Record", startRecHotkeyValue, (val) => { startRecHotkeyValue = val; }),
-            createBackendHotkeyRow("Stop Record", stopRecHotkeyValue, (val) => { stopRecHotkeyValue = val; })
+            createBackendHotkeyRow(getText(lang, "highlight"), highlightHotkeyValue, (val) => { highlightHotkeyValue = val; }),
+            createBackendHotkeyRow(getText(lang, "startRecord"), startRecHotkeyValue, (val) => { startRecHotkeyValue = val; }),
+            createBackendHotkeyRow(getText(lang, "stopRecord"), stopRecHotkeyValue, (val) => { stopRecHotkeyValue = val; })
         );
         
         hotkeysGrid.append(inGameTitle, inGameContainer);
@@ -3401,7 +3435,7 @@ export default class UI {
         // 2. Replay Shortcuts Section
         const replayTitle = this.vjs.dom.createEl("h3", {}, { 
             style: "margin-top: 15px; margin-bottom: 8px; color: #b9bbbe; font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;" 
-        }, "Replay Shortcuts");
+        }, getText(lang, "replayShortcuts"));
         
         const replayContainer = this.vjs.dom.createEl("div", {}, { 
             class: "hotkey-section-container",
@@ -3417,7 +3451,7 @@ export default class UI {
         // 3. Mouse Controls Section
         const mouseTitle = this.vjs.dom.createEl("h3", {}, { 
             style: "margin-top: 15px; margin-bottom: 8px; color: #b9bbbe; font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;" 
-        }, "Mouse Controls");
+        }, getText(lang, "mouseControls"));
         
         const mouseContainer = this.vjs.dom.createEl("div", {}, { 
             class: "hotkey-section-container",
@@ -3444,7 +3478,7 @@ export default class UI {
         };
 
         // Scroll Frame Step Modifier
-        const scrollModLabel = this.vjs.dom.createEl("span", {}, { style: "font-size: 0.95em; color: #dcddde; font-weight: 500;" }, "Scroll Frame Step Modifier");
+        const scrollModLabel = this.vjs.dom.createEl("span", {}, { style: "font-size: 0.95em; color: #dcddde; font-weight: 500;" }, getText(lang, "scrollModifier"));
         const scrollModSelect = this.vjs.dom.createEl("select", {}, { 
              class: "settings-input", 
              style: "width: 140px; padding: 6px; background-color: #202225; border: 1px solid #202225; color: #dcddde; border-radius: 3px;" 
@@ -3470,17 +3504,17 @@ export default class UI {
         
         mouseContainer.append(
             createMouseSwitch(
-                "Wheel adjusts Speed (±0.1)", 
+                getText(lang, "wheelSpeed"), 
                 pendingMouseConfig.wheelAction === "speed",
                 (checked) => { pendingMouseConfig.wheelAction = checked ? "speed" : "none"; }
             ),
             createMouseSwitch(
-                "Middle Click resets Speed", 
+                getText(lang, "middleReset"), 
                 pendingMouseConfig.middleClickAction === "resetSpeed",
                 (checked) => { pendingMouseConfig.middleClickAction = checked ? "resetSpeed" : "none"; }
             ),
             createMouseSwitch(
-                "Side Button Seek (Back/Fwd)", 
+                getText(lang, "sideSeek"), 
                 pendingMouseConfig.sideButtonSeek,
                 (checked) => { pendingMouseConfig.sideButtonSeek = checked; }
             ),
@@ -3572,20 +3606,20 @@ export default class UI {
         };
 
         const flags = settings.markerFlags;
-        const mfKill = createMarkerSwitch("Kill", flags.kill);
-        const mfDeath = createMarkerSwitch("Death", flags.death);
-        const mfAssist = createMarkerSwitch("Assist", flags.assist);
-        const mfStructure = createMarkerSwitch("Structure", flags.structure);
-        const mfDragon = createMarkerSwitch("Dragon", flags.dragon);
-        const mfVoidgrub = createMarkerSwitch("Voidgrub", flags.voidgrub);
-        const mfHerald = createMarkerSwitch("Herald", flags.herald);
+        const mfKill = createMarkerSwitch(getText(lang, "kill"), flags.kill);
+        const mfDeath = createMarkerSwitch(getText(lang, "death"), flags.death);
+        const mfAssist = createMarkerSwitch(getText(lang, "assist"), flags.assist);
+        const mfStructure = createMarkerSwitch(getText(lang, "structure"), flags.structure);
+        const mfDragon = createMarkerSwitch(getText(lang, "dragon"), flags.dragon);
+        const mfVoidgrub = createMarkerSwitch(getText(lang, "voidgrub"), flags.voidgrub);
+        const mfHerald = createMarkerSwitch(getText(lang, "herald"), flags.herald);
 
-        const mfBaron = createMarkerSwitch("Baron", flags.baron);
+        const mfBaron = createMarkerSwitch(getText(lang, "baron"), flags.baron);
 
         // Marker Flags - Title outside, content with background
         const markerFlagsTitle = this.vjs.dom.createEl("h3", {}, { 
             class: "settings-section-title"
-        }, "Marker Flags (Default Visibility)");
+        }, getText(lang, "markerFlags"));
         
         const markerFlagsContent = this.vjs.dom.createEl("div", {}, { 
             class: "settings-group-styled",
@@ -3598,7 +3632,8 @@ export default class UI {
         ]) as HTMLDivElement;
 
         // Game Modes
-        const currentModes = settings.gameModes || [];
+        const allModeIds = ["RANKED", "NORMAL", "ARAM", "CHERRY", "PRACTICE_TOOL", "CUSTOM", "COOP_VS_AI", "TFT", "SWIFTPLAY"];
+        const currentModes = settings.gameModes || allModeIds;
         const createModeSwitch = (label: string, modeId: string) => {
              const checked = currentModes.includes(modeId);
              const input = this.vjs.dom.createEl("input", {}, { type: "checkbox", ...(checked ? {checked: "true"} : {}) }) as HTMLInputElement;
@@ -3612,20 +3647,20 @@ export default class UI {
              ]), input, modeId };
         };
 
-        const gmRanked = createModeSwitch("Ranked (Solo/Flex)", "RANKED");
-        const gmNormal = createModeSwitch("Normal (Blind/Draft)", "NORMAL");
-        const gmAram = createModeSwitch("ARAM", "ARAM");
-        const gmArena = createModeSwitch("Arena (Cherry)", "CHERRY");
-        const gmPractice = createModeSwitch("Practice Tool", "PRACTICE_TOOL");
-        const gmCustom = createModeSwitch("Custom", "CUSTOM");
-        const gmCoop = createModeSwitch("vs AI", "COOP_VS_AI");
-        const gmTft = createModeSwitch("TFT", "TFT");
-        const gmSwiftplay = createModeSwitch("Swiftplay", "SWIFTPLAY");
+        const gmRanked = createModeSwitch(getText(lang, "ranked"), "RANKED");
+        const gmNormal = createModeSwitch(getText(lang, "normal"), "NORMAL");
+        const gmAram = createModeSwitch(getText(lang, "aram"), "ARAM");
+        const gmArena = createModeSwitch(getText(lang, "arena"), "CHERRY");
+        const gmPractice = createModeSwitch(getText(lang, "practice"), "PRACTICE_TOOL");
+        const gmCustom = createModeSwitch(getText(lang, "custom"), "CUSTOM");
+        const gmCoop = createModeSwitch(getText(lang, "coop"), "COOP_VS_AI");
+        const gmTft = createModeSwitch(getText(lang, "tft"), "TFT");
+        const gmSwiftplay = createModeSwitch(getText(lang, "swiftplay"), "SWIFTPLAY");
 
         // Game Modes - Title outside, content with background
         const gameModesTitle = this.vjs.dom.createEl("h3", {}, {
             class: "settings-section-title"
-        }, "Allowed Game Modes (Uncheck All = Record All)");
+        }, getText(lang, "gameModes"));
         
         const gameModesContent = this.vjs.dom.createEl("div", {}, { 
             class: "settings-group-styled",
@@ -3652,13 +3687,13 @@ export default class UI {
         };
 
 
-        const autostart = createSwitch("Autostart", settings.autostart);
-        const autoplayVideo = createSwitch("Autoplay Video", settings.autoplayVideo);
-        const autoStopPlayback = createSwitch("Auto Stop Playback", settings.autoStopPlayback);
-        const autoSelectRecording = createSwitch("Auto Select Recording", settings.autoSelectRecording);
-        const confirmDel = createSwitch("Confirm Delete", settings.confirmDelete);
-        const devMode = createSwitch("Developer Mode", settings.developerMode);
-        const playSounds = createSwitch("Play Recording Sounds", settings.playRecordingSounds ?? false);
+        const autostart = createSwitch(getText(lang, "autostart"), settings.autostart);
+        const autoplayVideo = createSwitch(getText(lang, "autoplay"), settings.autoplayVideo);
+        const autoStopPlayback = createSwitch(getText(lang, "autoStop"), settings.autoStopPlayback);
+        const autoSelectRecording = createSwitch(getText(lang, "autoSelect"), settings.autoSelectRecording);
+        const confirmDel = createSwitch(getText(lang, "confirmDel"), settings.confirmDelete);
+        const devMode = createSwitch(getText(lang, "devMode"), settings.developerMode);
+        const playSounds = createSwitch(getText(lang, "playSounds"), settings.playRecordingSounds ?? false);
 
         const matchHistoryUrlInput = this.vjs.dom.createEl("input", {}, {
             class: "settings-input",
@@ -3671,7 +3706,7 @@ export default class UI {
         // Other Options - Title outside, Switches Section (Auto Record, etc.)
         const switchesTitle = this.vjs.dom.createEl("h3", {}, { 
             class: "settings-section-title"
-        }, "Other Options");
+        }, getText(lang, "otherOptions"));
         
         const switchesContent = this.vjs.dom.createEl("div", {}, { 
             class: "settings-group-styled",
@@ -3690,8 +3725,8 @@ export default class UI {
         
         // Tracking Site URL - separate container without background
         const trackingUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width" }, [
-            this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, "Tracking Site URL (Use {q} for ID placeholder)"),
-            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, "Example: https://www.deeplol.gg/summoner/jp/{q}"),
+            this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "trackingUrl")),
+            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, getText(lang, "trackingUrlExample")),
             matchHistoryUrlInput
         ]) as HTMLDivElement;
         
@@ -3737,7 +3772,7 @@ export default class UI {
                      }
                  });
              }
-        }, { class: "btn-browse" }, "Browse") as HTMLButtonElement;
+        }, { class: "btn-browse" }, getText(lang, "browse")) as HTMLButtonElement;
 
         const ffmpegContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; align-items: center; width: 100%;" }, [
              ffmpegPathInput,
@@ -3759,20 +3794,21 @@ export default class UI {
                       }
                  }
              }
-        }, { class: "btn-browse btn-danger" }, "Clear Asset Cache");
+        }, { class: "btn-browse btn-danger" }, getText(lang, "clearCache"));
 
         // Populate General Grid
         generalGrid.append(
-            createGroup("Recordings Folder", folderContainer as HTMLElement, true),
-            createGroup("Clips Folder", clipsFolderContainer as HTMLElement, true),
-            createGroup("Filename Format", filenameInput, true),
-            createGroup("Encoding Quality (0-50)", qualityContainer as HTMLElement),
-            createGroup("Output Resolution", resSelect),
-            createGroup("Framerate", frSelect),
-            createGroup("Record Audio", audioSelect),
-            createGroup("Max Age (Days)", maxAgeInput),
-            createGroup("Max Size (GB)", maxSizeInput),
-            createGroup("FFmpeg Path", ffmpegContainer as HTMLElement, true)
+            createGroup(getText(lang, "language"), langSelect),
+            createGroup(getText(lang, "filenameFormat"), filenameInput),
+            createGroup(getText(lang, "recordingsFolder"), folderContainer as HTMLElement, true),
+            createGroup(getText(lang, "clipsFolder"), clipsFolderContainer as HTMLElement, true),
+            createGroup(getText(lang, "encodingQuality"), qualityContainer as HTMLElement),
+            createGroup(getText(lang, "outputResolution"), resSelect),
+            createGroup(getText(lang, "framerate"), frSelect),
+            createGroup(getText(lang, "recordAudio"), audioSelect),
+            createGroup(getText(lang, "maxAge"), maxAgeInput),
+            createGroup(getText(lang, "maxSize"), maxSizeInput),
+            createGroup(getText(lang, "ffmpegPath"), ffmpegContainer as HTMLElement, true)
         );
 
         generalGrid.append(
@@ -3815,8 +3851,8 @@ export default class UI {
              }
         };
 
-        const btnGeneral = createTabBtn("General", true, () => switchTab(true));
-        const btnHotkeys = createTabBtn("Hotkeys", false, () => switchTab(false));
+        const btnGeneral = createTabBtn(getText(lang, "tabGeneral"), true, () => switchTab(true));
+        const btnHotkeys = createTabBtn(getText(lang, "tabHotkeys"), false, () => switchTab(false));
 
         const tabsContainer = this.vjs.dom.createEl("div", {}, { class: "settings-tabs" }, [btnGeneral, btnHotkeys]);
 
@@ -3868,7 +3904,7 @@ export default class UI {
                         if (gmCoop.input.checked) modes.push(gmCoop.modeId);
                         if (gmTft.input.checked) modes.push(gmTft.modeId);
                         if (gmSwiftplay.input.checked) modes.push(gmSwiftplay.modeId);
-                        return modes.length > 0 ? modes : null;
+                        return modes;
                     })(),
 
                     autostart: autostart.input.checked,
@@ -3896,16 +3932,16 @@ export default class UI {
                     (window as any)._developerModeEnabled = newSettings.developerMode;
                 });
             }
-        }, { class: "btn-save" }, "Save");
+        }, { class: "btn-save" }, getText(lang, "save"));
 
         const cancelBtn = this.vjs.dom.createEl("button", {
             onclick: this.hideModal
-        }, { class: "btn-cancel" }, "Cancel");
+        }, { class: "btn-cancel" }, getText(lang, "cancel"));
 
         const actions = this.vjs.dom.createEl("div", {}, { class: "settings-actions" }, [cancelBtn, saveBtn]);
 
         const content = this.vjs.dom.createEl("div", {}, { id: "settings-modal-content" }, [
-            this.vjs.dom.createEl("h2", {}, { style: "text-align: center; margin-top: 5px; margin-bottom: 0px; font-size: 1.2em;" }, "Settings"),
+            this.vjs.dom.createEl("h2", {}, { style: "text-align: center; margin-top: 5px; margin-bottom: 0px; font-size: 1.2em;" }, getText(lang, "settingsTitle")),
             this.vjs.dom.createEl("div", {}, { style: "text-align: center; margin-bottom: 10px; color: #888; font-size: 0.8em;" }, `Patch ${getCurrentPatchVersion()}`),
             modalBody,
             actions

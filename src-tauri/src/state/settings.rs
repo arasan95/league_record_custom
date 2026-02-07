@@ -313,6 +313,7 @@ pub struct Settings {
     pub scroll_frame_step_modifier: Option<String>,
     pub scoreboard_scale: Option<f64>,
     pub play_recording_sounds: bool,
+    pub language: String,
 }
 
 const DEFAULT_DEBUG_LOG: bool = false;
@@ -382,6 +383,7 @@ impl Default for Settings {
             scroll_frame_step_modifier: Some("Shift".to_string()),
             scoreboard_scale: None,
             play_recording_sounds: false,
+            language: "en".to_string(),
         }
     }
 }
@@ -489,6 +491,9 @@ impl<'de> Deserialize<'de> for Settings {
                         }
                         "playRecordingSounds" => {
                             settings.play_recording_sounds = map.next_value().unwrap_or(false);
+                        }
+                        "language" => {
+                            settings.language = map.next_value().unwrap_or_else(|_| "en".to_string());
                         }
                         _ => { /* ignored */ }
                     }
