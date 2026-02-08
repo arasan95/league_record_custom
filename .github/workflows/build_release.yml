@@ -1,9 +1,8 @@
 name: Build Release Artifacts
+
 on:
   push:
     tags: ["v*"]
-  pull_request:
-    branches: ["main"]
   workflow_dispatch:
 
 jobs:
@@ -12,6 +11,7 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -23,22 +23,13 @@ jobs:
 
       # Update version based on tag
       - name: Update Version
-        if: startsWith(github.ref, 'refs/tags/v')
         shell: powershell
         run: |
           $tag = "${{ github.ref_name }}"
-          # Remove 'v' prefix if present (e.g. v1.2.3 -> 1.2.3)
           if ($tag.StartsWith("v")) { $version = $tag.Substring(1) } else { $version = $tag }
-
           Write-Host "Syncing version to $version"
-
           $path = "src-tauri/Cargo.toml"
-          # Replace 'version = "x.y.z"' with new version
-          # Note: this targets the [workspace.package] version line which usually starts with 'version ='
           (Get-Content $path) -replace '^version = ".*"', "version = `"$version`"" | Set-Content $path
-
-          # Optional: Verify output
-          Get-Content $path | Select-String "version =" | Select-Object -First 5
 
       - run: bun install --linker=isolated && bun run --bun tauri build
         env:
