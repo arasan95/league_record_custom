@@ -18,7 +18,7 @@ The following changes have been implemented in this version:
 - Video Tools: A-B Loop repeat and clip creation (requires FFmpeg).
 - Configuration: Expanded hotkey and general settings.
 
-## 📦 Download
+## Download
 
 **[Download the latest installer from GitHub Releases](https://github.com/arasan95/league_record_custom/releases)**
 
@@ -116,7 +116,7 @@ There are 3 parts to the window.
 Just closing the window doesn't completely stop LeagueRecord because it needs to run in the background to record your games.
 In order to completely stop LeagueRecord you have to right-click the tray-icon at the bottom right of your screen and click the 'Quit' button.
 
-> [!NOTE]
+> [!NOTE]s
 > A bunch of stuff can be customized in the [Settings](#settings). Video resolution, framerate, only record ranked games, record voice-comms or only game audio, autostart LeagueRecord when you turn on your PC, ...
 <!-- -->
 > [!NOTE]
