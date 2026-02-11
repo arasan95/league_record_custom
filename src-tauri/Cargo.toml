@@ -49,8 +49,8 @@ default-run = "LeagueRecord"
 
 
 [dependencies]
-tauri = { version = "2.9.1", features = ["protocol-asset", "tray-icon"] }
-tauri-plugin-updater = "2.9.0"
+tauri = { version = "2.10", features = ["protocol-asset", "tray-icon"] }
+tauri-plugin-updater = "2.10"
 tauri-plugin-autostart = "2.5.0"
 tauri-plugin-single-instance = "2.3.0"
 tauri-plugin-log = "2.6.0"
