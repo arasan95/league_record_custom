@@ -1,6 +1,7 @@
 import videojs from "video.js";
 import type Player from "video.js/dist/types/player";
 import { type MarkerOptions, MarkersPlugin, type Settings } from "@fffffffxxxxxxx/videojs-markers";
+import "@fffffffxxxxxxx/videojs-markers";
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { join, sep } from "@tauri-apps/api/path";
