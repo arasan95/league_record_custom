@@ -503,9 +503,15 @@ async function main() {
     listenerManager.listen_app("RecordingStarted", () => {
         commands.getSettings().then(settings => {
             if (settings.playRecordingSounds) playNotificationSound('start');
+
+        });
+    });
+
+    listenerManager.listen_app("GameDetected", () => {
+        commands.getSettings().then(settings => {
             if (settings.autoStopPlayback) {
                 player.pause();
-                console.log("Auto-stopped playback due to new game start.");
+                console.log("Auto-stopped playback due to new game detected.");
             }
         });
     });
