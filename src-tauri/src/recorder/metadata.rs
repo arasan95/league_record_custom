@@ -7,10 +7,8 @@ use anyhow::{bail, Context, Result};
 use riot_datatypes::lcu::{Game, Player};
 use riot_datatypes::{Champion, MatchId, Queue, Timeline};
 use riot_local_auth::Credentials;
-use serde_json::Value;
 use shaco::model::ingame::GameEvent as LiveGameEvent;
 use shaco::rest::LcuRestClient;
-use std::collections::HashMap;
 use tokio::{time::sleep, try_join};
 use tokio_util::sync::CancellationToken;
 
