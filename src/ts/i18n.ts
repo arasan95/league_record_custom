@@ -84,7 +84,8 @@ export const APP_TEXT = {
         prevVideo: "Previous Recording",
         tabGeneral: "General",
         tabHotkeys: "Hotkeys",
-        language: "Language"
+        language: "Language",
+        other: "Other"
     },
     ja: {
         settingsTitle: "設定",
@@ -169,7 +170,8 @@ export const APP_TEXT = {
         prevVideo: "前の録画へ",
         tabGeneral: "全般",
         tabHotkeys: "ホットキー",
-        language: "言語 / Language"
+        language: "言語 / Language",
+        other: "その他"
     },
     zh: {
         settingsTitle: "设置",
@@ -254,7 +256,8 @@ export const APP_TEXT = {
         prevVideo: "上一个录像",
         tabGeneral: "常规",
         tabHotkeys: "热键",
-        language: "语言 / Language"
+        language: "语言 / Language",
+        other: "其他"
     },
     ko: {
         settingsTitle: "설정",
@@ -339,7 +342,8 @@ export const APP_TEXT = {
         prevVideo: "이전 녹화",
         tabGeneral: "일반",
         tabHotkeys: "단축키",
-        language: "언어 / Language"
+        language: "언어 / Language",
+        other: "기타"
     },
     vi: {
         settingsTitle: "Cài đặt",
@@ -424,7 +428,8 @@ export const APP_TEXT = {
         prevVideo: "Video trước đó",
         tabGeneral: "Chung",
         tabHotkeys: "Phím nóng",
-        language: "Ngôn ngữ / Language"
+        language: "Ngôn ngữ / Language",
+        other: "Khác"
     },
     pt: {
         settingsTitle: "Configurações",
@@ -509,7 +514,8 @@ export const APP_TEXT = {
         prevVideo: "Gravação Anterior",
         tabGeneral: "Geral",
         tabHotkeys: "Teclas de Atalho",
-        language: "Idioma / Language"
+        language: "Idioma / Language",
+        other: "Outros"
     },
     es: {
         settingsTitle: "Configuración",
@@ -594,7 +600,8 @@ export const APP_TEXT = {
         prevVideo: "Grabación Anterior",
         tabGeneral: "General",
         tabHotkeys: "Teclas Rápidas",
-        language: "Idioma / Language"
+        language: "Idioma / Language",
+        other: "Otros"
     },
     fr: {
         settingsTitle: "Paramètres",
@@ -679,7 +686,8 @@ export const APP_TEXT = {
         prevVideo: "Enregistrement Précédent",
         tabGeneral: "Général",
         tabHotkeys: "Raccourcis",
-        language: "Langue / Language"
+        language: "Langue / Language",
+        other: "Autre"
     },
     de: {
         settingsTitle: "Einstellungen",
@@ -764,7 +772,8 @@ export const APP_TEXT = {
         prevVideo: "Vorherige Aufnahme",
         tabGeneral: "Allgemein",
         tabHotkeys: "Hotkeys",
-        language: "Sprache / Language"
+        language: "Sprache / Language",
+        other: "Andere"
     },
     ru: {
         settingsTitle: "Настройки",
@@ -849,7 +858,8 @@ export const APP_TEXT = {
         prevVideo: "Пред. запись",
         tabGeneral: "Общее",
         tabHotkeys: "Горячие клавиши",
-        language: "Язык / Language"
+        language: "Язык / Language",
+        other: "Другое"
     },
     tr: {
         settingsTitle: "Ayarlar",
@@ -934,7 +944,8 @@ export const APP_TEXT = {
         prevVideo: "Önceki Kayıt",
         tabGeneral: "Genel",
         tabHotkeys: "Kısayollar",
-        language: "Dil / Language"
+        language: "Dil / Language",
+        other: "Diğer"
     },
     pl: {
         settingsTitle: "Ustawienia",
@@ -1019,7 +1030,8 @@ export const APP_TEXT = {
         prevVideo: "Poprzednie Nagranie",
         tabGeneral: "Ogólne",
         tabHotkeys: "Skróty",
-        language: "Język / Language"
+        language: "Język / Language",
+        other: "Inne"
     },
     it: {
         settingsTitle: "Impostazioni",
@@ -1104,7 +1116,8 @@ export const APP_TEXT = {
         prevVideo: "Video Precedente",
         tabGeneral: "Generale",
         tabHotkeys: "Tasti Rapidi",
-        language: "Lingua / Language"
+        language: "Lingua / Language",
+        other: "Altro"
     }
 };
 

@@ -35,8 +35,9 @@ export const SWIFTPLAY_OBJECTIVES: ObjectiveConfig = {
 
 export function getObjectiveConfig(queueId: number): ObjectiveConfig {
     // 490 = Swiftplay (Quickplay replaced)
+    // 480 = Swiftplay (Observed)
     // 830-850, 890 = Co-op vs AI
-    if (queueId === 490 || (queueId >= 830 && queueId <= 890)) {
+    if (queueId === 490 || queueId === 480 || (queueId >= 830 && queueId <= 890)) {
         return SWIFTPLAY_OBJECTIVES;
     }
     return STANDARD_OBJECTIVES;

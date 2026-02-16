@@ -115,7 +115,7 @@ appEvent: "app-event"
 
 /** user-defined types **/
 
-export type AppEvent = { type: "RecordingsChanged"; payload: null } | { type: "MetadataChanged"; payload: string[] } | { type: "MarkerflagsChanged"; payload: null } | { type: "RecordingStarted" } | { type: "RecordingFinished"; payload: [string, boolean] }
+export type AppEvent = { type: "RecordingsChanged"; payload: null } | { type: "MetadataChanged"; payload: string[] } | { type: "MarkerflagsChanged"; payload: null } | { type: "RecordingStarted" } | { type: "GameDetected" } | { type: "RecordingFinished"; payload: [string, boolean] }
 export type AudioSource = 
 /**
  * no audio
