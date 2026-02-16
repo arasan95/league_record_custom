@@ -600,3 +600,42 @@
 
 /* Clear previous overrides */
 /* ---------------------------------------------------- */
+
+
+/* Player Metadata (Rank/Level) */
+.player-meta {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 60px;
+    font-family: "Beaufort", sans-serif; /* Use game font if available */
+}
+
+.player-rank {
+    font-size: 0.9em; /* Slightly larger */
+    color: #e0e0e0; 
+    line-height: 1.1;
+    font-weight: 800; /* Extra bold */
+    text-transform: uppercase;
+    text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; /* Strong outline */
+    letter-spacing: 0.5px;
+}
+
+/* Rank Colors */
+.rank-iron { color: #574d4f; text-shadow: 0 0 2px #aaa; }
+.rank-bronze { color: #8c513a; text-shadow: 0 0 2px #000; }
+.rank-silver { color: #80989d; text-shadow: 0 0 3px #000; }
+.rank-gold { color: #cdbe91; text-shadow: 0 0 4px #423008; }
+.rank-platinum { color: #4E9996; text-shadow: 0 0 4px #000; }
+.rank-emerald { color: #0AC8B9; text-shadow: 0 0 5px #003300; }
+.rank-diamond { color: #576BCE; text-shadow: 0 0 5px #000033; }
+.rank-master { color: #9d48e0; text-shadow: 0 0 6px #220033; }
+.rank-grandmaster { color: #eb4c4c; text-shadow: 0 0 6px #330000; }
+.rank-challenger { color: #f4c874; text-shadow: 0 0 8px #0050b3; } /* Goldish with Blue glow */
+
+.player-level {
+    font-size: 0.7em;
+    color: #aaa;
+    font-weight: normal;
+    text-shadow: 1px 1px 1px #000;
+}

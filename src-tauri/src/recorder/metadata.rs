@@ -7,8 +7,10 @@ use anyhow::{bail, Context, Result};
 use riot_datatypes::lcu::{Game, Player};
 use riot_datatypes::{Champion, MatchId, Queue, Timeline};
 use riot_local_auth::Credentials;
+use serde_json::Value;
 use shaco::model::ingame::GameEvent as LiveGameEvent;
 use shaco::rest::LcuRestClient;
+use std::collections::HashMap;
 use tokio::{time::sleep, try_join};
 use tokio_util::sync::CancellationToken;
 
@@ -141,6 +143,10 @@ pub async fn process_data(
         &pid_to_champ,
     );
 
+    // Fetch Rank and Summoner Level
+    let pid_to_meta =
+        super::lp_helper_meta::fetch_participant_metadata(&lcu_rest_client, &game.participant_identities).await;
+
     let lane_scores = calculate_lane_scores(&merged_events);
 
     let participants = game
@@ -173,6 +179,12 @@ pub async fn process_data(
                     .unwrap_or_else(|| "NONE".to_string()),
                 summoner_name: name,
                 lane_score: *lane_scores.get(&p.participant_id).unwrap_or(&0.0),
+                champ_level: Some(0),
+                summoner_level: pid_to_meta.get(&p.participant_id).map(|m| m.1),
+                rank: pid_to_meta
+                    .get(&p.participant_id)
+                    .map(|m| m.0.clone())
+                    .or(Some("Unranked".to_string())),
             }
         })
         .collect();
@@ -371,6 +383,10 @@ pub async fn process_data_with_retry(
         &pid_to_champ,
     );
 
+    // Fetch Rank and Summoner Level
+    let pid_to_meta =
+        super::lp_helper_meta::fetch_participant_metadata(&lcu_rest_client, &game.participant_identities).await;
+
     let lane_scores = calculate_lane_scores(&merged_events);
 
     let participants = game
@@ -403,6 +419,12 @@ pub async fn process_data_with_retry(
                     .unwrap_or_else(|| "NONE".to_string()),
                 summoner_name: name,
                 lane_score: *lane_scores.get(&p.participant_id).unwrap_or(&0.0),
+                champ_level: Some(0),
+                summoner_level: pid_to_meta.get(&p.participant_id).map(|m| m.1),
+                rank: pid_to_meta
+                    .get(&p.participant_id)
+                    .map(|m| m.0.clone())
+                    .or(Some("Unranked".to_string())),
             }
         })
         .collect();
