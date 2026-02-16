@@ -314,6 +314,9 @@ pub struct Settings {
     pub scoreboard_scale: Option<f64>,
     pub play_recording_sounds: bool,
     pub language: String,
+    pub champion_wiki_base_url: Option<String>,
+    pub champion_matchup_url: Option<String>,
+    pub champion_build_url: Option<String>,
 }
 
 const DEFAULT_DEBUG_LOG: bool = false;
@@ -331,6 +334,8 @@ const DEFAULT_AUTO_SELECT_RECORDING: bool = false;
 const DEFAULT_AUTO_POPUP_ON_END: bool = false;
 const DEFAULT_FFMPEG_PATH: Option<String> = None;
 const DEFAULT_MATCH_HISTORY_BASE_URL: Option<String> = None;
+const DEFAULT_CHAMPION_MATCHUP_URL: &str = "https://dpm.lol/champions/{my}/matchups?opponent={opponent}";
+const DEFAULT_CHAMPION_BUILD_URL: &str = "https://dpm.lol/champions/{q}/build";
 
 #[inline]
 fn default_recordings_folder() -> PathBuf {
@@ -384,6 +389,9 @@ impl Default for Settings {
             scoreboard_scale: None,
             play_recording_sounds: false,
             language: "en".to_string(),
+            champion_wiki_base_url: Some("https://www.loljp-wiki.jp/wiki/?Champion%2F{q}".to_string()),
+            champion_matchup_url: Some(DEFAULT_CHAMPION_MATCHUP_URL.to_string()),
+            champion_build_url: Some(DEFAULT_CHAMPION_BUILD_URL.to_string()),
         }
     }
 }
@@ -494,6 +502,16 @@ impl<'de> Deserialize<'de> for Settings {
                         }
                         "language" => {
                             settings.language = map.next_value().unwrap_or_else(|_| "en".to_string());
+                        }
+                        "championWikiBaseUrl" => {
+                            settings.champion_wiki_base_url = map.next_value().ok();
+                            // Using .ok() handles Option<String> nicely
+                        }
+                        "championMatchupUrl" => {
+                            settings.champion_matchup_url = map.next_value().ok();
+                        }
+                        "championBuildUrl" => {
+                            settings.champion_build_url = map.next_value().ok();
                         }
                         _ => { /* ignored */ }
                     }
