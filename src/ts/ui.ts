@@ -2317,10 +2317,64 @@ export default class UI {
                 
 
 
-                // Assign Order based on User Request
+                // Summoner Level & Rank (Outside Riot ID)
+                const metaDiv = this.vjs.dom.createEl("div", {}, { class: "player-meta" }) as HTMLElement;
+                
+                // Rank (if available)
+                if (p.rank && p.rank !== "Unranked" && p.rank !== "UNRANKED") {
+                   const formatRank = (r: string) => {
+                       const parts = r.split(" ");
+                       if (parts.length < 1) return r;
+                       
+                       const tier = parts[0].toUpperCase();
+                       const division = parts.length > 1 ? parts[1] : "";
+                       
+                       let shortTier = tier[0]; // Default to first letter
+                       
+                       // Custom mappings if needed, or rely on first letter
+                       // Iron -> I, Silver -> S, Gold -> G, Platinum -> P, Emerald -> E, Diamond -> D
+                       // Master -> M, Grandmaster -> GM, Challenger -> C
+                       if (tier === "GRANDMASTER") shortTier = "GM";
+                       if (tier === "CHALLENGER") shortTier = "C";
+                       
+                       const shortDiv = division; 
+                       
+                       // e.g. "GIV", "PI", "DII"
+                       return `${shortTier}${shortDiv}`;
+                   };
+                   
+                   const rankStr = formatRank(p.rank as string);
+                   const rankEl = this.vjs.dom.createEl("div", {}, { class: "player-rank" }, rankStr);
+                   
+                   // Add Rank Color Class
+                   try {
+                       const parts = (p.rank as string).split(" ");
+                       if (parts.length > 0) {
+                           const tier = parts[0].toLowerCase();
+                           rankEl.classList.add(`rank-${tier}`);
+                       }
+                   } catch(e) {}
+                   
+                   metaDiv.append(rankEl);
+                }
+                
+                // Summoner Level
+                // Use new field 'summonerLevel' if available, otherwise ignore or fallback
+                // Note: p.summonerLevel might be 0 if not fetched correctly.
+                const sLevel = p.summonerLevel || 0;
+                if (sLevel > 0) {
+                    const lvlEl = this.vjs.dom.createEl("div", {}, { class: "player-level" }, `Lv.${sLevel}`);
+                    metaDiv.append(lvlEl);
+                }
+                
+                // Also add Champion Level indicator (requested implicitly by lack of level?)
+                // Actually user asked for Summoner Level and Rank.
+                // But let's add Champion Level overlay on icon if we can? 
+                // For now, adhere strictly to "Outside Riot ID".
+
                 if (teamId === 200) {
                     // Red Team (Right Side)
-                    // Desired: [Icon][CS][KDA][Items][Trinket][Spells][Runes][Gold][Name]
+                    // Desired: [Icon]...[Name][Meta]
                     img.style.order = "1";
                     csDiv.style.order = "2";
                     kdaDiv.style.order = "3";
@@ -2330,6 +2384,9 @@ export default class UI {
                     runesDiv.style.order = "7";
                     goldDiv.style.order = "8";
                     name.style.order = "9";
+                    metaDiv.style.order = "10";
+                    metaDiv.style.textAlign = "left"; // Near name, left aligned relative to its box?
+                    metaDiv.style.marginLeft = "8px"; // Spacing from Name
                     
                     // Items in standard order (1-6) -> LTR
                     itemsGrid.style.flexDirection = "row";
@@ -2337,7 +2394,8 @@ export default class UI {
                     
                 } else {
                     // Blue Team (Left Side)
-                    // Desired: [Name][Gold][Runes][Spells][Trinket][Items][KDA][CS][Icon]
+                    // Desired: [Meta][Name]...[Icon]
+                    metaDiv.style.order = "0";
                     name.style.order = "1";
                     goldDiv.style.order = "2";
                     runesDiv.style.order = "3";
@@ -2348,13 +2406,16 @@ export default class UI {
                     csDiv.style.order = "8";
                     img.style.order = "9";
                     
+                    metaDiv.style.textAlign = "right"; 
+                    metaDiv.style.marginRight = "8px"; // Spacing from Name
+                    
                     // Items in reverse order (6-1) -> RTL inside grid
                     itemsGrid.style.flexDirection = "row-reverse";
                     itemsGrid.style.justifyContent = "flex-end";
                 }
                 
-                // Append all to row (Order doesn't matter for append if style.order is set, but keeping logical is good)
-                row.append(img, csDiv, kdaDiv, itemsGrid, trinketDiv, spells, runesDiv, goldDiv, name);
+                // Append all to row
+                row.append(metaDiv, img, csDiv, kdaDiv, itemsGrid, trinketDiv, spells, runesDiv, goldDiv, name);
                 
                 return {
                     row,
