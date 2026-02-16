@@ -47,6 +47,12 @@ pub struct Participant {
     pub summoner_name: String,
     #[serde(default)]
     pub lane_score: f64,
+    #[serde(default)]
+    pub champ_level: Option<i32>,
+    #[serde(default)]
+    pub summoner_level: Option<i32>,
+    #[serde(default)]
+    pub rank: Option<String>,
 }
 
 #[cfg_attr(test, derive(specta::Type))]
