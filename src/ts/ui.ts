@@ -7,7 +7,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import * as clipboard from "@tauri-apps/plugin-clipboard-manager";
 
 import { commands, type GameMetadata, type GoldFrame, type ParticipantGold, type MarkerFlags, type Recording, type Settings, type MatchTeam, type Participant, type GameEvent } from "./bindings";
-import { getChampionIconUrl, getChampionIconUrlById, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, getItemPrice } from "./datadragon";
+import { getChampionIconUrl, getChampionIconUrlById, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, getItemPrice, getChampionNameById } from "./datadragon";
 import { getCurrentPatchVersion, getSpawnTimers } from "./version";
 import { InventoryTimeline } from "./timeline";
 import { getObjectiveConfig } from "./objectives";
@@ -2183,6 +2183,7 @@ export default class UI {
                 if (this.metadataRenderId !== currentRenderId) return null;
 
                 const row = this.vjs.dom.createEl("div", {}, { class: "player-row" }) as HTMLElement;
+                const isMe = p.participantId === data.participantId;
                 const img = this.vjs.dom.createEl("img", { src: cachedChampIcon }, { class: "champ-icon" }) as HTMLImageElement;
                 img.onerror = () => {
                     if (img.src !== cDragonUrl) {
@@ -2190,6 +2191,36 @@ export default class UI {
                         img.src = cDragonUrl;
                     }
                 };
+
+                // Champion Wiki Link
+                if (settings.championWikiBaseUrl) {
+                    img.style.cursor = "pointer";
+                    img.title = `Open Wiki`;
+                    img.addEventListener("click", async (e) => {
+                        e.stopPropagation();
+                        if (!settings.championWikiBaseUrl) return;
+                        
+                        const champName = await getChampionNameById(p.championId);
+                        if (!champName) {
+                            console.warn(`Could not resolve champion name for ID ${p.championId}`);
+                            return;
+                        }
+
+                        // e.g. "https://www.loljp-wiki.jp/wiki/?Champion%2F{q}" -> replace {q} with "Caitlyn"
+                        let url = "";
+                        if (settings.championWikiBaseUrl.includes("{q}")) {
+                             url = settings.championWikiBaseUrl.replace("{q}", champName);
+                        } else {
+                             url = `${settings.championWikiBaseUrl}${champName}`;
+                        }
+                        
+                        try {
+                            await open(url);
+                        } catch (err) {
+                            console.error("Failed to open Wiki URL:", err);
+                        }
+                    });
+                }
                 
                 const spells = this.vjs.dom.createEl("div", {}, { class: "spells" }, [
                     this.vjs.dom.createEl("img", { src: spell1Url }, { class: "spell-icon" }),
@@ -2210,6 +2241,36 @@ export default class UI {
                 const trinketUrl = itemUrls[6];
 
                 const itemsGrid = this.vjs.dom.createEl("div", {}, { class: "items-grid" }) as HTMLElement;
+                
+                // Champion Build Link (Click on Items - My Champion Only)
+                if (settings.championBuildUrl && isMe) {
+                     itemsGrid.style.cursor = "pointer";
+                     itemsGrid.title = `Open Champion Build`;
+                     itemsGrid.addEventListener("click", async (e) => {
+                         e.stopPropagation();
+                         if (!settings.championBuildUrl) return;
+
+                         const champName = await getChampionNameById(p.championId);
+                         if (!champName) {
+                             console.warn(`Could not resolve champion name for ID ${p.championId}`);
+                             return;
+                         }
+
+                         // Replace {q} -> champName
+                         let url = "";
+                         if (settings.championBuildUrl.includes("{q}")) {
+                              url = settings.championBuildUrl.replace("{q}", champName);
+                         } else {
+                              url = `${settings.championBuildUrl}${champName}`;
+                         }
+                         
+                         try {
+                             await open(url);
+                         } catch (err) {
+                             console.error("Failed to open Build URL:", err);
+                         }
+                     });
+                }
                 
                 const itemImgs: HTMLImageElement[] = [];
                 // Initialize with final stats, but we will update them via timeline
@@ -2254,11 +2315,13 @@ export default class UI {
                 
                 const goldDiv = this.vjs.dom.createEl("div", {}, { class: "total-gold" }, "0") as HTMLElement;
 
+                // Matchup Link (Click on Gold) removed from here
+
+
                 // DATA-BINDING ROBUSTNESS
                 // Embed PID in the DOM row for easy debugging
                 row.dataset.pid = p.participantId.toString();
                 
-                const isMe = p.participantId === data.participantId;
                 // Priority: 1. Populated summonerName (New recordings), 2. data.player (Old recordings - Me), 3. Fallback ID
                 const nameStr = p.summonerName || (isMe ? `${data.player.gameName}#${data.player.tagLine}` : `P${p.participantId}`); 
                 const name = this.vjs.dom.createEl("div", {}, { class: "player-name" }, nameStr) as HTMLElement;
@@ -2485,6 +2548,8 @@ export default class UI {
         if (this.metadataRenderId !== currentRenderId) return;
         if (!topDiv || !botDiv) return;
 
+        const settings = await commands.getSettings();
+
         // Center Gold Diff
         const centerDiv = this.vjs.dom.createEl("div", {}, { class: "scoreboard-center" });
 
@@ -2509,6 +2574,51 @@ export default class UI {
             } else {
                 diffRow.innerHTML = `<span class="diff-val">-</span>`;
             }
+
+            // Matchup Link (Click on Gold Diff)
+            if (settings.championMatchupUrl) {
+                diffRow.style.cursor = "pointer";
+                diffRow.title = `Open Matchup`;
+                diffRow.addEventListener("click", async (e) => {
+                    e.stopPropagation();
+                    if (!settings.championMatchupUrl) return;
+
+                    // p1 is Blue (100), p2 is Red (200)
+                    // Determine which is {my} and which is {opponent}
+                    let myP = p1;
+                    let oppP = p2;
+                    
+                    // If the user's ID matches the Red side participant, swap.
+                    if (data.participantId === p2.participantId) {
+                        myP = p2;
+                        oppP = p1;
+                    } 
+                    // Note: If user is neither (spectator), it defaults to Blue vs Red.
+                    // Or if user is p1, it stays p1 vs p2.
+
+                    const myChampName = await getChampionNameById(myP.championId);
+                    const targetChampName = await getChampionNameById(oppP.championId);
+
+                    if (!myChampName || !targetChampName) {
+                        console.warn("Could not resolve champion names for matchup");
+                        return;
+                    }
+
+                    // Replace placeholders
+                    // {my} -> myChampName
+                    // {opponent} -> targetChampName
+                    const url = settings.championMatchupUrl
+                        .replace("{my}", myChampName)
+                        .replace("{opponent}", targetChampName);
+                    
+                    try {
+                        await open(url);
+                    } catch (err) {
+                        console.error("Failed to open Matchup URL:", err);
+                    }
+                });
+            }
+
             centerDiv.append(diffRow);
             this.goldDiffRefs.push(diffRow);
         }
@@ -3792,6 +3902,51 @@ export default class UI {
             this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, getText(lang, "trackingUrlExample")),
             matchHistoryUrlInput
         ]) as HTMLDivElement;
+
+        // Champion Wiki URL
+        const championWikiUrlInput = this.vjs.dom.createEl("input", {}, {
+            class: "settings-input",
+            type: "text",
+            placeholder: "e.g. https://www.loljp-wiki.jp/wiki/?Champion%2F{q}",
+            value: settings.championWikiBaseUrl || "",
+            style: "flex: 1;"
+        }) as HTMLInputElement;
+
+        const championWikiUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width" }, [
+            this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, "Champion Wiki URL"),
+            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, "{q} will be replaced by Champion Name (English)."),
+            championWikiUrlInput
+        ]) as HTMLDivElement;
+
+        // Champion Matchup URL
+        const championMatchupUrlInput = this.vjs.dom.createEl("input", {}, {
+            class: "settings-input",
+            type: "text",
+            placeholder: "e.g. https://dpm.lol/champions/{my}/matchups?opponent={opponent}",
+            value: settings.championMatchupUrl || "",
+            style: "flex: 1;"
+        }) as HTMLInputElement;
+
+        const championMatchupUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width" }, [
+            this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, "Champion Matchup URL"),
+            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, "{my} = Your Champ, {opponent} = Target Champ (English)."),
+            championMatchupUrlInput
+        ]) as HTMLDivElement;
+
+        // Champion Build URL
+        const championBuildUrlInput = this.vjs.dom.createEl("input", {}, {
+            class: "settings-input",
+            type: "text",
+            placeholder: "e.g. https://dpm.lol/champions/{q}/build",
+            value: settings.championBuildUrl || "",
+            style: "flex: 1;"
+        }) as HTMLInputElement;
+
+        const championBuildUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width" }, [
+            this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, "Champion Build URL"),
+            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, "{q} will be replaced by Champion Name (English)."),
+            championBuildUrlInput
+        ]) as HTMLDivElement;
         
         // Hotkeys
 
@@ -3882,6 +4037,9 @@ export default class UI {
             switchesTitle,
             switchesContent,
             trackingUrlContainer,
+            championWikiUrlContainer,
+            championMatchupUrlContainer,
+            championBuildUrlContainer,
             
             // Modernized Sections (Moved to bottom)
             createGroup("Local Assets", assetsWrapper as HTMLElement, true),
@@ -3934,6 +4092,10 @@ export default class UI {
                     recordingsFolder: folderInput.value,
                     clipsFolder: clipsFolderInput.value,
                     filenameFormat: filenameInput.value,
+                    matchHistoryBaseUrl: matchHistoryUrlInput.value.trim() || null,
+                    championWikiBaseUrl: championWikiUrlInput.value.trim() || null,
+                    championMatchupUrl: championMatchupUrlInput.value.trim() || null,
+                    championBuildUrl: championBuildUrlInput.value.trim() || null,
                     encodingQuality: parseInt(qualityInput.value, 10),
                     outputResolution: resSelect.value || null as any,
                     framerate: [
@@ -3977,8 +4139,7 @@ export default class UI {
                     autoSelectRecording: autoSelectRecording.input.checked,
                     confirmDelete: confirmDel.input.checked,
                     developerMode: devMode.input.checked,
-                    playRecordingSounds: playSounds.input.checked,
-                    matchHistoryBaseUrl: matchHistoryUrlInput.value.trim() || null
+                    playRecordingSounds: playSounds.input.checked
                 };
                 
                 // Save Keybinds & Mouse Config

@@ -213,6 +213,13 @@ export async function getChampionIconUrlById(championId: number): Promise<string
     return await getCachedAssetUrl(url, "champion_id", `${championId}.png`);
 }
 
+export async function getChampionNameById(championId: number): Promise<string | null> {
+    await ensureDataLoaded();
+    if (!cachedChampionData) return null;
+    const entry = Object.values(cachedChampionData).find((c: any) => c.key == championId) as any;
+    return entry ? entry.id : null; // entry.id is the internal name (e.g. "MonkeyKing"), entry.name is display name (e.g. "Wukong"). Wiki likely uses ID or Name. User said "English Champion Name". Usually ID is safer for URLs but Name might be required. Let's use ID (Caitlyn, Ahri, etc are IDs).
+}
+
 export async function getItemIconUrl(itemId: number): Promise<string> {
     if (itemId === 0) return "";
     const url = `${getBaseUrl()}/item/${itemId}.png`;
