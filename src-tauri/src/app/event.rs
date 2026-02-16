@@ -9,6 +9,7 @@ pub enum AppEvent {
     MetadataChanged { payload: Vec<String> },
     MarkerflagsChanged { payload: () },
     RecordingStarted,
+    GameDetected,
     RecordingFinished { payload: (String, bool) },
 }
 
@@ -33,6 +34,7 @@ impl EventManager for tauri::AppHandle {
                 self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), payload)?
             }
             RecordingStarted => self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), ())?,
+            GameDetected => self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), ())?,
             RecordingFinished { payload } => {
                 self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), payload)?
             }

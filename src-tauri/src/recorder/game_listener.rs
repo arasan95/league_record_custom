@@ -341,13 +341,19 @@ impl GameListener {
                     let allowed_modes = settings.game_modes();
                     log::info!("User Allowed Modes (Settings): {:?}", allowed_modes);
 
+                    // Emit GameDetected event regardless of allowed mode
+                    if let Err(e) = self.ctx.app_handle.send_event(AppEvent::GameDetected) {
+                        log::error!("Failed to emit GameDetected event: {}", e);
+                    }
+
                     let mut is_mode_allowed = true;
 
                     if let Some(modes) = allowed_modes {
                         // Prioritize QueueID mapping for known queues to ensure consistency
                         let mode_val = match queue.id {
                             420 | 440 => "RANKED".to_string(),
-                            400 | 430 | 490 => "NORMAL".to_string(),
+                            400 | 430 => "NORMAL".to_string(), // Removed 480/490 from NORMAL
+                            480 | 490 => "SWIFTPLAY".to_string(), // Explicit Swiftplay mapping
                             450 | 100 => "ARAM".to_string(),
                             3140 => "PRACTICE_TOOL".to_string(),
                             1700 => "CHERRY".to_string(),
@@ -361,7 +367,30 @@ impl GameListener {
                         };
 
                         let mode_upper = mode_val.to_uppercase();
+
+                        // Check if allowed directly
                         is_mode_allowed = modes.iter().any(|m| m.to_uppercase() == mode_upper);
+
+                        // Check "OTHER" category
+                        if !is_mode_allowed {
+                            let standard_modes = [
+                                "RANKED",
+                                "NORMAL",
+                                "ARAM",
+                                "PRACTICE_TOOL",
+                                "CHERRY",
+                                "COOP_VS_AI",
+                                "TFT",
+                                "CUSTOM",
+                                "SWIFTPLAY",
+                            ];
+                            let is_standard = standard_modes.contains(&mode_upper.as_str());
+
+                            if !is_standard && modes.iter().any(|m| m == "OTHER") {
+                                is_mode_allowed = true;
+                                log::info!("Game Mode '{}' allowed via OTHER category.", mode_upper);
+                            }
+                        }
 
                         if !is_mode_allowed {
                             log::info!("Game Mode '{}' NOT in allowed list. Skipping recording.", mode_upper);

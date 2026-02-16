@@ -3632,7 +3632,7 @@ export default class UI {
         ]) as HTMLDivElement;
 
         // Game Modes
-        const allModeIds = ["RANKED", "NORMAL", "ARAM", "CHERRY", "PRACTICE_TOOL", "CUSTOM", "COOP_VS_AI", "TFT", "SWIFTPLAY"];
+        const allModeIds = ["RANKED", "NORMAL", "ARAM", "CHERRY", "PRACTICE_TOOL", "CUSTOM", "COOP_VS_AI", "TFT", "SWIFTPLAY", "OTHER"];
         const currentModes = settings.gameModes || allModeIds;
         const createModeSwitch = (label: string, modeId: string) => {
              const checked = currentModes.includes(modeId);
@@ -3656,6 +3656,7 @@ export default class UI {
         const gmCoop = createModeSwitch(getText(lang, "coop"), "COOP_VS_AI");
         const gmTft = createModeSwitch(getText(lang, "tft"), "TFT");
         const gmSwiftplay = createModeSwitch(getText(lang, "swiftplay"), "SWIFTPLAY");
+        const gmOther = createModeSwitch(getText(lang, "other"), "OTHER");
 
         // Game Modes - Title outside, content with background
         const gameModesTitle = this.vjs.dom.createEl("h3", {}, {
@@ -3668,7 +3669,8 @@ export default class UI {
         }, [
             this.vjs.dom.createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: repeat(2, 1fr); gap: 10px;" }, [
                 gmRanked.container, gmNormal.container, gmAram.container, gmArena.container,
-                gmPractice.container, gmCustom.container, gmCoop.container, gmTft.container, gmSwiftplay.container
+                gmPractice.container, gmCustom.container, gmCoop.container, gmTft.container, gmSwiftplay.container,
+                gmOther.container
             ])
         ]) as HTMLDivElement;
 
@@ -3904,6 +3906,7 @@ export default class UI {
                         if (gmCoop.input.checked) modes.push(gmCoop.modeId);
                         if (gmTft.input.checked) modes.push(gmTft.modeId);
                         if (gmSwiftplay.input.checked) modes.push(gmSwiftplay.modeId);
+                        if (gmOther.input.checked) modes.push(gmOther.modeId);
                         return modes;
                     })(),
 

@@ -6,6 +6,7 @@ export const QueueID = {
     RANKED_FLEX: 440,
     ARAM: 450,
     SWIFTPLAY: 490, // Replaces Quickplay
+    SWIFTPLAY_480: 480, // Observed Swiftplay ID
     CLASH: 700,
     COOP_AI_INTRO: 830,
     COOP_AI_BEGINNER: 840,
@@ -26,6 +27,7 @@ export const SR_QUEUES = [
     QueueID.BLIND_PICK,
     QueueID.RANKED_FLEX,
     QueueID.SWIFTPLAY,
+    QueueID.SWIFTPLAY_480,
     QueueID.CLASH,
     QueueID.COOP_AI_INTRO,
     QueueID.COOP_AI_BEGINNER,
