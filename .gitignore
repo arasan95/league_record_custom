@@ -37,3 +37,12 @@ src-tauri/src/bin/debug_events.rs
 .log/
 
 custom-build.local.ps1
+
+# Dev tools & temp files (not part of the project)
+AGENTS.md
+copy_dlls_to.ps1
+query
+ranked_stats_dump.json
+raw_input_example.py
+*.bak
+.mypy_cache
