@@ -658,14 +658,15 @@ export default class UI {
         const videoLiElements = recordings.map((recording, index) => {
             // STRICT FILTERING: If metadata is missing or "Unknown Queue", do NOT display it.
             // User requested: "If it can't be acquired, it's fine to display nothing."
-            let shouldHide = true;
+            // STRICT FILTERING: Hide logic disabled per user request to show all videos.
+            let shouldHide = false;
             if (recording.metadata && "Metadata" in recording.metadata) {
                 const m = recording.metadata.Metadata;
                 // Broaden check: If queue is missing OR name contains "Unknown" (case insensitive), hide it ONLY IF STATS ARE MISSING.
                 // If stats are present, it's a finished game (e.g. AI game with unmapped ID), so show it.
-                if (m.stats || (m.queue && m.queue.name && !m.queue.name.toLowerCase().includes("unknown"))) {
-                    shouldHide = false;
-                }
+                // if (m.stats || (m.queue && m.queue.name && !m.queue.name.toLowerCase().includes("unknown"))) {
+                //    shouldHide = false;
+                // }
                 
                 // Search Filter
                 if (this.searchQuery && this.searchQuery !== "") {
@@ -836,8 +837,19 @@ export default class UI {
                 queueName = "Normal";
             }
 
-            if (queueName === "Unknown Queue") {
-                queueName = "Unknown";
+            if (queueName === "Unknown Queue" || queueName === "Unknown") {
+                // Heuristic: If we have stats, it's a valid game.
+                // Call it "Normal" or "Custom" depending on other hints? Or just "Match".
+                // If it's Swiftplay (ID 480/490), it might show up as Unknown if not mapped.
+                // Let's just show "Match" or pass through "Unknown" but ensure liClass has-metadata is kept.
+                
+                // If ID is 480 or 490 (Swiftplay), force it.
+                if (meta.queue?.id === 480 || meta.queue?.id === 490) {
+                     queueName = "Swiftplay";
+                } else if (meta.stats) {
+                    // Safe Fallback
+                    queueName = "Match";
+                }
             }
 
             // Determine Side for Border Color and Sidebar Indicator
