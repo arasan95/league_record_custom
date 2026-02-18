@@ -100,6 +100,44 @@ pub struct Stats {
     pub gold_earned: i64,
 }
 
+impl Default for Stats {
+    fn default() -> Self {
+        Self {
+            kills: 0,
+            deaths: 0,
+            assists: 0,
+            largest_multi_kill: 0,
+            neutral_minions_killed: 0,
+            neutral_minions_killed_enemy_jungle: 0,
+            neutral_minions_killed_team_jungle: 0,
+            total_minions_killed: 0,
+            vision_score: 0.0,
+            vision_wards_bought_in_game: 0,
+            wards_placed: 0,
+            wards_killed: 0,
+            game_ended_in_early_surrender: false,
+            game_ended_in_surrender: false,
+            win: false,
+            item0: 0,
+            item1: 0,
+            item2: 0,
+            item3: 0,
+            item4: 0,
+            item5: 0,
+            item6: 0,
+            perk0: 0,
+            perk1: 0,
+            perk2: 0,
+            perk3: 0,
+            perk4: 0,
+            perk5: 0,
+            perk_primary_style: 0,
+            perk_sub_style: 0,
+            gold_earned: 0,
+        }
+    }
+}
+
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

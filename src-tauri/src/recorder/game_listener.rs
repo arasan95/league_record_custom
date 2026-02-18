@@ -58,7 +58,10 @@ enum State {
         HighlightTask,
         JoinHandle<Vec<LiveGameEvent>>,
         Arc<Mutex<Vec<LiveGameEvent>>>,
-        Option<i32>, // start_lp
+        Arc<Mutex<HashMap<String, i32>>>,                      // player_map
+        Option<i32>,                                           // start_lp
+        Arc<Mutex<Option<shaco::model::ingame::AllGameData>>>, // last_game_data
+        HashMap<i64, i32>,                                     // pid_to_cid (ParticipantId -> ChampionId)
     ),
     EndOfGame(Metadata, Vec<LiveGameEvent>, Option<i32>), // start_lp
 }
@@ -67,7 +70,7 @@ impl Display for State {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             State::Idle => f.write_str("Idle"),
-            State::Recording(_, _, _, _, _) => f.write_str("Recording"),
+            State::Recording(_, _, _, _, _, _, _, _) => f.write_str("Recording"),
             State::EndOfGame(metadata, _, _) => f.write_fmt(format_args!("EndOfGame({metadata})")),
         }
     }
@@ -95,7 +98,11 @@ impl GameListener {
         }
     }
 
-    async fn run_info_poller(live_events: Arc<Mutex<Vec<LiveGameEvent>>>) -> Vec<LiveGameEvent> {
+    async fn run_info_poller(
+        live_events: Arc<Mutex<Vec<LiveGameEvent>>>,
+        player_map: Arc<Mutex<HashMap<String, i32>>>,
+        last_game_data: Arc<Mutex<Option<shaco::model::ingame::AllGameData>>>,
+    ) -> Vec<LiveGameEvent> {
         let client = shaco::ingame::IngameClient::new();
         let mut last_event_id = 0;
         // Cache: ParticipantIndex -> List of Items
@@ -107,6 +114,18 @@ impl GameListener {
 
             match client.all_game_data(Some(last_event_id as u32)).await {
                 Ok(data) => {
+                    // Update player map
+                    if let Ok(mut map) = player_map.lock() {
+                        for (i, p) in data.all_players.iter().enumerate() {
+                            map.insert(p.summoner_name.clone(), (i + 1) as i32);
+                        }
+                    }
+
+                    // Update last known game data
+                    if let Ok(mut last_data) = last_game_data.lock() {
+                        *last_data = Some(data.clone());
+                    }
+
                     let game_time = data.game_data.game_time;
                     let mut new_events = Vec::new();
 
@@ -282,15 +301,25 @@ impl GameListener {
                                     if should_start {
                                         log::info!("Manual start: Game detected (ID: {}). Forcing start.", data.game_data.game_id);
                                          let live_events = Arc::new(Mutex::new(Vec::new()));
+                                         let player_map = Arc::new(Mutex::new(HashMap::new()));
                                          let live_events_clone = live_events.clone();
-                                         let live_task = async_runtime::spawn(Self::run_info_poller(live_events_clone));
+                                         let player_map_clone = player_map.clone();
+                                        let last_game_data = Arc::new(Mutex::new(None));
+                                        let live_task = async_runtime::spawn(Self::run_info_poller(
+                                            live_events_clone,
+                                            player_map_clone,
+                                            last_game_data.clone(),
+                                        ));
 
-                                         self.state = State::Recording(
+                                        self.state = State::Recording(
                                             RecordingTask::new(self.ctx.game_ctx(data.game_data.game_id)),
                                             HighlightTask::new(self.ctx.app_handle.clone()),
                                             live_task,
                                             live_events,
-                                            None, // start_lp (Manual start assumes no LP tracking or we could try fetch)
+                                            player_map,
+                                            None, // start_lp
+                                            last_game_data,
+                                            HashMap::new(), // pid_to_cid (empty for manual start)
                                         );
                                         log::info!("recorder state: {}", self.state);
                                     } else {
@@ -309,7 +338,9 @@ impl GameListener {
             }
         }
 
-        if let State::Recording(recording_task, highlight_task, live_task, _, _) = std::mem::take(&mut self.state) {
+        if let State::Recording(recording_task, highlight_task, live_task, _, _, _, _, _) =
+            std::mem::take(&mut self.state)
+        {
             _ = recording_task.stop().await;
             _ = highlight_task.stop().await;
             live_task.abort();
@@ -398,25 +429,51 @@ impl GameListener {
                             log::info!("Game Mode '{}' ALLOWED. Starting...", mode_upper);
                         }
                     }
-
                     if is_mode_allowed {
                         // reset last stopped game id if we are starting a new game (different id)
                         if Some(game_id) != self.last_stopped_game_id {
                             self.last_stopped_game_id = None;
                         }
-
                         let live_events = Arc::new(Mutex::new(Vec::new()));
+                        let player_map = Arc::new(Mutex::new(HashMap::new()));
                         let live_events_clone = live_events.clone();
-                        let live_task = async_runtime::spawn(Self::run_info_poller(live_events_clone));
+                        let player_map_clone = player_map.clone();
+                        let last_game_data = Arc::new(Mutex::new(None));
 
-                        let start_lp = if queue.is_ranked {
-                            fetch_current_lp(&self.ctx.credentials).await
-                        } else {
-                            None
-                        };
+                        // Fetch Session for PID->CID
+                        let mut pid_to_cid = HashMap::new();
+                        let lcu_rest_client = LcuRestClient::from(&self.ctx.credentials);
+                        // We use a raw Value here to avoid dependency on incomplete GameData struct
+                        match lcu_rest_client.get::<serde_json::Value>(Self::GAMEFLOW_SESSION).await {
+                            Ok(v) => {
+                                if let Some(game_data) = v.get("gameData") {
+                                    for team_key in &["teamOne", "teamTwo"] {
+                                        if let Some(team) = game_data.get(team_key).and_then(|t| t.as_array()) {
+                                            for p in team {
+                                                if let (Some(pid), Some(cid)) = (
+                                                    p.get("participantId").and_then(|v| v.as_i64()),
+                                                    p.get("championId").and_then(|v| v.as_i64()),
+                                                ) {
+                                                    pid_to_cid.insert(pid, cid as i32);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => log::warn!("Failed to fetch session data for PID->CID: {}", e),
+                        }
 
+                        let live_task = async_runtime::spawn(Self::run_info_poller(
+                            live_events_clone,
+                            player_map_clone,
+                            last_game_data.clone(),
+                        ));
+
+                        // Try to fetch LP
+                        let start_lp = fetch_current_lp(&self.ctx.credentials).await;
                         if let Some(lp) = start_lp {
-                            log::info!("Ranked Game Detected. Start LP: {}", lp);
+                            log::info!("Fetched initial LP: {}", lp);
                         }
 
                         State::Recording(
@@ -424,7 +481,10 @@ impl GameListener {
                             HighlightTask::new(self.ctx.app_handle.clone()),
                             live_task,
                             live_events,
+                            player_map,
                             start_lp,
+                            last_game_data,
+                            pid_to_cid,
                         )
                     } else {
                         State::Idle
@@ -434,93 +494,234 @@ impl GameListener {
             },
 
             // wait for game to end => stop recording
-            State::Recording(recording_task, highlight_task, live_task, live_events_arc, start_lp) => match sub_resp {
-                SubscriptionResponse::Session(SessionEventData {
-                    phase:
-                        phase @ (GamePhase::FailedToLaunch
-                        | GamePhase::Reconnect
-                        | GamePhase::WaitingForStats
-                        | GamePhase::PreEndOfGame),
-                    ..
-                }) => {
-                    log::info!("stopping recording due to session event phase: {phase:?}");
+            State::Recording(
+                recording_task,
+                highlight_task,
+                live_task,
+                live_events_arc,
+                player_map,
+                start_lp,
+                last_game_data_arc,
+                pid_to_cid,
+            ) => {
+                match sub_resp {
+                    SubscriptionResponse::Session(SessionEventData {
+                        phase:
+                            phase @ (GamePhase::FailedToLaunch
+                            | GamePhase::Reconnect
+                            | GamePhase::WaitingForStats
+                            | GamePhase::PreEndOfGame),
+                        ..
+                    }) => {
+                        log::debug!("Game listener detected phase: {phase:?}. Stopping recording...");
+                        log::info!("stopping recording due to session event phase: {phase:?}");
 
-                    // Capture game_id before consuming recording_task
-                    let stopped_game_id = recording_task.ctx.match_id.game_id;
-                    self.last_stopped_game_id = Some(stopped_game_id);
+                        // Capture game_id before consuming recording_task
+                        let stopped_game_id = recording_task.ctx.match_id.game_id;
+                        self.last_stopped_game_id = Some(stopped_game_id);
 
-                    // make sure the task stops
-                    let highlight_data = highlight_task.stop().await;
+                        // make sure the task stops
+                        let highlight_data = highlight_task.stop().await;
 
-                    // Abort live task and get events (best effort, or we could signal it to stop)
-                    // Abort live task
-                    live_task.abort();
+                        // Abort live task and get events (best effort, or we could signal it to stop)
+                        // Abort live task
+                        live_task.abort();
 
-                    // Since we share the Arc<Mutex<Vec>>, we can just read from the Arc we stored in State
-                    let collected_events = if let Ok(events) = live_events_arc.lock() {
-                        events.clone()
-                    } else {
-                        vec![]
-                    };
+                        // Since we share the Arc<Mutex<Vec>>, we can just read from the Arc we stored in State
+                        let collected_events = if let Ok(events) = live_events_arc.lock() {
+                            events.clone()
+                        } else {
+                            vec![]
+                        };
 
-                    // Re-match to get access to fields safely
-                    // Actually `live_task.await` returns Result<Vec<_>> but if aborted it returns RequestCancelled error.
-                    // So we should rely on the Arc.
-                    // Let's modify the match arm to capture the Arc.
+                        // Re-match to get access to fields safely
+                        // Actually `live_task.await` returns Result<Vec<_>> but if aborted it returns RequestCancelled error.
+                        // So we should rely on the Arc.
+                        // Let's modify the match arm to capture the Arc.
 
-                    match recording_task.stop().await {
-                        Ok(metadata) => {
-                            let mut metadata_filepath = metadata.output_filepath.clone();
-                            metadata_filepath.set_extension("json");
+                        match recording_task.stop().await {
+                            Ok(metadata) => {
+                                let mut metadata_filepath = metadata.output_filepath.clone();
+                                metadata_filepath.set_extension("json");
 
-                            if let Ok(MetadataFile::Deferred(mut deferred)) =
-                                action::get_recording_metadata(&metadata_filepath, false)
-                            {
-                                deferred.highlights = highlight_data;
-                                if let Err(e) = action::save_recording_metadata(
-                                    &metadata_filepath,
-                                    &MetadataFile::Deferred(deferred),
-                                ) {
-                                    log::warn!("failed to write highlight data to deferred metadata file: {e}");
+                                if let Ok(MetadataFile::Deferred(mut deferred)) =
+                                    action::get_recording_metadata(&metadata_filepath, false)
+                                {
+                                    // Convert collected LiveGameEvents to data::GameEvent
+                                    let mut converted_events = Vec::new();
+                                    let name_to_id: HashMap<String, i32> = if let Ok(map) = player_map.lock() {
+                                        map.clone()
+                                    } else {
+                                        HashMap::new()
+                                    };
+
+                                    // 1. Convert Events (existing logic)
+                                    for event in &collected_events {
+                                        // Helper to match name to ID
+                                        let resolve_id = |name: &str| -> Option<i32> {
+                                            if let Some(id) = name_to_id.get(name) {
+                                                return Some(*id);
+                                            }
+                                            if let Some(real_name) = name.split('#').next() {
+                                                if let Some(id) = name_to_id.get(real_name) {
+                                                    if !real_name.is_empty() {
+                                                        return Some(*id);
+                                                    }
+                                                }
+                                            }
+                                            None
+                                        };
+
+                                        match event {
+                                            LiveGameEvent::ItemPurchased(e) => {
+                                                if let Some(pid) = resolve_id(&e.shopper_name) {
+                                                    converted_events.push(crate::recorder::data::GameEvent {
+                                                        timestamp: (e.event_time * 1000.0) as i64,
+                                                        event: crate::recorder::data::Event::ItemPurchased {
+                                                            participant_id: pid as i64,
+                                                            item_id: e.item.item_id as i64,
+                                                            slot: None,
+                                                        },
+                                                    });
+                                                }
+                                            }
+                                            LiveGameEvent::ItemSold(e) => {
+                                                if let Some(pid) = resolve_id(&e.shopper_name) {
+                                                    converted_events.push(crate::recorder::data::GameEvent {
+                                                        timestamp: (e.event_time * 1000.0) as i64,
+                                                        event: crate::recorder::data::Event::ItemSold {
+                                                            participant_id: pid as i64,
+                                                            item_id: e.item.item_id as i64,
+                                                            slot: None,
+                                                        },
+                                                    });
+                                                }
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    deferred.events = converted_events;
+
+                                    // 2. Synthesize Participants from Last Game Data
+                                    if let Ok(Some(game_data)) = last_game_data_arc.lock().as_deref() {
+                                        let mut participants = Vec::new();
+
+                                        for player in &game_data.all_players {
+                                            // Resolve ID
+                                            let pid = name_to_id.get(&player.summoner_name).copied().unwrap_or(0);
+                                            // Resolve Team
+                                            let team_id = match player.team {
+                                                shaco::model::ingame::TeamId::Order => 100,
+                                                shaco::model::ingame::TeamId::Chaos => 200,
+                                                _ => 100,
+                                            };
+                                            // Resolve Champion ID
+                                            let champion_id = pid_to_cid.get(&(pid as i64)).copied().unwrap_or(0);
+
+                                            // Map Items
+                                            // shaco items -> lcu items?
+                                            // We just need item IDs for item0..item6
+                                            let mut item_ids = [0; 7];
+                                            for (i, item) in player.items.iter().enumerate().take(7) {
+                                                item_ids[i] = item.item_id as i64;
+                                            }
+
+                                            // Construct dummy Stats
+                                            let stats = riot_datatypes::lcu::Stats {
+                                                kills: player.scores.kills as i64,
+                                                deaths: player.scores.deaths as i64,
+                                                assists: player.scores.assists as i64,
+                                                total_minions_killed: player.scores.creep_score as i64,
+                                                neutral_minions_killed: 0, // Not available directly?
+                                                gold_earned: 0,            // Not available directly
+                                                item5: item_ids[5],
+                                                item6: item_ids[6],
+                                                win: false, // Don't know yet
+                                                ..Default::default()
+                                            };
+
+                                            participants.push(crate::recorder::data::Participant {
+                                                participant_id: pid as i64,
+                                                team_id,
+                                                champion_id: champion_id as i64,
+                                                spell1_id: 0, // Not available easily
+                                                spell2_id: 0,
+                                                stats,
+                                                lane: "NONE".into(),
+                                                role: "NONE".into(),
+                                                summoner_name: player.summoner_name.clone(),
+                                                lane_score: 0.0,
+                                                champ_level: Some(player.level),
+                                                summoner_level: None,
+                                                rank: None,
+                                            });
+                                        }
+                                        log::info!(
+                                            "Synthesized {} participants from Live Client Data.",
+                                            participants.len()
+                                        );
+                                        deferred.participants = participants;
+                                    } else {
+                                        log::warn!("No Live Client Data available to synthesize participants.");
+                                    }
+
+                                    deferred.highlights = highlight_data;
+                                    if let Err(e) = action::save_recording_metadata(
+                                        &metadata_filepath,
+                                        &MetadataFile::Deferred(deferred),
+                                    ) {
+                                        log::warn!("failed to write highlight data to deferred metadata file: {e}");
+                                    }
                                 }
-                            }
 
-                            // EMIT RECORDING FINISHED
-                            if let Some(video_name) = metadata.output_filepath.file_name().and_then(|n| n.to_str()) {
-                                if let Err(e) = self.ctx.app_handle.send_event(AppEvent::RecordingFinished {
-                                    payload: (video_name.to_string(), is_manual_stop),
-                                }) {
-                                    log::error!("failed to emit RecordingFinished: {e}");
-                                }
+                                // EMIT RECORDING FINISHED
+                                if let Some(video_name) = metadata.output_filepath.file_name().and_then(|n| n.to_str())
+                                {
+                                    if let Err(e) = self.ctx.app_handle.send_event(AppEvent::RecordingFinished {
+                                        payload: (video_name.to_string(), is_manual_stop),
+                                    }) {
+                                        log::error!("failed to emit RecordingFinished: {e}");
+                                    }
 
-                                // Auto PopUp Logic (Server-side reliability)
-                                if !is_manual_stop {
-                                    let settings_state = self.ctx.app_handle.state::<SettingsWrapper>();
-                                    // wrapper: &SettingsWrapper explicitly to bypass State::inner() collision
-                                    let wrapper: &SettingsWrapper = &settings_state;
-                                    let inner_settings = wrapper.inner();
+                                    // Auto PopUp Logic (Server-side reliability)
+                                    if !is_manual_stop {
+                                        let settings_state = self.ctx.app_handle.state::<SettingsWrapper>();
+                                        // wrapper: &SettingsWrapper explicitly to bypass State::inner() collision
+                                        let wrapper: &SettingsWrapper = &settings_state;
+                                        let inner_settings = wrapper.inner();
 
-                                    if inner_settings.auto_popup_on_end {
-                                        log::info!("Auto-popup triggered (Backend)");
-                                        if let Some(window) = self.ctx.app_handle.get_webview_window("Main") {
-                                            let _ = window.unminimize();
-                                            let _ = window.show();
-                                            let _ = window.set_focus();
+                                        if inner_settings.auto_popup_on_end {
+                                            log::info!("Auto-popup triggered (Backend)");
+                                            if let Some(window) = self.ctx.app_handle.get_webview_window("Main") {
+                                                let _ = window.unminimize();
+                                                let _ = window.show();
+                                                let _ = window.set_focus();
+                                            }
                                         }
                                     }
                                 }
-                            }
 
-                            State::EndOfGame(metadata, collected_events, start_lp)
-                        }
-                        Err(e) => {
-                            log::error!("stopped recording task: {e}");
-                            State::Idle
+                                State::EndOfGame(metadata, collected_events, start_lp)
+                            }
+                            Err(e) => {
+                                log::debug!("Recording task stop failed: {e}");
+                                log::error!("stopped recording task: {e}");
+                                State::Idle
+                            }
                         }
                     }
+                    _ => State::Recording(
+                        recording_task,
+                        highlight_task,
+                        live_task,
+                        live_events_arc,
+                        player_map,
+                        start_lp,
+                        last_game_data_arc,
+                        pid_to_cid,
+                    ),
                 }
-                _ => State::Recording(recording_task, highlight_task, live_task, live_events_arc, start_lp),
-            },
+            }
 
             // wait for game-data to become available
             State::EndOfGame(metadata, live_events, start_lp) => match sub_resp {

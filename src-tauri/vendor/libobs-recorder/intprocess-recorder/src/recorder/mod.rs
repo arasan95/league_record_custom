@@ -91,14 +91,14 @@ impl InpRecorder {
 
         LIBOBS_THREAD.get_or_init(|| {
             if let Err(e) = Self::init_internal(libobs_data_path, plugin_bin_path, plugin_data_path) {
-                println!("Error initializing libobs: {e}");
+                // println!("Error initializing libobs: {e}");
                 panic!("Error initializing libobs: {e}");
             }
 
             thread::current().id()
         });
 
-        println!("libobs {} initialized", libobs_sys::VERSION);
+        // println!("libobs {} initialized", libobs_sys::VERSION);
 
         Ok(())
     }
@@ -413,7 +413,7 @@ impl InpRecorder {
 
 impl InpRecorder {
     pub fn start_recording(&mut self) -> Result<(), String> {
-        println!("Recording Start: {}", unsafe { libobs_sys::bnum_allocs() });
+        // println!("Recording Start: {}", unsafe { libobs_sys::bnum_allocs() });
         if self.is_recording() {
             Ok(()) // already recording
         } else {
@@ -436,7 +436,7 @@ impl InpRecorder {
     pub fn stop_recording(&mut self) {
         if self.is_recording() {
             unsafe { libobs_sys::obs_output_stop(self.output.as_ptr()) }
-            println!("Recording Stop: {}", unsafe { libobs_sys::bnum_allocs() });
+            // println!("Recording Stop: {}", unsafe { libobs_sys::bnum_allocs() });
         }
 
         let now = std::time::Instant::now();
@@ -476,10 +476,10 @@ impl InpRecorder {
 
         let effective_output_resolution = Resolution::new(new_width, output_target.height());
 
-        println!(
-            "Configuring Resolution: Input {:?} -> Target {:?} -> Effective {:?}",
-            input, output_target, effective_output_resolution
-        );
+        // println!(
+        //     "Configuring Resolution: Input {:?} -> Target {:?} -> Effective {:?}",
+        //     input, output_target, effective_output_resolution
+        // );
 
         let video_reset_necessary = settings.input_resolution.width() != ovi.base_width
             || settings.input_resolution.height() != ovi.base_height
@@ -577,7 +577,7 @@ impl InpRecorder {
         };
         unsafe { libobs_sys::obs_set_output_source(AUDIO_CHANNEL3, audio_source3) };
 
-        println!("configured");
+        // println!("configured");
 
         Ok(())
     }
@@ -621,7 +621,7 @@ impl Drop for InpRecorder {
             libobs_sys::obs_source_release(self.audio_source2.as_ptr());
             libobs_sys::obs_source_release(self.audio_source3.as_ptr());
 
-            println!("drop bnum_allocs: {}", libobs_sys::bnum_allocs());
+            // println!("drop bnum_allocs: {}", libobs_sys::bnum_allocs());
         }
 
         Self::decrement_refcount();
