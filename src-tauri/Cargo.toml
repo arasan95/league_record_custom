@@ -73,6 +73,7 @@ libobs-recorder = { workspace = true, features = ["specta"] }
 
 anyhow = { workspace = true }
 log = { workspace = true }
+simplelog = "0.12.2"
 chrono = { workspace = true }
 strum_macros = { workspace = true }
 notify = { version = "6.1.1", default-features = false, features = [

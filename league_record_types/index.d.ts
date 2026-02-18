@@ -17,7 +17,7 @@ export type AudioSource =
 "ALL"
 export type Ban = { championId: number; pickTurn: number }
 export type BuildingType = { buildingType: "INHIBITOR_BUILDING"; lane_type: LaneType } | { buildingType: "TOWER_BUILDING"; lane_type: LaneType; tower_type: TowerType }
-export type Deferred = { favorite: boolean; matchId: MatchId; ingameTimeRecStartOffset: number; highlights?: number[] }
+export type Deferred = { favorite: boolean; matchId: MatchId; ingameTimeRecStartOffset: number; highlights?: number[]; events?: GameEvent[]; participants?: Participant[] }
 export type DragonType = "FIRE_DRAGON" | "EARTH_DRAGON" | "WATER_DRAGON" | "AIR_DRAGON" | "HEXTECH_DRAGON" | "CHEMTECH_DRAGON" | "ELDER_DRAGON"
 export type Framerate = [number, number]
 export type GameEvent = ({ ChampionKill: { victim_id: number; killer_id: number; assisting_participant_ids: number[]; position: Position } } | { BuildingKill: { team_id: Team; killer_id: number; building_type: BuildingType; assisting_participant_ids: number[] } } | { EliteMonsterKill: { killer_id: number; monster_type: MonsterType; assisting_participant_ids: number[] } } | { ItemPurchased: { participant_id: number; item_id: number; slot?: number | null } } | { ItemSold: { participant_id: number; item_id: number; slot?: number | null } } | { ItemUndo: { participant_id: number; before_id: number; after_id: number; gold_gain: number } }) & { timestamp: number }

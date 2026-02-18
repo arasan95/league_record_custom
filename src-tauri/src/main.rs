@@ -13,6 +13,15 @@ mod state;
 mod util;
 
 fn main() {
+    use simplelog::*;
+    use std::fs::File;
+
+    let _ = WriteLogger::init(
+        LevelFilter::Debug,
+        Config::default(),
+        File::create("league_record.log").expect("failed to create log file"),
+    );
+
     use app::{AppManager, AppWindow, WindowManager};
     use state::{CurrentlyRecording, Shutdown, TrayState, WindowState};
     use tauri::Manager;
@@ -32,6 +41,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
+        // tauri-plugin-log removed
         // .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(WindowState::default())
         .manage(CurrentlyRecording::default())

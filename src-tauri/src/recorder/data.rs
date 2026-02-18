@@ -107,6 +107,10 @@ pub struct Deferred {
     pub ingame_time_rec_start_offset: f64,
     #[serde(default)]
     pub highlights: Vec<f64>,
+    #[serde(default)]
+    pub events: Vec<GameEvent>,
+    #[serde(default)]
+    pub participants: Vec<Participant>,
 }
 
 #[cfg_attr(test, derive(specta::Type))]

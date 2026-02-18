@@ -186,11 +186,15 @@ export class InventoryTimeline {
         if (state.trinket === itemId) {
             state.trinket = 0;
         } else {
+            let removed = false;
             if (slot !== undefined && slot !== null && slot >= 0 && slot < 6) {
                  if (state.items[slot] === itemId) {
                      state.items[slot] = 0;
+                     removed = true;
                  }
-            } else {
+            }
+            
+            if (!removed) {
                 const idx = state.items.indexOf(itemId);
                 if (idx !== -1) {
                     state.items[idx] = 0; // Set to 0 instead of splice to keep slots stable

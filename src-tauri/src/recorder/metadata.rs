@@ -601,7 +601,7 @@ fn merge_live_events(
         });
 
         if identity.is_none() {
-            println!("   -> NO MATCH FOUND for '{}'", shopper_name);
+            log::warn!("   -> NO MATCH FOUND for '{}'", shopper_name);
         }
         if let Ok(mut file) = log_file.as_ref() {
             let status = if identity.is_some() { "MATCHED" } else { "NO MATCH" };
