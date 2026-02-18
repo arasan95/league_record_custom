@@ -198,6 +198,8 @@ pub mod action {
                 ingame_time_rec_start_offset,
                 favorite,
                 highlights,
+                events: _,
+                participants: _,
             }) if fetch => {
                 let mut metadata =
                     async_runtime::block_on(recorder::process_data(ingame_time_rec_start_offset, match_id, vec![]))?;

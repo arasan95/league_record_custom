@@ -780,14 +780,61 @@ async function setMetadata(videoId: string) {
             events: data.Metadata.highlights ?? [],
         };
     } else if (data && "Deferred" in data) {
-        ui.showMarkerFlags(false);
-        // Explicitly set offset for UI as setVideoDescriptionMetadata is NOT called
-        ui.setRecordingOffset(data.Deferred.ingameTimeRecStartOffset);
+        const def = data.Deferred;
+        // Explicitly set offset for UI
+        ui.setRecordingOffset(def.ingameTimeRecStartOffset);
         
-        currentEvents = null;
+        // Immediate Scoreboard Update Logic (Fallback)
+        if (def.participants && def.participants.length > 0) {
+             const synthesizedMeta = {
+                 favorite: def.favorite,
+                 matchId: def.matchId,
+                 ingameTimeRecStartOffset: def.ingameTimeRecStartOffset,
+                 highlights: def.highlights ?? [],
+                 queue: { id: 0, name: "Deferred", isRanked: false }, 
+                 player: { gameName: "Unknown", tagLine: "LOC", summonerId: 0 },
+                 championName: "Unknown",
+                 stats: { 
+                     kills: 0, deaths: 0, assists: 0,
+                     largestMultiKill: 0, neutralMinionsKilled: 0,
+                     neutralMinionsKilledEnemyJungle: 0, neutralMinionsKilledTeamJungle: 0,
+                     totalMinionsKilled: 0, visionScore: 0,
+                     visionWardsBoughtInGame: 0, wardsPlaced: 0, wardsKilled: 0,
+                     gameEndedInEarlySurrender: false, gameEndedInSurrender: false, win: false,
+                     item0:0, item1:0, item2:0, item3:0, item4:0, item5:0, item6:0,
+                     perk0:0, perk1:0, perk2:0, perk3:0, perk4:0, perk5:0,
+                     perkPrimaryStyle:0, perkSubStyle:0, goldEarned:0
+                 },
+                 participantId: 0, 
+                 participants: def.participants,
+                 teams: [
+                     { teamId: 100, win: "Fail", towerKills: 0, inhibitorKills: 0, baronKills: 0, dragonKills: 0, vilemawKills: 0, riftHeraldKills: 0, dominionVictoryScore: 0, bans: [] as any[] },
+                     { teamId: 200, win: "Fail", towerKills: 0, inhibitorKills: 0, baronKills: 0, dragonKills: 0, vilemawKills: 0, riftHeraldKills: 0, dominionVictoryScore: 0, bans: [] as any[] }
+                 ],
+                 events: def.events ?? [],
+                 goldTimeline: [], 
+                 // @ts-ignore
+                 gameVersion: undefined 
+             } as any; // Cast as any to bypass strict GameMetadata requirements if minor fields missing
+             
+             ui.setVideoDescriptionMetadata(synthesizedMeta);
+        }
+
+        if (def.events && def.events.length > 0) {
+             currentEvents = {
+                 participantId: 0,
+                 recordingOffset: def.ingameTimeRecStartOffset,
+                 events: def.events
+             };
+             ui.showMarkerFlags(true);
+        } else {
+             currentEvents = null;
+             ui.showMarkerFlags(false);
+        }
+
         highlightEvents = {
-            recordingOffset: data.Deferred.ingameTimeRecStartOffset,
-            events: data.Deferred.highlights ?? [],
+            recordingOffset: def.ingameTimeRecStartOffset,
+            events: def.highlights ?? [],
         };
     } else {
         ui.showMarkerFlags(false);

@@ -57,30 +57,41 @@ impl RecordingTask {
     }
 
     pub async fn stop(self) -> Result<Metadata> {
+        log::debug!("recording_task::stop called");
         self.ctx.cancel_token.cancel();
-        let (mut recorder, metadata) = self.join_handle.await??;
+        let result = self.join_handle.await?;
 
-        async_runtime::spawn_blocking(move || {
-            let stopped = recorder.stop_recording();
-            let shutdown = recorder.shutdown();
-            log::info!("stopping recording: stopped={stopped:?}, shutdown={shutdown:?}");
+        match result {
+            Ok((mut recorder, metadata)) => {
+                let ctx = self.ctx;
+                async_runtime::spawn_blocking(move || {
+                    log::debug!("Stopping recorder process...");
 
-            self.ctx.app_handle.state::<CurrentlyRecording>().set(None);
-            self.ctx.app_handle.set_tray_menu_recording(false);
+                    // Update state immediately to prevent UI hang if shutdown crashes
+                    ctx.app_handle.state::<CurrentlyRecording>().set(None);
+                    ctx.app_handle.set_tray_menu_recording(false);
 
-            self.ctx.app_handle.cleanup_recordings();
+                    let stopped = recorder.stop_recording();
+                    let shutdown = recorder.shutdown();
+                    log::info!("stopping recording: stopped={stopped:?}, shutdown={shutdown:?}");
 
-            if let Err(e) = self
-                .ctx
-                .app_handle
-                .send_event(AppEvent::RecordingsChanged { payload: () })
-            {
-                log::error!("RecordingTask failed to send event: {e}");
+                    ctx.app_handle.cleanup_recordings();
+
+                    if let Err(e) = ctx.app_handle.send_event(AppEvent::RecordingsChanged { payload: () }) {
+                        log::error!("RecordingTask failed to send event: {e}");
+                    }
+
+                    Ok(metadata)
+                })
+                .await?
             }
-
-            Ok(metadata)
-        })
-        .await?
+            Err(e) => {
+                log::warn!("recording task failed/cancelled: {e}");
+                self.ctx.app_handle.state::<CurrentlyRecording>().set(None);
+                self.ctx.app_handle.set_tray_menu_recording(false);
+                Err(e)
+            }
+        }
     }
 
     async fn record(ctx: GameCtx) -> Result<(Recorder, Metadata)> {
@@ -154,6 +165,8 @@ impl RecordingTask {
             match_id: ctx.match_id.clone(),
             ingame_time_rec_start_offset,
             highlights: vec![],
+            events: vec![],
+            participants: vec![],
         });
         if let Err(e) = action::save_recording_metadata(&output_filepath, &metadata_file) {
             log::info!("failed to save MetadataFile: {e}")

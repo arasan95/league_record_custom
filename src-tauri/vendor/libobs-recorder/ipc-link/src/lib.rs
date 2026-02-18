@@ -140,12 +140,25 @@ impl IpcLinkSlave<'_> {
 
     pub fn respond(&mut self, mut handler: impl FnMut(IpcCommand) -> Option<IpcResponse>) {
         loop {
-            let cmd = serde_json::from_str(self.read_line()).unwrap();
+            let line = self.read_line();
+            if line.is_empty() {
+                break;
+            }
+            let cmd = match serde_json::from_str(line) {
+                Ok(c) => c,
+                Err(_) => break,
+            };
 
             let Some(response) = handler(cmd) else { break };
-            _ = serde_json::to_writer::<_, IpcResponse>(&mut self.tx, &response);
-            _ = self.tx.write(b"\n");
-            _ = self.tx.flush();
+            if serde_json::to_writer::<_, IpcResponse>(&mut self.tx, &response).is_err() {
+                break;
+            }
+            if self.tx.write(b"\n").is_err() {
+                break;
+            }
+            if self.tx.flush().is_err() {
+                break;
+            }
         }
 
         // Send one last IpcResponse::Ok because the other side is waiting for a response to IpcCommand::Exit
