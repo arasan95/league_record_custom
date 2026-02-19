@@ -494,7 +494,10 @@ async function main() {
         });
 
         // 2. Active Video Update (Refresh Detail View)
-        if (activeVideoId !== null && payload.includes(activeVideoId)) {
+        // Backend sends filename (e.g. "video.mp4"), Frontend activeVideoId is Full Path.
+        // We check if the active ID *contains* one of the payload IDs.
+        if (activeVideoId !== null && payload.some(id => activeVideoId.includes(id))) {
+            console.log("MetadataChanged event received for active video. Reloading.");
             // update metadata for currently selected recording
             setMetadata(activeVideoId);
         }
@@ -522,36 +525,66 @@ async function main() {
         });
 
         const [videoId, isManualStop] = payload;
+        
+        // Check if we are currently viewing this video (e.g. user clicked it while recording)
+        const activeId = ui.getActiveVideoId();
+        
         if (!isManualStop) {
              commands.getSettings().then(async settings => {
                  if (settings.autoSelectRecording) {
                      let fullPath = videoId;
-                     // Simple heuristic: if no path separator, it's a filename
                      if (!videoId.includes("\\") && !videoId.includes("/")) {
-                         // We need to resolve the full path.
-                         // Using Tauri's join is async.
                          try {
                             fullPath = await join(settings.recordingsFolder, videoId);
                          } catch (e) {
                              console.error("Failed to join path:", e);
-                             // Fallback: simple string concatenation if join fails? 
-                             // Or just use videoId and hope for the best.
                          }
                      }
 
                      console.log(`Auto-selecting recording: ${fullPath}`);
                      
-                     // Add a small delay to ensure file handle is released and file is ready for reading
-                     setTimeout(() => {
+                     // Standard delay to ensure file handle release
+                     setTimeout(async () => {
+                         // Force metadata update if already active (e.g. user clicked early)
+                         if (activeId === fullPath) {
+                             console.log("Recording finished for active video. Forcing initial metadata reload.");
+                             await setMetadata(activeId);
+                         }
+                         // setVideo might return early if ID matches, but that's fine if we called setMetadata above.
+                         // Crucially, rely on MetadataChanged event for the FINAL update.
                          void setVideo(fullPath);
                      }, 500);
+                 } else {
+                     // Auto-select OFF
+                     const settingsVals = await commands.getSettings();
+                     let fullPath = videoId;
+                     if (!videoId.includes("\\") && !videoId.includes("/")) {
+                         try {
+                            fullPath = await join(settingsVals.recordingsFolder, videoId);
+                         } catch (e) {}
+                     }
+                     if (activeId === fullPath) {
+                          console.log("Recording finished for active video (Auto-select OFF). Forcing metadata reload.");
+                          await setMetadata(activeId);
+                     }
                  }
+
                  if (settings.autoPopupOnEnd) {
                      console.log("Auto-popup triggered");
                      ui.showWindow();
                      ui.setFullscreen(false); 
                  }
              });
+        } else {
+             // Manual stop also needs reload if active
+             const activeId = ui.getActiveVideoId();
+             if (activeId && videoId) {
+                 // Check match (simple includes check for safety if paths differ)
+                 if (activeId.includes(videoId)) {
+                      console.log("Manual stop for active video. Forcing metadata reload.");
+                      setMetadata(activeId);
+                 }
+             }
         }
     });
 
