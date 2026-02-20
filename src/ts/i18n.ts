@@ -30,6 +30,15 @@ export const APP_TEXT = {
         otherOptions: "Other Options",
         trackingUrl: "Tracking Site URL (Use {q} for ID placeholder)",
         trackingUrlExample: "Example: https://www.deeplol.gg/summoner/jp/{q}",
+        scoreboardLinks: "Scoreboard Links",
+        championWikiUrl: "Champion Wiki URL ({Q}: Capitalized, {q}: Lowercase)",
+        championWikiUrlExample: "Example: https://wiki.leagueoflegends.com/en-us/{q}",
+        championWikiUrlHint: "Open by clicking 'Champion Icon'",
+        championMatchupUrl: "Champion Matchup URL ({My}/{my} vs {Opponent}/{opponent})",
+        championMatchupUrlHint: "Open by clicking 'Gold Difference' (Center)",
+        championBuildUrl: "Champion Build URL ({Q}: Capitalized, {q}: Lowercase)",
+        championBuildUrlHint: "Open by clicking 'Items'",
+        trackingUrlHint: "Open by clicking 'Player Name' (Others allowed)",
         downloadIcons: "Download All Icons (Champions/Items)",
         downloading: "Downloading...",
         downloadComplete: "Download Complete",
@@ -116,6 +125,15 @@ export const APP_TEXT = {
         otherOptions: "その他のオプション",
         trackingUrl: "トラッキングサイトURL ({q} はIDに置換)",
         trackingUrlExample: "例: https://www.deeplol.gg/summoner/jp/{q}",
+        scoreboardLinks: "スコアボード リンク",
+        championWikiUrl: "チャンピオンWiki URL ({Q}: 先頭大文字, {q}: 全て小文字)",
+        championWikiUrlExample: "例: https://wiki.leagueoflegends.com/en-us/{q}",
+        championWikiUrlHint: "「チャンピオンアイコン」をクリックして開く",
+        championMatchupUrl: "チャンピオンマッチアップ URL ({My}/{my} vs {Opponent}/{opponent})",
+        championMatchupUrlHint: "中央の「ゴールド差」をクリックして開く",
+        championBuildUrl: "チャンピオンビルド URL ({Q}: 先頭大文字, {q}: 全て小文字)",
+        championBuildUrlHint: "「アイテム」をクリックして開く",
+        trackingUrlHint: "「プレイヤー名」(自分以外も可) をクリックして開く",
         downloadIcons: "全アイコンをダウンロード (チャンピオン/アイテム)",
         downloading: "ダウンロード中...",
         downloadComplete: "ダウンロード完了",
@@ -1122,5 +1140,7 @@ export const APP_TEXT = {
 };
 
 export function getText(lang: Language, key: keyof typeof APP_TEXT["en"]): string {
-    return APP_TEXT[lang][key] || APP_TEXT["en"][key] || key;
+    const defaultObj = APP_TEXT["en"] as Record<string, string>;
+    const targetObj = APP_TEXT[lang] as Record<string, string>;
+    return targetObj[key] || defaultObj[key] || key;
 }
