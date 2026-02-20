@@ -334,7 +334,7 @@ const DEFAULT_AUTO_SELECT_RECORDING: bool = false;
 const DEFAULT_AUTO_POPUP_ON_END: bool = false;
 const DEFAULT_FFMPEG_PATH: Option<String> = None;
 const DEFAULT_MATCH_HISTORY_BASE_URL: Option<String> = None;
-const DEFAULT_CHAMPION_MATCHUP_URL: &str = "https://dpm.lol/champions/{my}/matchups?opponent={opponent}";
+const DEFAULT_CHAMPION_MATCHUP_URL: &str = "https://dpm.lol/champions/{My}/matchups?opponent={Opponent}";
 const DEFAULT_CHAMPION_BUILD_URL: &str = "https://dpm.lol/champions/{q}/build";
 
 #[inline]
@@ -389,7 +389,7 @@ impl Default for Settings {
             scoreboard_scale: None,
             play_recording_sounds: false,
             language: "en".to_string(),
-            champion_wiki_base_url: Some("https://www.loljp-wiki.jp/wiki/?Champion%2F{q}".to_string()),
+            champion_wiki_base_url: Some("https://wiki.leagueoflegends.com/en-us/{q}".to_string()),
             champion_matchup_url: Some(DEFAULT_CHAMPION_MATCHUP_URL.to_string()),
             champion_build_url: Some(DEFAULT_CHAMPION_BUILD_URL.to_string()),
         }

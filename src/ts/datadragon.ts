@@ -7,6 +7,25 @@ import { getCurrentPatchVersion } from "./version";
 const cachedItemDataByVersion: Record<string, Record<string, any>> = {};
 let cachedChampionData: Record<string, any> | null = null;
 
+export function getDDragonLocale(lang: string): string {
+    switch (lang) {
+        case "ko": return "ko_KR";
+        case "zh": return "zh_CN";
+        case "vi": return "vn_VN";
+        case "pt": return "pt_BR";
+        case "es": return "es_ES";
+        case "fr": return "fr_FR";
+        case "de": return "de_DE";
+        case "ru": return "ru_RU";
+        case "tr": return "tr_TR";
+        case "pl": return "pl_PL";
+        case "it": return "it_IT";
+        case "en": return "en_US";
+        case "ja":
+        default: return "ja_JP";
+    }
+}
+
 function getBaseUrl() {
     return `https://ddragon.leagueoflegends.com/cdn/${getCurrentPatchVersion()}/img`;
 }
@@ -33,12 +52,15 @@ async function ensureDataLoaded() {
  * 3. Fetches from DataDragon (Japanese locale).
  * 4. Saves to local file system.
  */
-export async function ensureItemDataLoaded(version: string) {
+export async function ensureItemDataLoaded(version: string, langStr: string = "ja") {
+    const locale = getDDragonLocale(langStr);
+    const cacheKey = `${version}_${locale}`;
+    
     // 1. In-memory check
-    if (cachedItemDataByVersion[version]) return;
+    if (cachedItemDataByVersion[cacheKey]) return;
 
     const cacheDir = "items_cache";
-    const filename = `${version}.json`;
+    const filename = `item_${version}_${locale}.json`;
     const filePath = `${cacheDir}/${filename}`;
 
     try {
@@ -52,8 +74,7 @@ export async function ensureItemDataLoaded(version: string) {
             const data = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
             const jsonStr = new TextDecoder().decode(data);
             const json = JSON.parse(jsonStr);
-            cachedItemDataByVersion[version] = json.data || json; // Handle structure differences if any
-            // console.log(`Loaded item data for ${version} from local cache.`);
+            cachedItemDataByVersion[cacheKey] = json.data || json; // Handle structure differences if any
             return;
         }
 
@@ -62,16 +83,12 @@ export async function ensureItemDataLoaded(version: string) {
         // URL format: https://ddragon.leagueoflegends.com/cdn/{version}/data/ja_JP/item.json
         
         let targetVersion = version;
-        // Attempt to format version if it looks like a full build number (e.g. 16.2.741.3171 -> 16.2.1)
-        // Note: DataDragon usually uses X.Y.1, but not always.
         if (version.split('.').length > 3) {
              const parts = version.split('.');
              targetVersion = `${parts[0]}.${parts[1]}.1`;
-             console.log(`Formatted version ${version} to ${targetVersion} for DataDragon.`);
         }
 
-        let url = `https://ddragon.leagueoflegends.com/cdn/${targetVersion}/data/ja_JP/item.json`;
-        // console.log(`Fetching item data for ${targetVersion} from ${url}...`);
+        let url = `https://ddragon.leagueoflegends.com/cdn/${targetVersion}/data/${locale}/item.json`;
         
         // Helper to fetch with retry on fallback
         const fetchItemData = async (v: string, u: string) => {
@@ -84,7 +101,7 @@ export async function ensureItemDataLoaded(version: string) {
         
         // If failed and formatted version was different, try exact version just in case (unlikely but safe)
         if (!result && targetVersion !== version) {
-             url = `https://ddragon.leagueoflegends.com/cdn/${version}/data/ja_JP/item.json`;
+             url = `https://ddragon.leagueoflegends.com/cdn/${version}/data/${locale}/item.json`;
              result = await fetchItemData(version, url);
         }
 
@@ -92,8 +109,7 @@ export async function ensureItemDataLoaded(version: string) {
         if (!result) {            
              const currentVer = getCurrentPatchVersion();
              if (currentVer !== version && currentVer !== targetVersion) {
-                 console.warn(`Failed to fetch item data for ${version}. Fallback to current: ${currentVer}`);
-                 url = `https://ddragon.leagueoflegends.com/cdn/${currentVer}/data/ja_JP/item.json`;
+                 url = `https://ddragon.leagueoflegends.com/cdn/${currentVer}/data/${locale}/item.json`;
                  result = await fetchItemData(currentVer, url);
              }
         }
@@ -107,8 +123,7 @@ export async function ensureItemDataLoaded(version: string) {
         const itemData = json.data;
         
         // Map cached data to the REQUESTED version key, so ui.ts can find it
-        // Even if we fetched 'currentVer', we save it under 'version' so logic requesting 'version' works.
-        cachedItemDataByVersion[version] = itemData;
+        cachedItemDataByVersion[cacheKey] = itemData;
 
         // 4. Save to local file (Save under the requested version name so we verify existence next time)
 
@@ -125,9 +140,11 @@ export async function ensureItemDataLoaded(version: string) {
 }
 
 export function getItemPrice(itemId: number, version: string): number {
-    if (!cachedItemDataByVersion[version]) return 0;
+    const locale = getDDragonLocale("ja"); // Not strictly needed for UI, but safe fallback
+    const cacheKey = `${version}_${locale}`;
+    if (!cachedItemDataByVersion[cacheKey]) return 0;
     
-    const item = cachedItemDataByVersion[version][itemId];
+    const item = cachedItemDataByVersion[cacheKey][itemId];
     if (item && item.gold && typeof item.gold.total === 'number') {
         return item.gold.total;
     }
@@ -135,11 +152,12 @@ export function getItemPrice(itemId: number, version: string): number {
     return 0;
 }
 
-export async function getItemData(itemId: number): Promise<any> {
-    // Legacy support or usage of current version
+export async function getItemData(itemId: number, langStr: string = "ja"): Promise<any> {
     const version = getCurrentPatchVersion();
-    await ensureItemDataLoaded(version);
-    return cachedItemDataByVersion[version] ? cachedItemDataByVersion[version][itemId] : null;
+    await ensureItemDataLoaded(version, langStr);
+    const locale = getDDragonLocale(langStr);
+    const cacheKey = `${version}_${locale}`;
+    return cachedItemDataByVersion[cacheKey] ? cachedItemDataByVersion[cacheKey][itemId] : null;
 }
 
 export async function getChampionData(championIdOrName: string | number): Promise<any> {
@@ -153,6 +171,116 @@ export async function getChampionData(championIdOrName: string | number): Promis
         return Object.values(cachedChampionData).find((c: any) => c.key == championIdOrName);
     }
 }
+
+const detailedChampionCache: Record<string, any> = {};
+
+export async function getDetailedChampionData(championId: number, version: string, langStr: string = "ja"): Promise<any> {
+    const champName = await getChampionNameById(championId);
+    if (!champName) return null;
+    
+    const locale = getDDragonLocale(langStr);
+    // Check in-memory cache
+    const cacheKey = `${version}_${locale}_${champName}`;
+    if (detailedChampionCache[cacheKey]) return detailedChampionCache[cacheKey];
+    
+    let targetVersion = version;
+    if (version.split('.').length > 3) {
+         const parts = version.split('.');
+         targetVersion = `${parts[0]}.${parts[1]}.1`;
+    }
+
+    const cacheDir = "items_cache";
+    const filename = `champion_${targetVersion}_${locale}_${champName}.json`;
+    const filePath = `${cacheDir}/${filename}`;
+
+    try {
+        if (!(await exists(cacheDir, { baseDir: BaseDirectory.AppLocalData }))) {
+            await mkdir(cacheDir, { baseDir: BaseDirectory.AppLocalData, recursive: true });
+        }
+        if (await exists(filePath, { baseDir: BaseDirectory.AppLocalData })) {
+            const data = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
+            const jsonStr = new TextDecoder().decode(data);
+            const json = JSON.parse(jsonStr);
+            detailedChampionCache[cacheKey] = json.data[champName];
+            return detailedChampionCache[cacheKey];
+        }
+    } catch(e) {}
+
+    let url = `https://ddragon.leagueoflegends.com/cdn/${targetVersion}/data/${locale}/champion/${champName}.json`;
+    try {
+        let res = await fetch(url);
+        if (!res.ok) {
+            // fallback
+            res = await fetch(`https://ddragon.leagueoflegends.com/cdn/${getCurrentPatchVersion()}/data/${locale}/champion/${champName}.json`);
+        }
+        if (res.ok) {
+             const json = await res.json();
+             detailedChampionCache[cacheKey] = json.data[champName];
+             try {
+                 const dataToSave = JSON.stringify(json);
+                 await writeFile(filePath, new TextEncoder().encode(dataToSave), { baseDir: BaseDirectory.AppLocalData });
+             } catch(e) {}
+             return detailedChampionCache[cacheKey];
+        }
+    } catch (e) {
+        console.error("Failed to fetch detailed champion data", e);
+    }
+    return null;
+}
+
+let cachedSummonersDataByVersion: Record<string, Record<string, any>> = {};
+
+export async function getSummonerSpellData(spellId: number, version: string, langStr: string = "ja"): Promise<any> {
+    let targetVersion = version;
+    if (version.split('.').length > 3) {
+         const parts = version.split('.');
+         targetVersion = `${parts[0]}.${parts[1]}.1`;
+    }
+    
+    const locale = getDDragonLocale(langStr);
+    const dictKey = `${targetVersion}_${locale}`;
+    
+    if (cachedSummonersDataByVersion[dictKey]) {
+        return Object.values(cachedSummonersDataByVersion[dictKey]).find((s: any) => s.key == spellId);
+    }
+
+    const cacheDir = "items_cache";
+    const filename = `summoner_${targetVersion}_${locale}.json`;
+    const filePath = `${cacheDir}/${filename}`;
+
+    try {
+        if (!(await exists(cacheDir, { baseDir: BaseDirectory.AppLocalData }))) {
+            await mkdir(cacheDir, { baseDir: BaseDirectory.AppLocalData, recursive: true });
+        }
+        if (await exists(filePath, { baseDir: BaseDirectory.AppLocalData })) {
+            const data = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
+            const jsonStr = new TextDecoder().decode(data);
+            const json = JSON.parse(jsonStr);
+            cachedSummonersDataByVersion[dictKey] = json.data;
+            return Object.values(cachedSummonersDataByVersion[dictKey]).find((s: any) => s.key == spellId);
+        }
+    } catch(e) {}
+    
+    try {
+        let res = await fetch(`https://ddragon.leagueoflegends.com/cdn/${targetVersion}/data/${locale}/summoner.json`);
+        if (!res.ok) {
+            res = await fetch(`https://ddragon.leagueoflegends.com/cdn/${getCurrentPatchVersion()}/data/${locale}/summoner.json`);
+        }
+        if (res.ok) {
+             const json = await res.json();
+             cachedSummonersDataByVersion[dictKey] = json.data;
+             try {
+                 const dataToSave = JSON.stringify(json);
+                 await writeFile(filePath, new TextEncoder().encode(dataToSave), { baseDir: BaseDirectory.AppLocalData });
+             } catch(e) {}
+             return Object.values(cachedSummonersDataByVersion[dictKey]).find((s: any) => s.key == spellId);
+        }
+    } catch(e) {
+        console.error("Failed to fetch summoner data", e);
+    }
+    return null;
+}
+
 
 
 const CDRAGON_BASE = "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/perk-images/styles";
