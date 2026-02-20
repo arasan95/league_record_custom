@@ -18,6 +18,11 @@ The following changes have been implemented in this version:
 - Video Tools: A-B Loop repeat and clip creation (requires FFmpeg).
 - Configuration: Expanded hotkey and general settings.
 
+## Requirements
+
+**FFmpeg** is required to use the **Clip** feature.
+Please install FFmpeg and add it to your system's PATH, or specify the executable path in the application settings.
+
 ## Download
 
 **[Download the latest installer from GitHub Releases](https://github.com/arasan95/league_record_custom/releases)**
