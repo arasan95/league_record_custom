@@ -7,7 +7,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import * as clipboard from "@tauri-apps/plugin-clipboard-manager";
 
 import { commands, type GameMetadata, type GoldFrame, type ParticipantGold, type MarkerFlags, type Recording, type Settings, type MatchTeam, type Participant, type GameEvent } from "./bindings";
-import { getChampionIconUrl, getChampionIconUrlById, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, getItemPrice, getChampionNameById } from "./datadragon";
+import { getChampionIconUrl, getChampionIconUrlById, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, getItemPrice, getChampionNameById, getDetailedChampionData, getSummonerSpellData, getItemData } from "./datadragon";
 import { getCurrentPatchVersion, getSpawnTimers } from "./version";
 import { InventoryTimeline } from "./timeline";
 import { getObjectiveConfig } from "./objectives";
@@ -32,6 +32,47 @@ try {
     appWindow = getCurrentWebviewWindow();
 } catch (error) {
     console.warn("Failed to get current window (likely running in browser):", error);
+}
+
+let globalTooltip: HTMLDivElement | null = null;
+let currentTooltipTarget: HTMLElement | null = null;
+
+function showGlobalTooltip(target: HTMLElement, html: string) {
+    if (!globalTooltip) {
+        globalTooltip = document.createElement("div");
+        globalTooltip.className = "league-tooltip";
+        globalTooltip.style.position = "fixed";
+        globalTooltip.style.background = "rgba(10, 20, 30, 0.95)";
+        globalTooltip.style.color = "#eee";
+        globalTooltip.style.padding = "10px";
+        globalTooltip.style.borderRadius = "4px";
+        globalTooltip.style.border = "1px solid #c8aa6e";
+        globalTooltip.style.zIndex = "999999";
+        globalTooltip.style.maxWidth = "300px";
+        globalTooltip.style.fontSize = "13px";
+        globalTooltip.style.lineHeight = "1.4";
+        globalTooltip.style.pointerEvents = "none";
+        document.body.appendChild(globalTooltip);
+    }
+    currentTooltipTarget = target;
+    globalTooltip.innerHTML = html;
+    globalTooltip.style.display = "block";
+
+    const rect = target.getBoundingClientRect();
+    let left = rect.left + rect.width / 2;
+    let top = rect.top - 10;
+
+    globalTooltip.style.left = `${left}px`;
+    globalTooltip.style.top = `${top}px`;
+    globalTooltip.style.transform = "translate(-50%, -100%)";
+    // console.log("Tooltip displayed for rect", rect);
+}
+
+function hideGlobalTooltip() {
+    if (globalTooltip) {
+        globalTooltip.style.display = "none";
+        currentTooltipTarget = null;
+    }
 }
 
 export default class UI {
@@ -2201,6 +2242,26 @@ export default class UI {
                     }
                 };
 
+                // Add Tooltip for Champion Skills
+                img.addEventListener("mouseenter", async () => {
+                    // console.log("Fetching data for champion:", p.championId);
+                    const data = await getDetailedChampionData(p.championId, getCurrentPatchVersion(), settings.language);
+                    // console.log("Champ data:", data);
+                    if (data && data.spells) {
+                        let html = `<b style="color:#c8aa6e; font-size: 14px;">${data.name}</b> <span style="color:#aaa;">${data.title}</span><hr style="border-color:#333; margin:5px 0;">`;
+                        for (let i = 0; i < data.spells.length; i++) {
+                            const spell = data.spells[i];
+                            const key = ["Q", "W", "E", "R"][i];
+                            html += `<div style="margin-bottom: 6px;">
+                                <b style="color:#00d2ff;">[${key}]</b> ${spell.name} <span style="color:#aaa; font-size: 11px;">(CD: ${spell.cooldownBurn}s)</span><br>
+                                <div style="font-size: 11px; margin-top:2px; color:#ddd;">${spell.description}</div>
+                            </div>`;
+                        }
+                        showGlobalTooltip(img, html);
+                    }
+                });
+                img.addEventListener("mouseleave", () => hideGlobalTooltip());
+
                 // Champion Wiki Link
                 if (settings.championWikiBaseUrl) {
                     img.style.cursor = "pointer";
@@ -2215,10 +2276,12 @@ export default class UI {
                             return;
                         }
 
-                        // e.g. "https://www.loljp-wiki.jp/wiki/?Champion%2F{q}" -> replace {q} with "Caitlyn"
+                        // Replace {Q} -> Capitalized, {q} -> lowercase
                         let url = "";
-                        if (settings.championWikiBaseUrl.includes("{q}")) {
-                             url = settings.championWikiBaseUrl.replace("{q}", champName);
+                        if (settings.championWikiBaseUrl.includes("{Q}") || settings.championWikiBaseUrl.includes("{q}")) {
+                             url = settings.championWikiBaseUrl
+                                 .replace("{Q}", champName)
+                                 .replace("{q}", champName.toLowerCase());
                         } else {
                              url = `${settings.championWikiBaseUrl}${champName}`;
                         }
@@ -2231,10 +2294,27 @@ export default class UI {
                     });
                 }
                 
-                const spells = this.vjs.dom.createEl("div", {}, { class: "spells" }, [
-                    this.vjs.dom.createEl("img", { src: spell1Url }, { class: "spell-icon" }),
-                    this.vjs.dom.createEl("img", { src: spell2Url }, { class: "spell-icon" })
-                ]) as HTMLElement;
+                const spell1El = this.vjs.dom.createEl("img", { src: spell1Url }, { class: "spell-icon" }) as HTMLImageElement;
+                const spell2El = this.vjs.dom.createEl("img", { src: spell2Url }, { class: "spell-icon" }) as HTMLImageElement;
+
+                // Add Tooltips for Summoner Spells
+                [
+                    {el: spell1El, id: p.spell1Id},
+                    {el: spell2El, id: p.spell2Id}
+                ].forEach(({el, id}) => {
+                    el.addEventListener("mouseenter", async () => {
+                        const spellData = await getSummonerSpellData(id, getCurrentPatchVersion(), settings.language);
+                        if (spellData) {
+                            let html = `<b style="color:#c8aa6e; font-size: 13px;">${spellData.name}</b><br>
+                            <span style="color:#aaa; font-size: 11px;">Cooldown: ${spellData.cooldownBurn}s</span><hr style="border-color:#333; margin:5px 0;">
+                            <div style="font-size: 11px; color:#ddd;">${spellData.description}</div>`;
+                            showGlobalTooltip(el, html);
+                        }
+                    });
+                    el.addEventListener("mouseleave", () => hideGlobalTooltip());
+                });
+
+                const spells = this.vjs.dom.createEl("div", {}, { class: "spells" }, [ spell1El, spell2El ]) as HTMLElement;
                 
                 const runesDiv = this.vjs.dom.createEl("div", {}, { class: "runes" }, [
                    this.vjs.dom.createEl("img", { src: runeUrl }, { class: "rune-icon" })
@@ -2251,8 +2331,8 @@ export default class UI {
 
                 const itemsGrid = this.vjs.dom.createEl("div", {}, { class: "items-grid" }) as HTMLElement;
                 
-                // Champion Build Link (Click on Items - My Champion Only)
-                if (settings.championBuildUrl && isMe) {
+                // Champion Build Link (Click on Items)
+                if (settings.championBuildUrl) {
                      itemsGrid.style.cursor = "pointer";
                      itemsGrid.title = `Open Champion Build`;
                      itemsGrid.addEventListener("click", async (e) => {
@@ -2265,10 +2345,12 @@ export default class UI {
                              return;
                          }
 
-                         // Replace {q} -> champName
+                         // Replace {Q} -> Capitalized, {q} -> lowercase
                          let url = "";
-                         if (settings.championBuildUrl.includes("{q}")) {
-                              url = settings.championBuildUrl.replace("{q}", champName);
+                         if (settings.championBuildUrl.includes("{Q}") || settings.championBuildUrl.includes("{q}")) {
+                              url = settings.championBuildUrl
+                                  .replace("{Q}", champName)
+                                  .replace("{q}", champName.toLowerCase());
                          } else {
                               url = `${settings.championBuildUrl}${champName}`;
                          }
@@ -2302,6 +2384,20 @@ export default class UI {
                         i.style.visibility = "hidden";
                     }
                     
+                    i.addEventListener("mouseenter", async (e) => {
+                        const target = e.target as HTMLElement;
+                        const currentId = parseInt(target.dataset.itemId || "0", 10);
+                        if (currentId === 0) return;
+                        const itemData = await getItemData(currentId, settings.language || "ja");
+                        if (itemData) {
+                            let html = `<b style="color:#c8aa6e; font-size: 13px;">${itemData.name}</b><br>
+                            <div style="color:#aaa; font-size: 11px; margin-bottom: 5px;">Cost: <span style="color:#e8d154">${itemData.gold?.total || 0}g</span></div>
+                            <div style="font-size: 11px; color:#ddd; max-width: 250px;">${itemData.description}</div>`;
+                            showGlobalTooltip(target, html);
+                        }
+                    });
+                    i.addEventListener("mouseleave", () => hideGlobalTooltip());
+                    
                     slotDiv.append(i);
                     itemsGrid.append(slotDiv);
                     itemImgs.push(i);
@@ -2315,6 +2411,20 @@ export default class UI {
                 if (p.stats.item6 === 0) {
                     trinketImg.style.visibility = "hidden";
                 }
+                
+                trinketImg.addEventListener("mouseenter", async (e) => {
+                    const target = e.target as HTMLElement;
+                    const currentId = parseInt(target.dataset.itemId || "0", 10);
+                    if (currentId === 0) return;
+                    const itemData = await getItemData(currentId, settings.language || "ja");
+                    if (itemData) {
+                        let html = `<b style="color:#c8aa6e; font-size: 13px;">${itemData.name}</b><br>
+                        <div style="font-size: 11px; color:#ddd; max-width: 250px;">${itemData.description}</div>`;
+                        showGlobalTooltip(target, html);
+                    }
+                });
+                trinketImg.addEventListener("mouseleave", () => hideGlobalTooltip());
+                
                 trinketImg.onerror = () => {
                      trinketImg.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
                 };
@@ -2598,8 +2708,8 @@ export default class UI {
         const centerDiv = this.vjs.dom.createEl("div", {}, { class: "scoreboard-center" });
 
         for (let i = 0; i < 5; i++) {
-            const p1 = participants100[i];
-            const p2 = participants200[i];
+            const p1 = sorted100[i];
+            const p2 = sorted200[i];
             
             // Handle missing participants (e.g. < 5v5)
             if (!p1 || !p2) continue;
@@ -2627,18 +2737,18 @@ export default class UI {
                     e.stopPropagation();
                     if (!settings.championMatchupUrl) return;
 
-                    // p1 is Blue (100), p2 is Red (200)
-                    // Determine which is {my} and which is {opponent}
+                    // Target selection based on Team IDs: 
                     let myP = p1;
                     let oppP = p2;
-                    
-                    // If the user's ID matches the Red side participant, swap.
-                    if (data.participantId === p2.participantId) {
-                        myP = p2;
-                        oppP = p1;
-                    } 
-                    // Note: If user is neither (spectator), it defaults to Blue vs Red.
-                    // Or if user is p1, it stays p1 vs p2.
+
+                    // If user is playing, find which team they are on and make that team {My}
+                    if (data.participantId) {
+                        const userIsRed = sorted200.some(p => p && p.participantId === data.participantId);
+                        if (userIsRed) {
+                             myP = p2;
+                             oppP = p1;
+                        }
+                    }
 
                     const myChampName = await getChampionNameById(myP.championId);
                     const targetChampName = await getChampionNameById(oppP.championId);
@@ -2649,11 +2759,13 @@ export default class UI {
                     }
 
                     // Replace placeholders
-                    // {my} -> myChampName
-                    // {opponent} -> targetChampName
+                    // {My} -> Capitalized, {my} -> lowercase
+                    // {Opponent} -> Capitalized, {opponent} -> lowercase
                     const url = settings.championMatchupUrl
-                        .replace("{my}", myChampName)
-                        .replace("{opponent}", targetChampName);
+                        .replace("{My}", myChampName)
+                        .replace("{my}", myChampName.toLowerCase())
+                        .replace("{Opponent}", targetChampName)
+                        .replace("{opponent}", targetChampName.toLowerCase());
                     
                     try {
                         await open(url);
@@ -3940,10 +4052,15 @@ export default class UI {
             ])
         ]) as HTMLDivElement;
         
-        // Tracking Site URL - separate container without background
-        const trackingUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width" }, [
+        // Scoreboard Links Section
+        const scoreboardLinksTitle = this.vjs.dom.createEl("h3", {}, { 
+            class: "settings-section-title"
+        }, getText(lang, "scoreboardLinks"));
+
+        const trackingUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width", style: "border: none; padding: 0; background: none;" }, [
             this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "trackingUrl")),
             this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, getText(lang, "trackingUrlExample")),
+            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "trackingUrlHint")),
             matchHistoryUrlInput
         ]) as HTMLDivElement;
 
@@ -3951,14 +4068,15 @@ export default class UI {
         const championWikiUrlInput = this.vjs.dom.createEl("input", {}, {
             class: "settings-input",
             type: "text",
-            placeholder: "e.g. https://www.loljp-wiki.jp/wiki/?Champion%2F{q}",
+            placeholder: "e.g. https://wiki.leagueoflegends.com/en-us/{q}",
             value: settings.championWikiBaseUrl || "",
             style: "flex: 1;"
         }) as HTMLInputElement;
 
-        const championWikiUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width" }, [
-            this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, "Champion Wiki URL"),
-            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, "{q} will be replaced by Champion Name (English)."),
+        const championWikiUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width", style: "border: none; padding: 0; background: none; margin-top: 10px;" }, [
+            this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "championWikiUrl")),
+            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, getText(lang, "championWikiUrlExample")),
+            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "championWikiUrlHint")),
             championWikiUrlInput
         ]) as HTMLDivElement;
 
@@ -3966,14 +4084,14 @@ export default class UI {
         const championMatchupUrlInput = this.vjs.dom.createEl("input", {}, {
             class: "settings-input",
             type: "text",
-            placeholder: "e.g. https://dpm.lol/champions/{my}/matchups?opponent={opponent}",
+            placeholder: "e.g. https://dpm.lol/champions/{My}/matchups?opponent={Opponent}",
             value: settings.championMatchupUrl || "",
             style: "flex: 1;"
         }) as HTMLInputElement;
 
-        const championMatchupUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width" }, [
-            this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, "Champion Matchup URL"),
-            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, "{my} = Your Champ, {opponent} = Target Champ (English)."),
+        const championMatchupUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width", style: "border: none; padding: 0; background: none; margin-top: 10px;" }, [
+            this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "championMatchupUrl")),
+            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "championMatchupUrlHint")),
             championMatchupUrlInput
         ]) as HTMLDivElement;
 
@@ -3986,10 +4104,22 @@ export default class UI {
             style: "flex: 1;"
         }) as HTMLInputElement;
 
-        const championBuildUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width" }, [
-            this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, "Champion Build URL"),
-            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, "{q} will be replaced by Champion Name (English)."),
+        const championBuildUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width", style: "border: none; padding: 0; background: none; margin-top: 10px;" }, [
+            this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "championBuildUrl")),
+            this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "championBuildUrlHint")),
             championBuildUrlInput
+        ]) as HTMLDivElement;
+
+        const scoreboardLinksContent = this.vjs.dom.createEl("div", {}, { 
+            class: "settings-group-styled",
+            style: "grid-column: 1 / -1;"
+        }, [
+            this.vjs.dom.createEl("div", {}, { style: "display: flex; flex-direction: column; gap: 5px;" }, [
+                trackingUrlContainer,
+                championWikiUrlContainer,
+                championMatchupUrlContainer,
+                championBuildUrlContainer
+            ])
         ]) as HTMLDivElement;
         
         // Hotkeys
@@ -4080,10 +4210,8 @@ export default class UI {
             gameModesContent,
             switchesTitle,
             switchesContent,
-            trackingUrlContainer,
-            championWikiUrlContainer,
-            championMatchupUrlContainer,
-            championBuildUrlContainer,
+            scoreboardLinksTitle,
+            scoreboardLinksContent,
             
             // Modernized Sections (Moved to bottom)
             createGroup("Local Assets", assetsWrapper as HTMLElement, true),
