@@ -1,8 +1,5 @@
 use std::time::Duration;
 
-use std::fs::{self, OpenOptions};
-use std::io::Write;
-
 use anyhow::{bail, Context, Result};
 use riot_datatypes::lcu::{Game, Player};
 use riot_datatypes::{Champion, MatchId, Queue, Timeline};
@@ -77,40 +74,17 @@ pub async fn process_data(
         _ => "Unknown Champion".into(),
     };
 
-    // Create .error directory if it doesn't exist (relative to sandbox root, goes to project root)
-    let _ = fs::create_dir_all("../../.error");
-
-    // Open log file (append mode)
-    let log_file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("../../.error/events_debug.log");
-
     let events: Vec<GameEvent> = timeline
         .frames
         .iter()
         .flat_map(|frame| {
-            frame.events.iter().filter_map(|event| {
-                // Debug: Check for item events
-                if let Ok(mut file) = log_file.as_ref() {
-                    let _ = writeln!(file, "Processing Event: {:?}", event);
-                }
-
-                match TryInto::<GameEvent>::try_into(event.clone()) {
-                    Ok(e) => {
-                        if let Ok(mut file) = log_file.as_ref() {
-                            let _ = writeln!(file, " -> Converted: {:?}", e);
-                        }
-                        Some(e)
-                    }
-                    Err(err) => {
-                        if let Ok(mut file) = log_file.as_ref() {
-                            let _ = writeln!(file, " -> Error converting entry: {}", err);
-                        }
-                        None
-                    }
-                }
-            })
+            frame
+                .events
+                .iter()
+                .filter_map(|event| match TryInto::<GameEvent>::try_into(event.clone()) {
+                    Ok(e) => Some(e),
+                    Err(_) => None,
+                })
         })
         .collect();
 
@@ -318,40 +292,17 @@ pub async fn process_data_with_retry(
         }
     };
 
-    // Create .log directory if it doesn't exist
-    let _ = fs::create_dir_all(".log");
-
-    // Open log file (append mode)
-    let log_file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(".log/events_debug.log");
-
     let events: Vec<GameEvent> = timeline
         .frames
         .iter()
         .flat_map(|frame| {
-            frame.events.iter().filter_map(|event| {
-                // Debug: Check for item events
-                if let Ok(mut file) = log_file.as_ref() {
-                    let _ = writeln!(file, "Processing Event: {:?}", event);
-                }
-
-                match TryInto::<GameEvent>::try_into(event.clone()) {
-                    Ok(e) => {
-                        if let Ok(mut file) = log_file.as_ref() {
-                            let _ = writeln!(file, " -> Converted: {:?}", e);
-                        }
-                        Some(e)
-                    }
-                    Err(err) => {
-                        if let Ok(mut file) = log_file.as_ref() {
-                            let _ = writeln!(file, " -> Error converting entry: {}", err);
-                        }
-                        None
-                    }
-                }
-            })
+            frame
+                .events
+                .iter()
+                .filter_map(|event| match TryInto::<GameEvent>::try_into(event.clone()) {
+                    Ok(e) => Some(e),
+                    Err(_) => None,
+                })
         })
         .collect();
 
@@ -474,25 +425,6 @@ fn merge_live_events(
     participants_info: &[riot_datatypes::lcu::Participant],
     pid_to_champ: &std::collections::HashMap<riot_datatypes::ParticipantId, riot_datatypes::Champion>,
 ) -> Vec<GameEvent> {
-    // Open log file for debugging
-    let log_file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("../../.error/events_debug.log");
-
-    if let Ok(mut file) = log_file.as_ref() {
-        let _ = writeln!(file, "--- Merge Live Events Start ---");
-        let _ = writeln!(file, "Live Events Count: {}", live_events.len());
-        let _ = writeln!(file, "Participant Identities Count: {}", participant_identities.len());
-        for pi in participant_identities {
-            let _ = writeln!(
-                file,
-                "Identity: ID={}, Name='{}', Tag='{}'",
-                pi.participant_id, pi.player.game_name, pi.player.tag_line
-            );
-        }
-    }
-
     // Create PID -> TeamID Map for fast lookup
     let mut pid_to_team = std::collections::HashMap::new();
     for p in participants_info {
@@ -602,14 +534,6 @@ fn merge_live_events(
 
         if identity.is_none() {
             log::warn!("   -> NO MATCH FOUND for '{}'", shopper_name);
-        }
-        if let Ok(mut file) = log_file.as_ref() {
-            let status = if identity.is_some() { "MATCHED" } else { "NO MATCH" };
-            let _ = writeln!(
-                file,
-                "Event: {:?}, Shopper: '{}' -> {}",
-                live_event, shopper_name, status
-            );
         }
 
         if let Some(identity) = identity {

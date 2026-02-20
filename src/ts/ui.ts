@@ -939,8 +939,8 @@ export default class UI {
             
             statsCol.append(kdaSpan, csSpan, resultSpan);
 
-            // Add LP Diff if available
-            if (meta.lpDiff !== undefined && meta.lpDiff !== null) {
+            // Add LP Diff if available (ONLY for Ranked Queues)
+            if (meta.lpDiff !== undefined && meta.lpDiff !== null && meta.queue?.isRanked) {
                 const diff = meta.lpDiff;
                 const diffStr = diff >= 0 ? `+${diff} LP` : `${diff} LP`;
                 const lpClass = "sidebar-lp " + resultClass; // Reuse result color logic
@@ -1841,22 +1841,19 @@ export default class UI {
                  const killer = this.participants.find(p => p.participantId == kId);
                  if (killer) {
                      teamId = killer.teamId;
-                     // console.warn(`[DEBUG-INIT] EliteKill Found: kId=${kId} Team=${teamId} Type=${e.EliteMonsterKill.monster_type.monsterType}`);
+                     // Found generic match
                  } else {
                      // 2. Check Assists if killer is neutral/minion
                      const assists = e.EliteMonsterKill.assisting_participant_ids;
                      if (assists && assists.length > 0) {
                          const assister = this.participants.find(p => assists.includes(p.participantId));
-                         if (assister) teamId = assister.teamId;
-                         // console.warn(`[DEBUG-INIT] EliteKill Assist: kId=${kId} Team=${teamId} Assists=${JSON.stringify(assists)}`);
-                     } else {
-                         // console.error(`[DEBUG-INIT] EliteKill UNKNOWN: kId=${kId} No Killer/Assists found!`);
+
                      }
                  }
                  
                  const type = e.EliteMonsterKill.monster_type;
                  
-                 // console.log(`[DEBUG] Init EliteKill: kId=${kId} Team=${teamId} Type=${type.monsterType}`);
+
                  
                  if (teamId === 100) {
                     if (type.monsterType === "DRAGON") t100_Dragons++;
@@ -2392,7 +2389,7 @@ export default class UI {
                 
 
 
-                // Summoner Level & Rank (Outside Riot ID)
+                // Summoner Level & Rank (Between Name and Gold)
                 const metaDiv = this.vjs.dom.createEl("div", {}, { class: "player-meta" }) as HTMLElement;
                 
                 // Rank (if available)
@@ -2406,15 +2403,17 @@ export default class UI {
                        
                        let shortTier = tier[0]; // Default to first letter
                        
-                       // Custom mappings if needed, or rely on first letter
-                       // Iron -> I, Silver -> S, Gold -> G, Platinum -> P, Emerald -> E, Diamond -> D
-                       // Master -> M, Grandmaster -> GM, Challenger -> C
                        if (tier === "GRANDMASTER") shortTier = "GM";
                        if (tier === "CHALLENGER") shortTier = "C";
                        
-                       const shortDiv = division; 
-                       
-                       // e.g. "GIV", "PI", "DII"
+                       // Roman Numeral Formatting: I, II, III, IV -> 1, 2, 3, 4
+                       let shortDiv = division;
+                       if (division === "1" || division === "I") shortDiv = "1";
+                       if (division === "2" || division === "II") shortDiv = "2";
+                       if (division === "3" || division === "III") shortDiv = "3";
+                       if (division === "4" || division === "IV" || division === "IIII") shortDiv = "4";
+
+                       // e.g. "G4", "P1"
                        return `${shortTier}${shortDiv}`;
                    };
                    
@@ -2434,22 +2433,28 @@ export default class UI {
                 }
                 
                 // Summoner Level
-                // Use new field 'summonerLevel' if available, otherwise ignore or fallback
-                // Note: p.summonerLevel might be 0 if not fetched correctly.
                 const sLevel = p.summonerLevel || 0;
                 if (sLevel > 0) {
                     const lvlEl = this.vjs.dom.createEl("div", {}, { class: "player-level" }, `Lv.${sLevel}`);
                     metaDiv.append(lvlEl);
                 }
                 
-                // Also add Champion Level indicator (requested implicitly by lack of level?)
-                // Actually user asked for Summoner Level and Rank.
-                // But let's add Champion Level overlay on icon if we can? 
-                // For now, adhere strictly to "Outside Riot ID".
-
+                // Layout Orders
+                // Goal: Name - Meta - Gold ...
+                // Blue (Left): [Icon 1] ... [KDA ?] [Gold ?] [Meta ?] [Name ?] 
+                // Wait, Blue Left alignment usually: [Icon] [Name] ...
+                // Let's verify standard order again.
+                // UI Code Line 2471: Blue Team (Left Side)
+                // Old: [Meta 0] [Name 1] [Gold 2] ...
+                // New Desired: [Name] [Meta] [Gold] ...
+                
+                // Red (Right):
+                // Old: ... [Gold 8] [Name 9] [Meta 10]
+                // New Desired: ... [Gold] [Meta] [Name]
+                
                 if (teamId === 200) {
                     // Red Team (Right Side)
-                    // Desired: [Icon]...[Name][Meta]
+                    // Desired: ... [Gold] [Meta] [Name]
                     img.style.order = "1";
                     csDiv.style.order = "2";
                     kdaDiv.style.order = "3";
@@ -2458,10 +2463,12 @@ export default class UI {
                     spells.style.order = "6";
                     runesDiv.style.order = "7";
                     goldDiv.style.order = "8";
-                    name.style.order = "9";
-                    metaDiv.style.order = "10";
-                    metaDiv.style.textAlign = "left"; // Near name, left aligned relative to its box?
-                    metaDiv.style.marginLeft = "8px"; // Spacing from Name
+                    metaDiv.style.order = "9"; // Swapped
+                    name.style.order = "10";   // Swapped
+                    
+                    metaDiv.style.textAlign = "center"; 
+                    metaDiv.style.marginRight = "0px"; 
+                    metaDiv.style.marginLeft = "0px";
                     
                     // Items in standard order (1-6) -> LTR
                     itemsGrid.style.flexDirection = "row";
@@ -2469,20 +2476,45 @@ export default class UI {
                     
                 } else {
                     // Blue Team (Left Side)
-                    // Desired: [Meta][Name]...[Icon]
-                    metaDiv.style.order = "0";
-                    name.style.order = "1";
-                    goldDiv.style.order = "2";
-                    runesDiv.style.order = "3";
-                    spells.style.order = "4";
-                    trinketDiv.style.order = "5";
-                    itemsGrid.style.order = "6";
-                    kdaDiv.style.order = "7";
-                    csDiv.style.order = "8";
-                    img.style.order = "9";
+                    // Desired: [Name] [Meta] [Gold] ...
+                    // Wait, usually Blue (Left) starts with Icon? 
+                    // Inspecting existing order:
+                    // Blue: [Meta 0] [Name 1] [Gold 2] ... [Icon 9] ??
+                    // This implies Right-Aligned Blue Team?
+                    // Line 2489: `itemsGrid.style.flexDirection = "row-reverse";`
+                    // This creates a mirrored look where center is the "spine".
+                    // If Blue is left of spine: [Name] [Meta] [Gold] ... [Icon] (Center)
+                    // If Blue is right of spine: [Icon] ... [Gold] [Meta] [Name]
                     
-                    metaDiv.style.textAlign = "right"; 
-                    metaDiv.style.marginRight = "8px"; // Spacing from Name
+                    // Let's assume standard "Center Spine" layout based on `spec-center` logic.
+                    // If so, Blue usually is [Name...Icon] [Spine] [Icon...Name] (Red)?
+                    // Or [Icon...Name] [Spine] [Name...Icon]?
+                    
+                    // Code says: Blue Order: Meta(0), Name(1), Gold(2)... Icon(9).
+                    // This suggests Blue is on the LEFT of the player row, expanding RIGHT??
+                    // BUT `justifyContent = "flex-end"` on Team Header (Blue).
+                    // This implies Blue text is Right-Aligned, pushing against the Center Spine?
+                    // And Red is Left-Aligned, pushing against Center Spine?
+                    
+                    // Let's Assume:
+                    // Blue (Left Team): [Name] [Meta] [Gold] ... [Icon] -> Center
+                    // old: [Meta] [Name] [Gold] ...
+                    // new: [Name] [Meta] [Gold] ...
+                    
+                    name.style.order = "1";
+                    metaDiv.style.order = "2"; // Swapped
+                    goldDiv.style.order = "3";
+                    runesDiv.style.order = "4";
+                    spells.style.order = "5";
+                    trinketDiv.style.order = "6";
+                    itemsGrid.style.order = "7";
+                    kdaDiv.style.order = "8";
+                    csDiv.style.order = "9";
+                    img.style.order = "10";
+                    
+                    metaDiv.style.textAlign = "center"; 
+                    metaDiv.style.marginLeft = "0px";
+                    metaDiv.style.marginRight = "0px";
                     
                     // Items in reverse order (6-1) -> RTL inside grid
                     itemsGrid.style.flexDirection = "row-reverse";

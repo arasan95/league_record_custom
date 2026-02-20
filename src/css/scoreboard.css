@@ -91,7 +91,7 @@
 .player-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     padding: 2px;
     background-color: rgba(0, 0, 0, 0.3);
     border-radius: 2px;
@@ -136,7 +136,7 @@
     min-width: 80px;
     white-space: nowrap;
     text-align: center;
-    margin: 0 2px; /* Minimal margin */
+    /* margin: 0 2px;  */
     font-variant-numeric: tabular-nums;
 }
 
@@ -550,11 +550,11 @@
    Symmetry Goal: Spells-Trinket (5px), Trinket-Items (2px)
 */
 .team-100 .player-name      { order: 1; text-align: right; margin-right: 15px; } 
-.team-100 .runes            { order: 2; margin-right: 2px; }
+.team-100 .runes            { order: 2; margin-right: 0px; }
 .team-100 .spells           { order: 3; margin-right: 0px; } 
 .team-100 .trinket-container{ order: 4; margin-left: 5px; margin-right: 2px; } 
 .team-100 .items-grid       { order: 5; margin-right: 5px; } /* Gap to KDA */
-.team-100 .kda-stat         { order: 6; margin-right: 0px; text-align: center; }
+.team-100 .kda-stat         { order: 6; text-align: center; }
 .team-100 .cs-stat          { order: 7; margin-right: 5px; text-align: center; }
 .team-100 .champ-icon       { order: 8; margin-right: 5px; }
 
@@ -569,10 +569,10 @@
 .team-200 .champ-icon       { order: 1; margin-right: 5px; }
 .team-200 .cs-stat          { order: 2; margin-right: 0px; text-align: center; }
 .team-200 .kda-stat         { order: 3; margin-right: 5px; text-align: center; }
-.team-200 .items-grid       { order: 4; margin-right: 12px; } /* Gap to Trinket (Increased to 8px to fix overlap) */
-.team-200 .trinket-container{ order: 5; margin-left: 0px; margin-right: 5px; } /* Gap to Spells (5px) */
-.team-200 .spells           { order: 6; margin-right: 2px; }
-.team-200 .runes            { order: 7; margin-right: 15px; }
+.team-200 .items-grid       { order: 4; margin-right: 12px; } 
+.team-200 .trinket-container{ order: 5; margin-left: 0px; margin-right: 5px; } 
+.team-200 .spells           { order: 6; margin-right: 0px; }
+.team-200 .runes            { order: 7; margin-right: 0px; }
 .team-200 .player-name      { order: 8; text-align: left; }
 
 /* Remove old order rules */
@@ -607,7 +607,7 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    min-width: 60px;
+    min-width: 35px;
     font-family: "Beaufort", sans-serif; /* Use game font if available */
 }
 
@@ -624,14 +624,14 @@
 /* Rank Colors */
 .rank-iron { color: #574d4f; text-shadow: 0 0 2px #aaa; }
 .rank-bronze { color: #8c513a; text-shadow: 0 0 2px #000; }
-.rank-silver { color: #80989d; text-shadow: 0 0 3px #000; }
-.rank-gold { color: #cdbe91; text-shadow: 0 0 4px #423008; }
-.rank-platinum { color: #4E9996; text-shadow: 0 0 4px #000; }
-.rank-emerald { color: #0AC8B9; text-shadow: 0 0 5px #003300; }
+.rank-silver { color: #8ca6ab; text-shadow: 0 0 3px #000; }
+.rank-gold { color: #d8c17b; text-shadow: 0 0 4px #423008; }
+.rank-platinum { color: #4fb5b2; text-shadow: 0 0 4px #000; }
+.rank-emerald { color: #0ac889; text-shadow: 0 0 5px #003300; }
 .rank-diamond { color: #576BCE; text-shadow: 0 0 5px #000033; }
 .rank-master { color: #9d48e0; text-shadow: 0 0 6px #220033; }
 .rank-grandmaster { color: #eb4c4c; text-shadow: 0 0 6px #330000; }
-.rank-challenger { color: #f4c874; text-shadow: 0 0 8px #0050b3; } /* Goldish with Blue glow */
+.rank-challenger { color: #f4eb74; text-shadow: 0 0 8px #0050b3; } /* Goldish with Blue glow */
 
 .player-level {
     font-size: 0.7em;
