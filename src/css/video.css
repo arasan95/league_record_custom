@@ -776,16 +776,13 @@ input[type="checkbox"]:not([id]):checked,
     align-items: center;
     justify-content: center;
 }
-.team-100 .player-name { margin-right: 8px !important; }
+
 .team-100 .total-gold {
     order: 2; 
-    margin-right: 15px !important;
-    justify-content: flex-end; 
+    justify-content: center; 
 }
-.team-200 .runes { margin-right: 8px !important; }
 .team-200 .total-gold {
     order: 8;
-    margin-right: 15px !important; 
-    justify-content: flex-start; 
+    justify-content: center; 
 }
 .icon-white { background-color: white !important; }
