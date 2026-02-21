@@ -1447,6 +1447,17 @@ export default class UI {
 
 
 
+    public clearVideoMetadata() {
+        const playerEl = document.getElementById("video_player");
+        if (playerEl) {
+            const oldScoreboard = playerEl.querySelector(".scoreboard");
+            if (oldScoreboard) oldScoreboard.remove();
+            
+            const spectatorHeader = document.getElementById("video-header");
+            if (spectatorHeader) this.vjs.dom.emptyEl(spectatorHeader);
+        }
+    }
+
     public async setVideoDescriptionMetadata(data: GameMetadata) {
         this.metadataRenderId++;
         this.currentQueueId = data.queue?.id ?? 0;

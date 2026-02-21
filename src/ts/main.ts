@@ -884,6 +884,7 @@ async function setMetadata(videoId: string) {
             events: def.highlights ?? [],
         };
     } else {
+        ui.clearVideoMetadata();
         ui.showMarkerFlags(false);
         ui.setRecordingOffset(0);
         currentEvents = null;
