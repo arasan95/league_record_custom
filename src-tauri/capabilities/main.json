@@ -2,7 +2,9 @@
   "identifier": "migrated",
   "description": "permissions that were migrated from v1",
   "local": true,
-  "windows": ["Main"],
+  "windows": [
+    "Main"
+  ],
   "permissions": [
     "core:window:allow-set-title",
     "core:window:allow-show",
@@ -26,27 +28,52 @@
     "fs:default",
     {
       "identifier": "fs:allow-exists",
-      "allow": [{ "path": "$APPLOCALDATA/**" }]
+      "allow": [
+        {
+          "path": "$APPLOCALDATA/**"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-read-text-file",
-       "allow": [{ "path": "$APPLOCALDATA/**" }]
+      "allow": [
+        {
+          "path": "$APPLOCALDATA/**"
+        }
+      ]
     },
     {
-       "identifier": "fs:allow-write-text-file",
-       "allow": [{ "path": "$APPLOCALDATA/**" }]
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        {
+          "path": "$APPLOCALDATA/**"
+        }
+      ]
     },
     {
-        "identifier": "fs:allow-mkdir",
-        "allow": [{ "path": "$APPLOCALDATA/**" }]
+      "identifier": "fs:allow-mkdir",
+      "allow": [
+        {
+          "path": "$APPLOCALDATA/**"
+        }
+      ]
     },
     {
-        "identifier": "fs:allow-write-file",
-        "allow": [{ "path": "$APPLOCALDATA/**" }]
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        {
+          "path": "$APPLOCALDATA/**"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-read-file",
-      "allow": [{ "path": "$APPLOCALDATA/**" }]
-    }
+      "allow": [
+        {
+          "path": "$APPLOCALDATA/**"
+        }
+      ]
+    },
+    "core:app:default"
   ]
 }

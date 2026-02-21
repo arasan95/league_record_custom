@@ -16,6 +16,8 @@ import { formatKeyCombo, saveKeybinds, keyComboToBackendString, loadMouseConfig,
 
 import { currentKeybinds, reloadKeybinds } from "./main";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
+import { check } from "@tauri-apps/plugin-updater";
 import { open } from "@tauri-apps/plugin-shell";
 
 import { toVideoId, toVideoName, isFavorite } from "./util";
@@ -48,8 +50,8 @@ function showGlobalTooltip(target: HTMLElement, html: string) {
         globalTooltip.style.borderRadius = "4px";
         globalTooltip.style.border = "1px solid #c8aa6e";
         globalTooltip.style.zIndex = "999999";
-        globalTooltip.style.maxWidth = "300px";
-        globalTooltip.style.fontSize = "13px";
+        globalTooltip.style.maxWidth = "500px";
+        globalTooltip.style.fontSize = "16px";
         globalTooltip.style.lineHeight = "1.4";
         globalTooltip.style.pointerEvents = "none";
         document.body.appendChild(globalTooltip);
@@ -2253,8 +2255,8 @@ export default class UI {
                             const spell = data.spells[i];
                             const key = ["Q", "W", "E", "R"][i];
                             html += `<div style="margin-bottom: 6px;">
-                                <b style="color:#00d2ff;">[${key}]</b> ${spell.name} <span style="color:#aaa; font-size: 11px;">(CD: ${spell.cooldownBurn}s)</span><br>
-                                <div style="font-size: 11px; margin-top:2px; color:#ddd;">${spell.description}</div>
+                                <b style="color:#00d2ff;">[${key}]</b> ${spell.name} <span style="color:#aaa; font-size: 13px;">(CD: ${spell.cooldownBurn}s)</span><br>
+                                <div style="font-size: 13px; margin-top:2px; color:#ddd;">${spell.description}</div>
                             </div>`;
                         }
                         showGlobalTooltip(img, html);
@@ -2306,8 +2308,8 @@ export default class UI {
                         const spellData = await getSummonerSpellData(id, getCurrentPatchVersion(), settings.language);
                         if (spellData) {
                             let html = `<b style="color:#c8aa6e; font-size: 13px;">${spellData.name}</b><br>
-                            <span style="color:#aaa; font-size: 11px;">Cooldown: ${spellData.cooldownBurn}s</span><hr style="border-color:#333; margin:5px 0;">
-                            <div style="font-size: 11px; color:#ddd;">${spellData.description}</div>`;
+                            <span style="color:#aaa; font-size: 13px;">Cooldown: ${spellData.cooldownBurn}s</span><hr style="border-color:#333; margin:5px 0;">
+                            <div style="font-size: 13px; color:#ddd;">${spellData.description}</div>`;
                             showGlobalTooltip(el, html);
                         }
                     });
@@ -2391,8 +2393,8 @@ export default class UI {
                         const itemData = await getItemData(currentId, settings.language || "ja");
                         if (itemData) {
                             let html = `<b style="color:#c8aa6e; font-size: 13px;">${itemData.name}</b><br>
-                            <div style="color:#aaa; font-size: 11px; margin-bottom: 5px;">Cost: <span style="color:#e8d154">${itemData.gold?.total || 0}g</span></div>
-                            <div style="font-size: 11px; color:#ddd; max-width: 250px;">${itemData.description}</div>`;
+                            <div style="color:#aaa; font-size: 13px; margin-bottom: 5px;">Cost: <span style="color:#e8d154">${itemData.gold?.total || 0}g</span></div>
+                            <div style="font-size: 13px; color:#ddd; max-width: 250px;">${itemData.description}</div>`;
                             showGlobalTooltip(target, html);
                         }
                     });
@@ -2419,7 +2421,7 @@ export default class UI {
                     const itemData = await getItemData(currentId, settings.language || "ja");
                     if (itemData) {
                         let html = `<b style="color:#c8aa6e; font-size: 13px;">${itemData.name}</b><br>
-                        <div style="font-size: 11px; color:#ddd; max-width: 250px;">${itemData.description}</div>`;
+                        <div style="font-size: 13px; color:#ddd; max-width: 250px;">${itemData.description}</div>`;
                         showGlobalTooltip(target, html);
                     }
                 });
@@ -4124,6 +4126,99 @@ export default class UI {
         
         // Hotkeys
 
+        // --- About / Update Tab ---
+        const aboutTabContent = this.vjs.dom.createEl("div", {}, { class: "settings-tab-content scrollable hidden" }) as HTMLDivElement;
+        const aboutWrapper = this.vjs.dom.createEl("div", {}, { class: "settings-group-styled", style: "display: flex; flex-direction: column; gap: 10px; text-align: center; padding: 20px;" }) as HTMLDivElement;
+        
+        const appVersionLine = this.vjs.dom.createEl("div", {}, { style: "font-size: 1.1em; color: #eee; margin-bottom: 5px;" }) as HTMLDivElement;
+        
+        // Fetch and display real version
+        getVersion().then(ver => {
+            appVersionLine.innerText = `${getText(lang, "appVersion" as any)}: v${ver}`;
+        }).catch(err => {
+            console.error("getVersion failed:", err);
+            appVersionLine.innerText = `${getText(lang, "appVersion" as any)}: Unknown`;
+        });
+        
+        const repoLine = this.vjs.dom.createEl("div", {}, { style: "margin-bottom: 20px;" }) as HTMLDivElement;
+        const repoLink = this.vjs.dom.createEl("a", {
+            onclick: () => open("https://github.com/arasan95/League_Record_custom")
+        }, { style: "color: #00d2ff; cursor: pointer; text-decoration: underline;" }, "GitHub Repository");
+        repoLine.appendChild(repoLink);
+        
+        const updateStatusMsg = this.vjs.dom.createEl("div", {}, { style: "font-size: 0.9em; color: #aaa; margin: 10px 0; min-height: 20px;" }) as HTMLDivElement;
+        const updateActionsContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; justify-content: center; gap: 10px;" }) as HTMLDivElement;
+        
+        let foundUpdate: any = null;
+        
+        const checkUpdateBtn = this.vjs.dom.createEl("button", {
+            onclick: async () => {
+                checkUpdateBtn.disabled = true;
+                updateStatusMsg.innerText = "Checking...";
+                updateStatusMsg.style.color = "#aaa";
+                try {
+                    const update = await check();
+                    if (update) {
+                        foundUpdate = update;
+                        updateStatusMsg.innerText = `${getText(lang, "updateAvailable" as any)} (v${update.version})`;
+                        updateStatusMsg.style.color = "#e8d154";
+                        checkUpdateBtn.style.display = "none";
+                        installUpdateBtn.style.display = "block";
+                    } else {
+                        updateStatusMsg.innerText = getText(lang, "updateLatest" as any);
+                        updateStatusMsg.style.color = "#4CAF50";
+                        checkUpdateBtn.disabled = false;
+                    }
+                } catch (e) {
+                    console.error("Update check failed", e);
+                    updateStatusMsg.innerText = getText(lang, "updateError" as any);
+                    updateStatusMsg.style.color = "#ff5555";
+                    checkUpdateBtn.disabled = false;
+                }
+            }
+        }, { class: "btn-browse" }, getText(lang, "checkForUpdates" as any)) as HTMLButtonElement;
+        
+        const installUpdateBtn = this.vjs.dom.createEl("button", {
+            onclick: async () => {
+                if (!foundUpdate) return;
+                installUpdateBtn.disabled = true;
+                updateStatusMsg.innerText = getText(lang, "updateDownloading" as any);
+                try {
+                    await foundUpdate.downloadAndInstall();
+                    updateStatusMsg.innerText = "Download complete. Restarting...";
+                    
+                    // Trigger Tauri app restart
+                    const { invoke } = await import("@tauri-apps/api/core");
+                    await invoke("plugin:updater|restart");
+                } catch (e) {
+                    console.error("Install update failed", e);
+                    updateStatusMsg.innerText = "Update installation failed.";
+                    updateStatusMsg.style.color = "#ff5555";
+                    installUpdateBtn.disabled = false;
+                }
+            }
+        }, { class: "btn-browse btn-danger", style: "display: none;" }, getText(lang, "updateRestart" as any)) as HTMLButtonElement;
+        
+        updateActionsContainer.append(checkUpdateBtn, installUpdateBtn);
+        
+        const updateOnStartupCheckbox = this.vjs.dom.createEl("input", {
+            type: "checkbox",
+            checked: settings.checkUpdatesOnStartup,
+            onchange: (e: Event) => {
+                settings.checkUpdatesOnStartup = (e.target as HTMLInputElement).checked;
+            }
+        }, { style: "margin-right: 5px; vertical-align: middle;" }) as HTMLInputElement;
+
+        const updateOnStartupContainer = this.vjs.dom.createEl("label", {}, { style: "margin-top: 15px; font-size: 0.9em; color: #ccc; cursor: pointer; display: inline-flex; justify-content: center; align-items: center;" }, [
+            updateOnStartupCheckbox,
+            this.vjs.dom.createEl("span", {}, {}, getText(lang, "checkUpdatesOnStartup" as any))
+        ]) as HTMLLabelElement;
+
+        aboutWrapper.append(appVersionLine, repoLine, updateActionsContainer, updateStatusMsg, updateOnStartupContainer);
+        aboutTabContent.appendChild(aboutWrapper);
+        // --- End About / Update Tab ---
+
+
         // Cleanup Settings
         const maxAgeInput = this.vjs.dom.createEl("input", {}, {
             class: "settings-input",
@@ -4230,30 +4325,28 @@ export default class UI {
             return btn;
         };
 
-        const switchTab = (showGeneral: boolean) => {
-             if (showGeneral) {
-                 btnGeneral.classList.add("active");
-                 btnHotkeys.classList.remove("active");
-                 generalTabContent.classList.remove("hidden");
-                 hotkeysTabContent.classList.add("hidden");
-             } else {
-                 btnGeneral.classList.remove("active");
-                 btnHotkeys.classList.add("active");
-                 generalTabContent.classList.add("hidden");
-                 hotkeysTabContent.classList.remove("hidden");
-             }
+        const switchTab = (tabName: 'general' | 'hotkeys' | 'about') => {
+             btnGeneral.classList.toggle("active", tabName === 'general');
+             btnHotkeys.classList.toggle("active", tabName === 'hotkeys');
+             btnAbout.classList.toggle("active", tabName === 'about');
+             
+             generalTabContent.classList.toggle("hidden", tabName !== 'general');
+             hotkeysTabContent.classList.toggle("hidden", tabName !== 'hotkeys');
+             aboutTabContent.classList.toggle("hidden", tabName !== 'about');
         };
 
-        const btnGeneral = createTabBtn(getText(lang, "tabGeneral"), true, () => switchTab(true));
-        const btnHotkeys = createTabBtn(getText(lang, "tabHotkeys"), false, () => switchTab(false));
+        const btnGeneral = createTabBtn(getText(lang, "tabGeneral"), true, () => switchTab('general'));
+        const btnHotkeys = createTabBtn(getText(lang, "tabHotkeys"), false, () => switchTab('hotkeys'));
+        const btnAbout = createTabBtn(getText(lang, "tabAbout" as any) || "About", false, () => switchTab('about'));
 
-        const tabsContainer = this.vjs.dom.createEl("div", {}, { class: "settings-tabs" }, [btnGeneral, btnHotkeys]);
+        const tabsContainer = this.vjs.dom.createEl("div", {}, { class: "settings-tabs" }, [btnGeneral, btnHotkeys, btnAbout]);
 
         // Main Content Assembly
         const modalBody = this.vjs.dom.createEl("div", {}, { style: "display: flex; flex-direction: column; overflow: hidden; flex: 1;" }, [
             tabsContainer,
             generalTabContent,
-            hotkeysTabContent
+            hotkeysTabContent,
+            aboutTabContent
         ]);
 
         // Actions

@@ -41,7 +41,7 @@ jobs:
 
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "./src-tauri/target/release/*.zip, ./src-tauri/target/release/bundle/nsis/*"
+          artifacts: "./src-tauri/target/release/*.zip, ./src-tauri/target/release/bundle/nsis/*, ./src-tauri/target/release/bundle/updater/latest.json"
           prerelease: false
           body: |
             Windows-x64 installer and portable version.
