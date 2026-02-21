@@ -42,7 +42,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         // tauri-plugin-log removed
-        // .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(WindowState::default())
         .manage(CurrentlyRecording::default())
         .manage(TrayState::default())
