@@ -592,7 +592,7 @@ async function main() {
     commands.getMarkerFlags().then(ui.setMarkerFlags);
 
     // Initialize Auto Buttons
-    commands.getSettings().then(settings => {
+    commands.getSettings().then(async settings => {
         ui.updateAutoStopBtn(settings.autoStopPlayback);
         ui.updateAutoPlayBtn(settings.autoplayVideo);
         ui.updateAutoSelectBtn(settings.autoSelectRecording);
@@ -603,6 +603,20 @@ async function main() {
             document.body.classList.add("selectable");
         } else {
             document.body.classList.remove("selectable");
+        }
+
+        // --- Startup Update Check ---
+        if (settings.checkUpdatesOnStartup) {
+            try {
+                const { check } = await import("@tauri-apps/plugin-updater");
+                const update = await check();
+                if (update) {
+                    // Use showErrorModal temporarily for notification
+                    ui.showErrorModal(`Update Available: v${update.version}\n\nPlease check the About tab in Settings to install.`);
+                }
+            } catch (e) {
+                console.error("Startup update check failed:", e);
+            }
         }
     });
 

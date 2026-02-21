@@ -317,6 +317,7 @@ pub struct Settings {
     pub champion_wiki_base_url: Option<String>,
     pub champion_matchup_url: Option<String>,
     pub champion_build_url: Option<String>,
+    pub check_updates_on_startup: bool,
 }
 
 const DEFAULT_DEBUG_LOG: bool = false;
@@ -336,6 +337,7 @@ const DEFAULT_FFMPEG_PATH: Option<String> = None;
 const DEFAULT_MATCH_HISTORY_BASE_URL: Option<String> = None;
 const DEFAULT_CHAMPION_MATCHUP_URL: &str = "https://dpm.lol/champions/{My}/matchups?opponent={Opponent}";
 const DEFAULT_CHAMPION_BUILD_URL: &str = "https://dpm.lol/champions/{q}/build";
+const DEFAULT_CHECK_UPDATES_ON_STARTUP: bool = true;
 
 #[inline]
 fn default_recordings_folder() -> PathBuf {
@@ -392,6 +394,7 @@ impl Default for Settings {
             champion_wiki_base_url: Some("https://wiki.leagueoflegends.com/en-us/{q}".to_string()),
             champion_matchup_url: Some(DEFAULT_CHAMPION_MATCHUP_URL.to_string()),
             champion_build_url: Some(DEFAULT_CHAMPION_BUILD_URL.to_string()),
+            check_updates_on_startup: DEFAULT_CHECK_UPDATES_ON_STARTUP,
         }
     }
 }
@@ -512,6 +515,10 @@ impl<'de> Deserialize<'de> for Settings {
                         }
                         "championBuildUrl" => {
                             settings.champion_build_url = map.next_value().ok();
+                        }
+                        "checkUpdatesOnStartup" => {
+                            settings.check_updates_on_startup =
+                                map.next_value().unwrap_or(DEFAULT_CHECK_UPDATES_ON_STARTUP);
                         }
                         _ => { /* ignored */ }
                     }
