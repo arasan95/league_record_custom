@@ -82,6 +82,7 @@ export default class UI {
     private readonly modal;
     private readonly modalContent;
     private readonly sidebar;
+    private readonly refreshBtn;
     private readonly videoFolderBtn;
     private readonly settingsBtn;
     // private readonly recordingsSize; // Removed
@@ -111,6 +112,12 @@ export default class UI {
     private filterRanked = false;
     private filterSearch = false;
     private searchQuery = "";
+    
+    // Server Nav Filter
+    private filterServer: 'ALL' | 'LOL' | 'TFT' = 'ALL';
+    private readonly navFilterAllBtn;
+    private readonly navFilterLolBtn;
+    private readonly navFilterTftBtn;
     
     // Store latest recordings to re-render locally
     private lastRecordings: ReadonlyArray<Recording> = [];
@@ -305,6 +312,7 @@ export default class UI {
         this.modal = document.querySelector<HTMLDivElement>("#modal")!;
         this.modalContent = document.querySelector<HTMLDivElement>("#modal-content")!;
         this.sidebar = document.querySelector<HTMLUListElement>("#sidebar-content")!;
+        this.refreshBtn = document.querySelector<HTMLButtonElement>("#refresh-btn")!;
         this.videoFolderBtn = document.querySelector<HTMLButtonElement>("#vid-folder-btn")!;
         this.settingsBtn = document.querySelector<HTMLButtonElement>("#settings-btn")!;
         // this.recordingsSize = document.querySelector<HTMLSpanElement>("#size-inner")!; // Removed in favor of storage bar
@@ -320,6 +328,11 @@ export default class UI {
         this.searchBarContainer = document.querySelector<HTMLDivElement>("#search-bar-container")!;
         this.searchInput = document.querySelector<HTMLInputElement>("#search-input")!;
         
+        // Server Nav Elements
+        this.navFilterAllBtn = document.querySelector<HTMLButtonElement>("#nav-filter-all")!;
+        this.navFilterLolBtn = document.querySelector<HTMLButtonElement>("#nav-filter-lol")!;
+        this.navFilterTftBtn = document.querySelector<HTMLButtonElement>("#nav-filter-tft")!;
+        
         // Storage Elements
         this.segClip = document.querySelector<HTMLDivElement>(".seg-clip")!;
         this.segStar = document.querySelector<HTMLDivElement>(".seg-star")!;
@@ -330,6 +343,38 @@ export default class UI {
         // Resize Handler for Physical Pixel Layout
         this.handleResize(); // Initial check
         window.addEventListener("resize", this.handleResize);
+
+        // Server Nav Handlers
+        const updateServerNavActiveState = () => {
+            this.navFilterAllBtn?.classList.remove('active');
+            this.navFilterLolBtn?.classList.remove('active');
+            this.navFilterTftBtn?.classList.remove('active');
+            if (this.filterServer === 'ALL') this.navFilterAllBtn?.classList.add('active');
+            if (this.filterServer === 'LOL') this.navFilterLolBtn?.classList.add('active');
+            if (this.filterServer === 'TFT') this.navFilterTftBtn?.classList.add('active');
+        };
+
+        if (this.navFilterAllBtn) {
+            this.navFilterAllBtn.addEventListener("click", () => {
+                this.filterServer = 'ALL';
+                updateServerNavActiveState();
+                if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+            });
+        }
+        if (this.navFilterLolBtn) {
+            this.navFilterLolBtn.addEventListener("click", () => {
+                this.filterServer = 'LOL';
+                updateServerNavActiveState();
+                if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+            });
+        }
+        if (this.navFilterTftBtn) {
+            this.navFilterTftBtn.addEventListener("click", () => {
+                this.filterServer = 'TFT';
+                updateServerNavActiveState();
+                if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+            });
+        }
         
         // Filter Click Handlers
         if (this.filterStarBtn) {
@@ -572,6 +617,10 @@ export default class UI {
         void appWindow?.setFullscreen(fullscreen);
     };
 
+    public setRefreshBtnOnClickHandler = (handler: (e: MouseEvent) => void) => {
+        this.refreshBtn.addEventListener("click", handler);
+    };
+
     public setRecordingsFolderBtnOnClickHandler = (handler: (e: MouseEvent) => void) => {
         this.videoFolderBtn.addEventListener("click", handler);
     };
@@ -782,6 +831,29 @@ export default class UI {
                 } else {
                     // No metadata = Unknown, assume not ranked
                     isVisible = false;
+                }
+            }
+            
+            // 4. Server Nav Filter (ALL / LOL / TFT)
+            if (this.filterServer !== 'ALL') {
+                const isClipObj = recording.videoId.includes("_clip");
+                let isTft = false;
+                if (recording.metadata && "Metadata" in recording.metadata) {
+                    const m = recording.metadata.Metadata;
+                    if (m.queue && (m.queue.id === 1220 || (m.queue.name && m.queue.name.toLowerCase() === "teamfight tactics"))) {
+                        isTft = true;
+                    }
+                }
+                
+                if (this.filterServer === 'TFT') {
+                    if (!isTft && !isClipObj) isVisible = false; // Hide non-TFT, but what about clips? We assume clips belong to the active mode or we just hide them if we want strict TFT. Let's hide non-TFT clips too if we can't tell, or just hide non-TFT. Let's be strict: if it's TFT mode, only show TFT.
+                    if (isClipObj && !isTft) {
+                        // We might not know if clip is TFT, but let's just make it visible if we don't know? Or hide? 
+                        // It's safer to hide if it's 'TFT' strictly, unless it's a clip from TFT. To keep it simple, if no metadata, assume LOL unless proven TFT. So clips are hidden in TFT mode usually.
+                        isVisible = false;
+                    }
+                } else if (this.filterServer === 'LOL') {
+                    if (isTft) isVisible = false; // Hide TFT
                 }
             }
 

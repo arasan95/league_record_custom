@@ -1,8 +1,8 @@
 #container {
     display: grid;
-    grid-template-columns: [sidebar] var(--sidebar-width, 325px) [main] 1fr;
+    grid-template-columns: [server-nav] 72px [sidebar] var(--sidebar-width, 325px) [main] 1fr;
     grid-template-rows: 100%;
-    grid-template-areas: "sidebar main";
+    grid-template-areas: "server-nav sidebar main";
     overflow: hidden;
 }
 
