@@ -57,9 +57,15 @@ jobs:
           $date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
           $url = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$zipName"
 
+          $notes = "Update v$version"
+          if (Test-Path "release_notes.json") {
+              $rn = Get-Content "release_notes.json" -Raw | ConvertFrom-Json
+              if ($rn.notes) { $notes = $rn.notes }
+          }
+
           $json = @{
             version = "v$version"
-            notes = "Update v$version"
+            notes = $notes
             pub_date = $date
             platforms = @{
                 "windows-x86_64" = @{

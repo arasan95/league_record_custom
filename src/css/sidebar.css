@@ -680,3 +680,143 @@ img.tft-trait {
     height: 20px;
     background-color: #2a2a2a;
 }
+
+/* ========================================================================= */
+/* Server Navigation Bar (Discord-like)                                      */
+/* ========================================================================= */
+
+#server-nav {
+    grid-area: server-nav;
+    background-color: #1e1f22;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 0;
+    gap: 14px;
+    z-index: 100;
+    overflow-y: auto;
+    overflow-x: hidden;
+    margin-right: 2px;
+}
+
+/* Hide scrollbar for server nav */
+#server-nav::-webkit-scrollbar {
+    width: 0px;
+    background: transparent;
+}
+
+.server-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background-color: #313338;
+    color: #dbdee1;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    outline: none;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+.server-icon:hover {
+    border-radius: 16px;
+    background-color: #3f3f3f;
+    color: #fff;
+}
+
+.server-icon.active {
+    border-radius: 16px;
+    background-color: #3f3f3f;
+    color: #fff;
+}
+
+/* Active/Hover Indicator (Left Pillar) */
+.server-icon::before {
+    content: "";
+    position: absolute;
+    left: -12px;
+    top: 50%;
+    transform: translateY(-50%) scaleY(0);
+    width: 4px; /* adjusted later maybe */
+    height: 48px;
+    background-color: #fff;
+    border-radius: 0 16px 16px 0;
+    transition: transform 0.2s ease, height 0.2s ease;
+}
+
+.server-icon:hover::before {
+    transform: translateY(-50%) scaleY(0.4);
+}
+
+.server-icon.active::before {
+    transform: translateY(-50%) scaleY(0.85);
+}
+
+/* Individual Game Mode Icons */
+#nav-filter-lol {
+    background-image: url('../assets/icon/LoL.png');
+    background-size: 80%;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: transparent;
+    color: transparent;
+}
+
+#nav-filter-lol:hover, #nav-filter-lol.active {
+    background-color: #3f3f3f;
+}
+
+#nav-filter-tft {
+    background-image: url('../assets/icon/TFT.png');
+    background-size: 80%;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: transparent;
+    color: transparent;
+}
+
+#nav-filter-tft:hover, #nav-filter-tft.active {
+    background-color: #3f3f3f;
+}
+
+.server-nav-divider {
+    width: 32px;
+    height: 2px;
+    background-color: #3f4147;
+    border-radius: 1px;
+    margin: 4px 0;
+}
+
+.server-nav-bottom {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+}
+
+.nav-action-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background-color: transparent;
+    color: #a1a1aa; /* matching grey */
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.nav-action-btn:hover {
+    border-radius: 16px;
+    background-color: #3f3f3f;
+    color: #fff;
+}

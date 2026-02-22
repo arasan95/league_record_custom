@@ -400,6 +400,9 @@ async function main() {
     }
 
     // add events to html elements
+    ui.setRefreshBtnOnClickHandler(() => {
+        updateSidebar();
+    });
     ui.setRecordingsFolderBtnOnClickHandler(commands.openRecordingsFolder);
     ui.setSettingsBtnOnClickHandler(() => {
         commands.getSettings().then(settings => {
@@ -418,6 +421,7 @@ async function main() {
                  if (activeId) {
                      await setMetadata(activeId);
                  }
+                 await updateSidebar();
              });
              return null;
         });
