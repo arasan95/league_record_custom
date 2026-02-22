@@ -8,6 +8,10 @@ import { commands } from "./bindings";
 // We will store cached images in a subdirectory named 'img_cache' inside AppLocalData
 const CACHE_DIR = "img_cache";
 
+// In-memory cache to prevent thousands of Tauri IPC calls per second during UI renders
+const inMemoryAssetCache = new Map<string, string>();
+let cachedAppLocalDataDir: string | null = null;
+
 /**
  * Downloads a file from a URL and saves it to the cache, or returns the cached path if it exists.
  * @param url The remote URL of the image.
@@ -18,16 +22,23 @@ export async function getCachedAssetUrl(url: string, category: string, filename:
     if (!url) return "";
 
     try {
-        // Ensure category subdirectory (Frontend check)
-        // Backend also checks, but checking here allows skipping the invoke if file exists
         const categoryDir = `${CACHE_DIR}/${category}`;
         const filePath = `${categoryDir}/${filename}`;
         
-        // Check cache
+        // Fast-path in-memory Cache (Massively speeds up TFT rendering)
+        if (inMemoryAssetCache.has(filePath)) {
+            return inMemoryAssetCache.get(filePath)!;
+        }
+
+        // Check local disk cache (via IPC)
         if (await exists(filePath, { baseDir: BaseDirectory.AppLocalData })) {
-            const appData = await appLocalDataDir();
-            const absPath = await join(appData, categoryDir, filename);
-            return convertFileSrc(absPath);
+            if (!cachedAppLocalDataDir) {
+                cachedAppLocalDataDir = await appLocalDataDir();
+            }
+            const absPath = await join(cachedAppLocalDataDir, categoryDir, filename);
+            const finalUrl = convertFileSrc(absPath);
+            inMemoryAssetCache.set(filePath, finalUrl);
+            return finalUrl;
         }
 
         // Download via Backend to bypass CORS
@@ -39,7 +50,9 @@ export async function getCachedAssetUrl(url: string, category: string, filename:
         const result = await commands.downloadImage(url, category, filename);
 
         if (result.status === "ok") {
-            return convertFileSrc(result.data);
+            const finalUrl = convertFileSrc(result.data);
+            inMemoryAssetCache.set(filePath, finalUrl);
+            return finalUrl;
         } else {
             console.error(`Failed to download image (${url}):`, result.error);
             return url;

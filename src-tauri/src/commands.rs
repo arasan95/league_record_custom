@@ -62,8 +62,18 @@ pub fn get_recordings_list(app_handle: AppHandle) -> Vec<Recording> {
     let mut ret = Vec::new();
     for path in recordings {
         if let Some(video_id) = path.to_str().map(|s| s.to_string()) {
-            let metadata = action::get_recording_metadata(&path, true).ok();
-            ret.push(Recording { video_id, metadata });
+            match action::get_recording_metadata(&path, true) {
+                Ok(metadata) => {
+                    ret.push(Recording {
+                        video_id,
+                        metadata: Some(metadata),
+                    });
+                }
+                Err(e) => {
+                    println!("Error parsing {}: {}", video_id, e);
+                    ret.push(Recording { video_id, metadata: None });
+                }
+            }
         }
     }
     ret
@@ -297,7 +307,12 @@ pub async fn download_image(
     let file_path = category_dir.join(&filename);
 
     // Download
-    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
         return Err(format!("Request failed: {}", response.status()));
     }

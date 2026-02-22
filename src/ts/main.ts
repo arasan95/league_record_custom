@@ -614,8 +614,11 @@ async function main() {
                     // Use showErrorModal temporarily for notification
                     ui.showErrorModal(`Update Available: v${update.version}\n\nPlease check the About tab in Settings to install.`);
                 }
-            } catch (e) {
-                console.error("Startup update check failed:", e);
+            } catch (e: any) {
+                // Ignore remote update check failures in dev/unconfigured environments
+                if (!e?.toString()?.includes("release JSON")) {
+                    console.error("Startup update check failed:", e);
+                }
             }
         }
     });

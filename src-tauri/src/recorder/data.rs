@@ -53,6 +53,92 @@ pub struct Participant {
     pub summoner_level: Option<i32>,
     #[serde(default)]
     pub rank: Option<String>,
+
+    // ======== TFT Specific Fields ======== //
+    #[serde(default, alias = "placement")]
+    pub placement: Option<i64>,
+    #[serde(default, alias = "players_eliminated")]
+    pub players_eliminated: Option<i64>,
+    #[serde(default, alias = "level")]
+    pub level: Option<i64>,
+    #[serde(default, alias = "traits")]
+    pub r#traits: Option<Vec<TftTrait>>,
+    #[serde(default, alias = "units")]
+    pub units: Option<Vec<TftUnit>>,
+    #[serde(default, alias = "companion")]
+    pub companion: Option<TftCompanion>,
+}
+
+#[cfg_attr(test, derive(specta::Type))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TftUnit {
+    #[serde(alias = "character_id")]
+    pub character_id: String,
+    pub name: String,
+    pub rarity: i64,
+    pub tier: i64,
+    #[serde(default, alias = "item_names")]
+    pub item_names: Vec<String>,
+}
+
+#[cfg_attr(test, derive(specta::Type))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TftTrait {
+    pub name: String,
+    #[serde(alias = "num_units")]
+    pub num_units: i64,
+    pub style: i64,
+    #[serde(alias = "tier_current")]
+    pub tier_current: i64,
+    #[serde(alias = "tier_total")]
+    pub tier_total: i64,
+}
+
+#[cfg_attr(test, derive(specta::Type))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TftCompanion {
+    #[serde(rename = "contentID", alias = "content_ID")]
+    pub content_i_d: String,
+    #[serde(rename = "skinID", alias = "skin_ID")]
+    pub skin_i_d: i64,
+    pub species: String,
+}
+
+impl From<riot_datatypes::lcu::TftUnit> for TftUnit {
+    fn from(u: riot_datatypes::lcu::TftUnit) -> Self {
+        Self {
+            character_id: u.character_id,
+            name: u.name,
+            rarity: u.rarity,
+            tier: u.tier,
+            item_names: u.item_names,
+        }
+    }
+}
+
+impl From<riot_datatypes::lcu::TftTrait> for TftTrait {
+    fn from(t: riot_datatypes::lcu::TftTrait) -> Self {
+        Self {
+            name: t.name,
+            num_units: t.num_units,
+            style: t.style,
+            tier_current: t.tier_current,
+            tier_total: t.tier_total,
+        }
+    }
+}
+
+impl From<riot_datatypes::lcu::TftCompanion> for TftCompanion {
+    fn from(c: riot_datatypes::lcu::TftCompanion) -> Self {
+        Self {
+            content_i_d: c.content_i_d,
+            skin_i_d: c.skin_i_d,
+            species: c.species,
+        }
+    }
 }
 
 #[cfg_attr(test, derive(specta::Type))]
@@ -94,6 +180,8 @@ pub struct GameMetadata {
     pub gold_timeline: Vec<GoldFrame>,
     #[serde(default)]
     pub game_version: String,
+    #[serde(default)]
+    pub game_duration: i64,
     #[serde(default)]
     pub lp_diff: Option<i32>,
 }
