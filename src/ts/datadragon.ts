@@ -7,6 +7,112 @@ import { getCurrentPatchVersion } from "./version";
 const cachedItemDataByVersion: Record<string, Record<string, any>> = {};
 let cachedChampionData: Record<string, any> | null = null;
 
+// TFT Cache Maps
+let tftTraitIconMap: Record<string, string> = {};
+let tftUnitIconMap: Record<string, string> = {};
+let tftTraitStyleMap: Record<string, Record<number, number>> = {};
+let tftUnitCostMap: Record<string, number> = {};
+let isTftDataLoaded = false;
+
+let tftDDTraitMap: Record<string, string> = {};
+let isTftDDTraitLoaded = false;
+
+let tftDDItemMap: Record<string, string> = {};
+let isTftDDItemLoaded = false;
+
+export async function ensureTftDDItemLoaded() {
+    if (isTftDDItemLoaded) return;
+    try {
+        const version = getCurrentPatchVersion();
+        const cacheDir = "items_cache";
+        const filePath = `${cacheDir}/tft_items_dd_${version}.json`;
+        let data: any = null;
+
+        if (await exists(filePath, { baseDir: BaseDirectory.AppLocalData })) {
+            const raw = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
+            const str = new TextDecoder().decode(raw);
+            try {
+                data = JSON.parse(str);
+            } catch (e) { console.error("Bad TFT DD Item cache", e); }
+        }
+
+        if (!data) {
+            const url = `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/tft-item.json`;
+            const res = await fetch(url);
+            if (res.ok) {
+                const json = await res.json();
+                data = json.data;
+                try {
+                    if (!(await exists(cacheDir, { baseDir: BaseDirectory.AppLocalData }))) {
+                         await mkdir(cacheDir, { baseDir: BaseDirectory.AppLocalData, recursive: true });
+                    }
+                    await writeFile(filePath, new TextEncoder().encode(JSON.stringify(data)), { baseDir: BaseDirectory.AppLocalData });
+                } catch(e) { }
+            }
+        }
+
+        if (data) {
+            for (const key of Object.keys(data)) {
+                const item = data[key];
+                if (item.image && item.image.full) {
+                    // key is something like "TFT_Item_BFSword" or "TFTTutorial_Items/TFTTutorial_Item_RecurveBow"
+                    // item.id is usually the clean name like "TFT_Item_BFSword"
+                    const lookupKey = (item.id || key).split("/").pop()!.toLowerCase();
+                    tftDDItemMap[lookupKey] = item.image.full;
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load DD TFT Items", e);
+    }
+    isTftDDItemLoaded = true;
+}
+
+export async function ensureTftDDTraitLoaded() {
+    if (isTftDDTraitLoaded) return;
+    try {
+        const version = getCurrentPatchVersion();
+        const cacheDir = "items_cache";
+        const filePath = `${cacheDir}/tft_traits_dd_${version}.json`;
+        let data: any = null;
+
+        if (await exists(filePath, { baseDir: BaseDirectory.AppLocalData })) {
+            const raw = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
+            const str = new TextDecoder().decode(raw);
+            try {
+                data = JSON.parse(str);
+            } catch (e) { console.error("Bad TFT DD Trait cache", e); }
+        }
+
+        if (!data) {
+            // "ja_JP" works safely to fetch the generic images; mapping names stays the same in image map.
+            const url = `https://ddragon.leagueoflegends.com/cdn/${version}/data/ja_JP/tft-trait.json`;
+            const res = await fetch(url);
+            if (res.ok) {
+                const json = await res.json();
+                data = json.data;
+                try {
+                    if (!(await exists(cacheDir, { baseDir: BaseDirectory.AppLocalData }))) {
+                         await mkdir(cacheDir, { baseDir: BaseDirectory.AppLocalData, recursive: true });
+                    }
+                    await writeFile(filePath, new TextEncoder().encode(JSON.stringify(data)), { baseDir: BaseDirectory.AppLocalData });
+                } catch(e) { }
+            }
+        }
+
+        if (data) {
+            for (const key of Object.keys(data)) {
+                const trait = data[key];
+                if (trait.image && trait.image.full) {
+                    tftDDTraitMap[key.toLowerCase()] = trait.image.full;
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load DD TFT Traits", e);
+    }
+    isTftDDTraitLoaded = true;
+}
 export function getDDragonLocale(lang: string): string {
     switch (lang) {
         case "ko": return "ko_KR";
@@ -281,6 +387,87 @@ export async function getSummonerSpellData(spellId: number, version: string, lan
     return null;
 }
 
+export async function ensureTftDataLoaded(langStr: string = "en") {
+    if (isTftDataLoaded) return;
+    try {
+        let locale = "en_us";
+        if (langStr.startsWith("ja")) locale = "ja_jp";
+        
+        const cacheDir = "items_cache";
+        const filename = `tft_data_${locale}.json`;
+        const filePath = `${cacheDir}/${filename}`;
+        
+        let data: any = null;
+        
+        // Try Cache
+        try {
+            if (!(await exists(cacheDir, { baseDir: BaseDirectory.AppLocalData }))) {
+                await mkdir(cacheDir, { baseDir: BaseDirectory.AppLocalData, recursive: true });
+            }
+            if (await exists(filePath, { baseDir: BaseDirectory.AppLocalData })) {
+                const fsData = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
+                const jsonStr = new TextDecoder().decode(fsData);
+                data = JSON.parse(jsonStr);
+                console.log("Loaded TFT Data from Cache.");
+            }
+        } catch (e) {
+            console.error("Failed to read TFT cache:", e);
+        }
+
+        // Fetch if no cache
+        if (!data) {
+            console.log("Fetching TFT Data from CDragon...");
+            // Use en_us as fallback if localization breaks, but we will try lang locale just in case.
+            const res = await fetch(`https://raw.communitydragon.org/latest/cdragon/tft/en_us.json`);
+            if (!res.ok) throw new Error("Failed to fetch TFT data");
+            data = await res.json();
+            
+            try {
+                const dataToSave = JSON.stringify(data);
+                await writeFile(filePath, new TextEncoder().encode(dataToSave), { baseDir: BaseDirectory.AppLocalData });
+            } catch (e) {
+                console.error("Failed to write TFT cache:", e);
+            }
+        }
+        
+        for (const setKey of Object.keys(data.sets || {})) {
+            const set = data.sets[setKey];
+            if (set.traits) {
+                for (const trait of set.traits) {
+                    if (trait.apiName) {
+                        const lname = trait.apiName.toLowerCase();
+                        if (trait.icon) {
+                            tftTraitIconMap[lname] = trait.icon.toLowerCase().replace(".tex", ".png");
+                        }
+                        if (trait.effects) {
+                            tftTraitStyleMap[lname] = {};
+                            for (const effect of trait.effects) {
+                                tftTraitStyleMap[lname][effect.minUnits] = effect.style;
+                            }
+                        }
+                    }
+                }
+            }
+            if (set.champions) {
+                for (const champ of set.champions) {
+                    if (champ.apiName) {
+                        const lname = champ.apiName.toLowerCase();
+                        if (champ.tileIcon) {
+                            tftUnitIconMap[lname] = champ.tileIcon.toLowerCase().replace(".tex", ".png");
+                        }
+                        if (champ.cost !== undefined) {
+                            tftUnitCostMap[lname] = champ.cost;
+                        }
+                    }
+                }
+            }
+        }
+        isTftDataLoaded = true;
+    } catch (e) {
+        console.error("Error loading TFT data:", e);
+    }
+}
+
 
 
 const CDRAGON_BASE = "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/perk-images/styles";
@@ -377,6 +564,104 @@ export async function getProfileIconUrl(iconId: number): Promise<string> {
     return await getCachedAssetUrl(url, "profileicon", `${iconId}.png`);
 }
 
+export async function getTftUnitIconUrl(characterId: string): Promise<string> {
+    if (!characterId) return "";
+    await ensureTftDataLoaded();
+    const charName = characterId.toLowerCase();
+    
+    // Check mapping first
+    if (tftUnitIconMap[charName]) {
+        const cdragonPath = tftUnitIconMap[charName];
+        // Path is something like "assets/characters/tft16_lulu/hud/tft16_lulu_square.tft_set16.png"
+        // Needs `game/` prefix in CDragon URL
+        let cleanPath = cdragonPath.startsWith('assets') ? `game/${cdragonPath}` : cdragonPath;
+        const url = `https://raw.communitydragon.org/latest/${cleanPath}`;
+        const basename = cdragonPath.split('/').pop() || `${charName}.png`;
+        return await getCachedAssetUrl(url, "tft_unit", basename);
+    }
+
+    // Fallback if not found in map
+    const match = charName.match(/^tft(\d+)_/);
+    const suffix = match ? `.tft_set${match[1]}` : "";
+    const url = `https://raw.communitydragon.org/latest/game/assets/characters/${charName}/hud/${charName}_square${suffix}.png`;
+    return await getCachedAssetUrl(url, "tft_unit", `${charName}${suffix}.png`);
+}
+
+export async function getTftTraitIconUrl(traitName: string): Promise<string> {
+    if (!traitName) return "";
+    const lowerName = traitName.toLowerCase();
+    
+    // Check DataDragon (DD) first for multi-set compatibility
+    await ensureTftDDTraitLoaded();
+    if (tftDDTraitMap[lowerName]) {
+        const version = getCurrentPatchVersion();
+        const filename = tftDDTraitMap[lowerName];
+        const url = `https://ddragon.leagueoflegends.com/cdn/${version}/img/tft-trait/${filename}`;
+        return await getCachedAssetUrl(url, "tft_trait", filename);
+    }
+
+    // Fallback to CommunityDragon (CDragon) map if DD doesn't have it
+    await ensureTftDataLoaded();
+    
+    // Check mapping first
+    if (tftTraitIconMap[lowerName]) {
+        const cdragonPath = tftTraitIconMap[lowerName];
+        let cleanPath = cdragonPath.startsWith('assets') ? `game/${cdragonPath}` : cdragonPath;
+        const url = `https://raw.communitydragon.org/latest/${cleanPath}`;
+        const basename = cdragonPath.split('/').pop() || `${lowerName}.png`;
+        return await getCachedAssetUrl(url, "tft_trait", basename);
+    }
+
+    // Fallback if not found in map
+    const match = lowerName.match(/^tft(\d+)_/);
+    if (!match) {
+        const url = `https://raw.communitydragon.org/latest/game/assets/ux/traiticons/trait_icon_${lowerName}.png`;
+        return await getCachedAssetUrl(url, "tft_trait", `${lowerName}.png`);
+    }
+
+    const setNum = match[1];
+    const traitBase = lowerName.substring(match[0].length); // e.g. "yordle"
+
+    const url1 = `https://raw.communitydragon.org/latest/game/assets/ux/traiticons/trait_icon_${setNum}_${traitBase}.tft_set${setNum}.png`;
+    const url2 = `https://raw.communitydragon.org/latest/game/assets/ux/traiticons/trait_icon_${traitBase}.png`;
+
+    let result = await getCachedAssetUrl(url1, "tft_trait", `${setNum}_${traitBase}.png`);
+    
+    console.log(`[Trait Debug] fetching ${traitName}`);
+    console.log(`[Trait Debug] URL1: ${url1} => result: ${result}`);
+
+    // If getting the first URL fails, getCachedAssetUrl returns the original remote URL.
+    // We check if result === url1 to know if it failed. (Tauri convertFileSrc can start with 'http://asset.localhost' so don't check startsWith('http'))
+    if (result === url1) {
+        console.warn(`[Trait Debug] URL1 failed or wasn't cached, falling back to URL2: ${url2}`);
+        result = await getCachedAssetUrl(url2, "tft_trait", `${traitBase}.png`);
+        console.log(`[Trait Debug] URL2 result: ${result}`);
+    }
+
+    return result;
+}
+
+export async function getTftItemIconUrl(itemName: string): Promise<string> {
+    if (!itemName) return "";
+    const lowerName = itemName.toLowerCase();
+    
+    // Check DataDragon (DD) first
+    await ensureTftDDItemLoaded();
+    if (tftDDItemMap[lowerName]) {
+        const version = getCurrentPatchVersion();
+        const filename = tftDDItemMap[lowerName];
+        const url = `https://ddragon.leagueoflegends.com/cdn/${version}/img/tft-item/${filename}`;
+        return await getCachedAssetUrl(url, "tft_item", filename);
+    }
+
+    // Fallback to CDragon direct URL guessing if not found
+    const match = lowerName.match(/^tft(\d+)_item_(.*)/);
+    const suffix = match ? match[2] : lowerName.replace("tft_item_", "");
+    
+    const url = `https://raw.communitydragon.org/latest/game/assets/maps/particles/tft/item_icons/traits/spatula/set16/${lowerName}.png`;
+    return await getCachedAssetUrl(url, "tft_item", `${lowerName}.png`);
+}
+
 // Helper for concurrency
 async function runConcurrent<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>, onProgress: (completed: number, total: number) => void) {
     let index = 0;
@@ -452,4 +737,26 @@ export async function downloadAllAssets(onProgress: (msg: string) => void) {
         console.error("Asset download failed:", e);
         onProgress(`Error: ${e}`);
     }
+}
+
+export function getTftUnitCost(characterId: string): number | null {
+    if (!characterId) return null;
+    return tftUnitCostMap[characterId.toLowerCase()] ?? null;
+}
+
+export function getTftTraitStyle(apiName: string, numUnits: number): number | null {
+    if (!apiName) return null;
+    const styles = tftTraitStyleMap[apiName.toLowerCase()];
+    if (!styles) return null;
+    
+    // Find the highest minUnits that is <= numUnits
+    let bestStyle = null;
+    let maxMinUnits = -1;
+    for (const minU of Object.keys(styles).map(Number)) {
+        if (numUnits >= minU && minU > maxMinUnits) {
+            maxMinUnits = minU;
+            bestStyle = styles[minU];
+        }
+    }
+    return bestStyle;
 }
