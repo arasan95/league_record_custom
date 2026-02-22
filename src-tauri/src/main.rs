@@ -83,3 +83,18 @@ fn main() {
         }
     }
 }
+
+#[cfg(test)]
+mod parse_tests {
+    #[test]
+    fn test_parse_metadata() {
+        use crate::recorder::MetadataFile;
+        use std::fs;
+        use std::path::Path;
+        let raw = fs::read_to_string(Path::new(r"C:\Users\fjnce\Downloads\league_record-master - 1\LeagueRecord_custom\.vscode\record\2026-02-22_12-20.json")).unwrap();
+        match serde_json::from_str::<MetadataFile>(&raw) {
+            Ok(_) => println!("Parsed completely fine!"),
+            Err(e) => panic!("Parse error: {}", e),
+        }
+    }
+}

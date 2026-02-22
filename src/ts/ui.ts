@@ -7,7 +7,8 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import * as clipboard from "@tauri-apps/plugin-clipboard-manager";
 
 import { commands, type GameMetadata, type GoldFrame, type ParticipantGold, type MarkerFlags, type Recording, type Settings, type MatchTeam, type Participant, type GameEvent } from "./bindings";
-import { getChampionIconUrl, getChampionIconUrlById, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, getItemPrice, getChampionNameById, getDetailedChampionData, getSummonerSpellData, getItemData } from "./datadragon";
+
+import { getChampionIconUrl, getChampionIconUrlById, getTftUnitIconUrl, getTftTraitIconUrl, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, ensureTftDataLoaded, getItemPrice, getChampionNameById, getDetailedChampionData, getSummonerSpellData, getItemData, getTftItemIconUrl } from "./datadragon";
 import { getCurrentPatchVersion, getSpawnTimers } from "./version";
 import { InventoryTimeline } from "./timeline";
 import { getObjectiveConfig } from "./objectives";
@@ -785,10 +786,12 @@ export default class UI {
             }
 
 
-            if (isVisible) {
-                li.style.display = "";
-            } else {
-                li.style.display = "none";
+            if (li) {
+                if (isVisible) {
+                    li.style.display = "";
+                } else {
+                    li.style.display = "none";
+                }
             }
             
             return li;
@@ -815,6 +818,7 @@ export default class UI {
         onRename: (videoId: string) => void,
         onDelete: (videoId: string) => void,
     ) => {
+        console.log("createRecordingItem:", recording.videoId, recording.metadata);
         const videoName = toVideoName(recording.videoId);
         let displayContent: HTMLElement[] = [this.vjs.dom.createEl("span", {}, { class: "video-name" }, videoName) as HTMLElement];
         let liClass = "recording-item";
@@ -878,6 +882,8 @@ export default class UI {
                 queueName = "Ranked";
             } else if (qLower.includes("normal") || qLower.includes("draft") || qLower.includes("blind")) {
                 queueName = "Normal";
+            } else if (qLower.includes("tft") || qLower.includes("teamfight") || [1090, 1100, 1130, 1160, 1220].includes(meta.queue?.id ?? 0)) {
+                queueName = "TFT";
             }
 
             if (queueName === "Unknown Queue" || queueName === "Unknown") {
@@ -946,18 +952,20 @@ export default class UI {
             const minutes = Math.floor(durationSec / 60);
             const seconds = durationSec % 60;
             const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            const dateSpan = this.vjs.dom.createEl("div", {}, { class: "sidebar-date" }, dateStr);
 
             // --- CS Calculation ---
             const totalCS = meta.stats.totalMinionsKilled + meta.stats.neutralMinionsKilled;
             const csPerMin = durationSec > 0 ? (totalCS / (durationSec / 60)).toFixed(1) : "0.0";
 
-            // --- Flattened Layout Elements (Refactored) ---
+            // Flattened Layout Elements
+            const mainCol = this.vjs.dom.createEl("div", {}, { class: "sidebar-main" });
+            const rightCol = this.vjs.dom.createEl("div", {}, { class: "sidebar-right" });
             
             // 1. Header: Time and Mode
             const headerRow = this.vjs.dom.createEl("div", {}, { class: "sidebar-header-row" });
             const timeSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-time" }, timeStr);
             
-            // Rename Swiftplay -> Swift
             // Rename Swiftplay -> Swift based on ID 480
             let displayMode = queueName;
             const queueId = meta.queue?.id;
@@ -968,68 +976,236 @@ export default class UI {
             const modeSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-mode" }, displayMode);
             headerRow.append(timeSpan, modeSpan);
 
-            // 2. Body: Icon + Stats
             const bodyRow = this.vjs.dom.createEl("div", {}, { class: "sidebar-body-row" });
-            
-            // Icon
             const mainIconImg = this.vjs.dom.createEl("img", {}, { class: "main-champ-img" }) as HTMLImageElement;
-            
-            // Stats Column (KDA, CS, Result)
-            const statsCol = this.vjs.dom.createEl("div", {}, { class: "sidebar-stats" });
-            const kdaSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-kda" }, kda);
-            const csSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-cs" }, `${totalCS} CS (${csPerMin}/m)`);
-            const resultSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-result " + resultClass }, result);
-            
-            statsCol.append(kdaSpan, csSpan, resultSpan);
 
-            // Add LP Diff if available (ONLY for Ranked Queues)
-            if (meta.lpDiff !== undefined && meta.lpDiff !== null && meta.queue?.isRanked) {
-                const diff = meta.lpDiff;
-                const diffStr = diff >= 0 ? `+${diff} LP` : `${diff} LP`;
-                const lpClass = "sidebar-lp " + resultClass; // Reuse result color logic
-                const lpSpan = this.vjs.dom.createEl("span", {}, { class: lpClass }, diffStr);
-                statsCol.append(lpSpan);
-            }
-
-            bodyRow.append(mainIconImg, statsCol);
-
-            // Main Column (Header + Body)
-            const mainCol = this.vjs.dom.createEl("div", {}, { class: "sidebar-main" });
-            mainCol.append(headerRow, bodyRow);
-
-            // Right: Meta (Date, Participants)
-            const rightCol = this.vjs.dom.createEl("div", {}, { class: "sidebar-right" });
-            
-            // Date Row
-            const dateSpan = this.vjs.dom.createEl("div", {}, { class: "sidebar-date" }, dateStr);
-            
-            // Participants
             const participantsContainer = this.vjs.dom.createEl("div", {}, { class: "sidebar-participants" });
             const team1Row = this.vjs.dom.createEl("div", {}, { class: "participant-row" }) as HTMLElement; // Blue
             const team2Row = this.vjs.dom.createEl("div", {}, { class: "participant-row" }) as HTMLElement; // Red
             participantsContainer.append(team1Row, team2Row);
 
-            rightCol.append(dateSpan, participantsContainer);
+            if (queueName === "TFT") {
+                // =============== TFT Layout ===============
+                liClass += " tft-match";
+                
+                const statsCol = this.vjs.dom.createEl("div", {}, { class: "sidebar-stats tft-stats" });
+                const placementClass = selfPart?.placement === 1 ? "tft-1st" : (selfPart?.placement && selfPart?.placement <= 4 ? "tft-top4" : "tft-bot4");
+                const placementStr = selfPart?.placement ? `#${selfPart.placement}` : "-";
+                
+                const placementSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-placement " + placementClass }, placementStr);
+                
+                // Append Placement and Date to the header row
+                headerRow.append(placementSpan, dateSpan);
+                
+                const tftTraits = this.vjs.dom.createEl("div", {}, { class: "sidebar-tft-traits" });
+                if (selfPart?.traits) {
+                    // Sort traits by tierCurrent, then numUnits
+                    const activeTraits = [...selfPart.traits]
+                        .filter(t => t.tierCurrent > 0)
+                        .sort((a, b) => b.tierCurrent - a.tierCurrent || b.numUnits - a.numUnits)
+                        .slice(0, 7); // display up to 7 traits
+                        
+                    for (const trait of activeTraits) {
+                        let styleClass = "tft-inactive";
+                        const { tierCurrent, tierTotal } = trait;
+                        
+                        if (tierCurrent > 0) {
+                            if (tierTotal === 1 && tierCurrent === 1) styleClass = "tft-unique";
+                            else if (tierTotal === 2) {
+                                if (tierCurrent === 1) styleClass = "tft-bronze";
+                                else if (tierCurrent >= 2) styleClass = "tft-gold";
+                            }
+                            else if (tierTotal === 3) {
+                                if (tierCurrent === 1) styleClass = "tft-bronze";
+                                else if (tierCurrent === 2) styleClass = "tft-silver";
+                                else if (tierCurrent >= 3) styleClass = "tft-gold";
+                            }
+                            else if (tierTotal === 4) {
+                                if (tierCurrent === 1) styleClass = "tft-bronze";
+                                else if (tierCurrent === 2) styleClass = "tft-silver";
+                                else if (tierCurrent === 3) styleClass = "tft-gold";
+                                else if (tierCurrent >= 4) styleClass = "tft-prismatic";
+                            }
+                            else if (tierTotal >= 5) {
+                                if (tierCurrent === 1) styleClass = "tft-bronze";
+                                else if (tierCurrent === 2) styleClass = "tft-silver";
+                                else if (tierCurrent === 3) styleClass = "tft-silver";
+                                else if (tierCurrent === 4) styleClass = "tft-gold";
+                                else if (tierCurrent >= 5) styleClass = "tft-prismatic";
+                            }
+                        }
+                        
+                        const trWrapper = this.vjs.dom.createEl("div", { title: trait.name.replace(/^TFT\d+_/, "") }, { class: "tft-trait-wrapper " + styleClass });
+                        const trImg = this.vjs.dom.createEl("div", {}, { class: "tft-trait" }) as HTMLElement;
+                        const trNum = this.vjs.dom.createEl("span", {}, { class: "tft-trait-num" }, `${trait.numUnits}`);
+                        trWrapper.append(trImg, trNum);
+                        tftTraits.append(trWrapper);
+                    }
+                }
+                
+                // Add Units
+                const tftUnits = this.vjs.dom.createEl("div", {}, { class: "sidebar-tft-units" });
+                if (selfPart?.units) {
+                    // Only show 1+ cost units, limit to reasonable amount
+                    const activeUnits = [...selfPart.units].slice(0, 10);
+                    
+                    for (const unit of activeUnits) {
+                        let cost = 1;
+                        if (unit.rarity === 0) cost = 1;
+                        else if (unit.rarity === 1) cost = 2;
+                        else if (unit.rarity === 2) cost = 3;
+                        else if (unit.rarity === 3 || unit.rarity === 4) cost = 4;
+                        else if (unit.rarity >= 5) cost = 5;
+                        
+                        const costClass = `tft-cost-${cost}`;
+                        const unitContainer = this.vjs.dom.createEl("div", {}, { class: `tft-unit-wrapper ${costClass}` });
+                        const unitImg = this.vjs.dom.createEl("img", { title: unit.characterId.replace(/^TFT\d+_/, "") }, { class: "tft-unit-img" }) as HTMLImageElement;
+                        unitContainer.append(unitImg);
+                        
+                        if (unit.tier > 1) {
+                            const starClass = unit.tier === 3 ? "star-gold" : "star-silver";
+                            const starSpan = this.vjs.dom.createEl("span", {}, { class: `tft-unit-stars ${starClass}` }, "★".repeat(unit.tier));
+                            unitContainer.append(starSpan);
+                        }
 
-            // Append All to Grid Container
-            mainContent.append(mainCol, rightCol);
+                        // Add Items Container
+                        const itemsContainer = this.vjs.dom.createEl("div", {}, { class: "tft-unit-items" });
+                        if (unit.itemNames && unit.itemNames.length > 0) {
+                            for (const itemName of unit.itemNames) {
+                                const itemImg = this.vjs.dom.createEl("img", { title: itemName.replace(/^TFT\d+_Item_/, "") }, { class: "tft-unit-item-img" }) as HTMLImageElement;
+                                itemsContainer.append(itemImg);
+                            }
+                        }
+                        unitContainer.append(itemsContainer);
+
+                        tftUnits.append(unitContainer);
+                    }
+                }
+                
+                statsCol.append(tftTraits, tftUnits);
+                bodyRow.append(statsCol);
+                
+            } else {
+                // =============== Normal Layout ===============
+                // Stats Column (KDA, CS, Result)
+                const statsCol = this.vjs.dom.createEl("div", {}, { class: "sidebar-stats" });
+                const kdaSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-kda" }, kda);
+                const csSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-cs" }, `${totalCS} CS (${csPerMin}/m)`);
+                const resultSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-result " + resultClass }, result);
+                
+                statsCol.append(kdaSpan, csSpan, resultSpan);
+
+                // Add LP Diff if available (ONLY for Ranked Queues)
+                if (meta.lpDiff !== undefined && meta.lpDiff !== null && meta.queue?.isRanked) {
+                    const diff = meta.lpDiff;
+                    const diffStr = diff >= 0 ? `+${diff} LP` : `${diff} LP`;
+                    const lpClass = "sidebar-lp " + resultClass; // Reuse result color logic
+                    const lpSpan = this.vjs.dom.createEl("span", {}, { class: lpClass }, diffStr);
+                    statsCol.append(lpSpan);
+                }
+
+                bodyRow.append(mainIconImg, statsCol);
+            }
+
+            // Main Column (Header + Body)
+            mainCol.append(headerRow, bodyRow);
+
+            if (queueName === "TFT") {
+                mainContent.append(mainCol);
+            } else {
+                participantsContainer.append(team1Row, team2Row);
+                rightCol.append(dateSpan, participantsContainer);
+                mainContent.append(mainCol, rightCol);
+            }
 
             // Load Icons Async
             void (async () => {
                 try {
                     const selfParticipant = meta.participants.find((p) => p.participantId === meta.participantId);
-                    if (selfParticipant) {
-                            const url = await getChampionIconUrlById(selfParticipant.championId);
-                            mainIconImg.src = url;
-                            mainIconImg.onerror = () => { console.error("Failed to load main icon:", url); };
-                    } else {
-                            const url = await getChampionIconUrl(champion);
-                            mainIconImg.src = url;
+                    
+                    if (queueName === "TFT" && selfParticipant) {
+                     // For TFT, set Main Icon directly to Companion if available, otherwise fallback
+                     if (selfParticipant.companion) {
+                         // DataDragon companion URL format (approximate logic, can enhance later)
+                         const comp = selfParticipant.companion;
+                         // Just as fallback, leave it blank or load a companion icon if we know the URL mapping
+                         // For now, let's keep it generic or use their first unit
+                         const url = await getTftUnitIconUrl(selfParticipant.units?.[0]?.characterId || "");
+                         if (url) mainIconImg.src = url;
+                     }
+
+                     // Load Unit and Trait icons
+                     const tftStatsCol = bodyRow.querySelector(".sidebar-stats.tft-stats");
+                     const unitWrappers = tftStatsCol?.querySelectorAll(".tft-unit-wrapper");
+                     const traitImgs = tftStatsCol?.querySelectorAll(".tft-trait");
+                     
+                     if (unitWrappers && selfParticipant.units) {
+                         const maxLen = Math.min(unitWrappers.length, selfParticipant.units.length);
+                         for (let i = 0; i < maxLen; i++) {
+                             const unit = selfParticipant.units[i];
+                             const wrapper = unitWrappers[i];
+                             
+                             const img = wrapper.querySelector(".tft-unit-img") as HTMLImageElement;
+                             if (img) {
+                                 // Don't await inline, run async block
+                                 getTftUnitIconUrl(unit.characterId).then(url => {
+                                     if (url) {
+                                         img.src = url;
+                                         img.onerror = () => { img.style.opacity = "0"; };
+                                     }
+                                 }).catch(console.error);
+                             }
+
+                             const itemImgs = wrapper.querySelectorAll(".tft-unit-item-img");
+                             if (itemImgs && unit.itemNames) {
+                                 for (let j = 0; j < Math.min(itemImgs.length, unit.itemNames.length); j++) {
+                                     const itemImg = itemImgs[j] as HTMLImageElement;
+                                     // Don't await inline
+                                     getTftItemIconUrl(unit.itemNames[j]).then(itemUrl => {
+                                         if (itemUrl) {
+                                             itemImg.src = itemUrl;
+                                             itemImg.onerror = () => { itemImg.style.display = "none"; };
+                                         }
+                                     }).catch(console.error);
+                                 }
+                             }
+                         }
+                     }
+                     
+                     if (traitImgs && selfParticipant.traits) {
+                         const activeTraits = [...selfParticipant.traits]
+                             .filter(t => t.tierCurrent > 0)
+                             .sort((a, b) => b.tierCurrent - a.tierCurrent || b.numUnits - a.numUnits)
+                             .slice(0, 7);
+                         for (let i = 0; i < Math.min(traitImgs.length, activeTraits.length); i++) {
+                             const el = traitImgs[i] as HTMLElement;
+                             // Don't await inline
+                             getTftTraitIconUrl(activeTraits[i].name).then(url => {
+                                 if (url) {
+                                     el.style.webkitMaskImage = `url("${url}")`;
+                                     el.style.webkitMaskSize = "contain";
+                                     el.style.webkitMaskRepeat = "no-repeat";
+                                     el.style.webkitMaskPosition = "center";
+                                     el.style.backgroundColor = "currentColor";
+                                 }
+                             }).catch(console.error);
+                         }
+                     }
+
+                } else {
+                    try {
+                        if (selfParticipant) {
+                                const url = await getChampionIconUrlById(selfParticipant.championId);
+                                mainIconImg.src = url;
+                                mainIconImg.onerror = () => { console.error("Failed to load main icon:", url); };
+                        } else {
+                                const url = await getChampionIconUrl(champion);
+                                mainIconImg.src = url;
+                        }
+                    } catch (e) {
+                        console.error("Error fetching main icon:", e);
                     }
-                } catch (e) {
-                    console.error("Error fetching main icon:", e);
                 }
-                
                 const p100 = meta.participants.filter(p => {
                     if ("teamId" in p && p.teamId === 200) return false;
                     if ("teamId" in p && p.teamId === 100) return true;
@@ -1055,6 +1231,9 @@ export default class UI {
 
                 for (const p of p100) void appendIcon(p, team1Row);
                 for (const p of p200) void appendIcon(p, team2Row);
+                } catch (e) {
+                    console.error("Error loading icons in sidebar:", e);
+                }
             })();
 
             displayContent = [mainContent];
@@ -1469,6 +1648,9 @@ export default class UI {
 
         this.currentGameVersion = data.gameVersion || (await getCurrentPatchVersion());
         await ensureItemDataLoaded(this.currentGameVersion);
+        if (data.queue?.name === "Teamfight Tactics" || data.queue?.id === 1220) {
+            await ensureTftDataLoaded();
+        }
         
         // Build ID Map: Event participant_id (1-10 fixed slots) -> Real participantId
         // Events usually use 1-5 for Blue (100) and 6-10 for Red (200).
@@ -2117,12 +2299,24 @@ export default class UI {
 
         // Order: [BaronTimer] [BlueTeam] [CenterTime] [RedTeam] [DragonTimer]
         spectatorHeader.append(bTimer.container);
-        spectatorHeader.append(createTeamHeader("blue"));
+        
+        const blueHeader = createTeamHeader("blue");
+        spectatorHeader.append(blueHeader);
+        
         const centerParams = this.vjs.dom.createEl("div", {}, { class: "spec-center" }, "00:00"); 
         this.headerTimeText = centerParams as HTMLElement;
         spectatorHeader.append(centerParams);
-        spectatorHeader.append(createTeamHeader("red"));
+        
+        const redHeader = createTeamHeader("red");
+        spectatorHeader.append(redHeader);
+        
         spectatorHeader.append(dTimer.container);
+
+        const isTFT = data.queue?.id === 1220;
+        if (isTFT) {
+            blueHeader.style.display = "none";
+            redHeader.style.display = "none";
+        }
 
         
         // Append Header to Player - NO, it is already in #main
@@ -2709,6 +2903,14 @@ export default class UI {
             return teamDiv;
         };
 
+        if (data.queue?.id === 1220) {
+            if (this.scoreboardEl) {
+                this.scoreboardEl.style.display = "none";
+            }
+            this.player.off("timeupdate", this.updateTimelineItems);
+            return;
+        }
+
         const topDiv = await renderTeam(100, sorted100, sorted200);
         const botDiv = await renderTeam(200, sorted200, sorted100);
 
@@ -2793,10 +2995,10 @@ export default class UI {
         }
 
         if (this.scoreboardEl) {
+            this.scoreboardEl.style.display = "";
             this.scoreboardEl.append(topDiv, centerDiv, botDiv);
             
             // Remove ALL possible duplicate scoreboards
-            // Reuse 'playerEl' from earlier scope
             const oldScoreboards = playerEl.querySelectorAll(".scoreboard");
             oldScoreboards.forEach(el => el.remove());
 

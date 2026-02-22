@@ -51,13 +51,70 @@ pub struct ParticipantTimeline {
 #[serde(rename_all = "camelCase")]
 pub struct Participant {
     pub participant_id: ParticipantId,
+    #[serde(default)]
     pub team_id: i64,
+    #[serde(default)]
     pub champion_id: ChampionId,
+    #[serde(default)]
     pub spell1_id: SpellId,
+    #[serde(default)]
     pub spell2_id: SpellId,
+    #[serde(default)]
     pub stats: Stats,
     #[serde(default)]
     pub timeline: Option<ParticipantTimeline>,
+
+    // ======== TFT Specific Fields ======== //
+    #[serde(default)]
+    pub placement: Option<i64>,
+    #[serde(default)]
+    pub players_eliminated: Option<i64>,
+    #[serde(default)]
+    pub level: Option<i64>,
+    #[serde(default)]
+    pub r#traits: Option<Vec<TftTrait>>,
+    #[serde(default)]
+    pub units: Option<Vec<TftUnit>>,
+    #[serde(default)]
+    pub companion: Option<TftCompanion>,
+}
+
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TftUnit {
+    #[serde(alias = "character_id")]
+    pub character_id: String,
+    pub name: String,
+    pub rarity: i64,
+    pub tier: i64,
+    #[serde(default, alias = "item_names")]
+    pub item_names: Vec<String>,
+}
+
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TftTrait {
+    pub name: String,
+    #[serde(alias = "num_units")]
+    pub num_units: i64,
+    pub style: i64,
+    #[serde(alias = "tier_current")]
+    pub tier_current: i64,
+    #[serde(alias = "tier_total")]
+    pub tier_total: i64,
+}
+
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TftCompanion {
+    #[serde(rename = "contentID", alias = "content_ID")]
+    pub content_i_d: String,
+    #[serde(rename = "skinID", alias = "skin_ID")]
+    pub skin_i_d: i64,
+    pub species: String,
 }
 
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -160,4 +217,44 @@ pub struct MatchTeam {
 pub struct Ban {
     pub champion_id: ChampionId,
     pub pick_turn: i64,
+}
+
+// ======== TFT Match History Data Structures ======== //
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TftHistoryResponse {
+    pub games: Vec<TftHistoryGame>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TftHistoryGame {
+    pub json: TftGameJson,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TftGameJson {
+    pub game_id: GameId,
+    #[serde(alias = "game_length")]
+    pub game_length: f64,
+    pub queue_id: QueueId,
+    pub participants: Vec<TftHistoryParticipant>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TftHistoryParticipant {
+    pub puuid: String,
+    pub placement: i64,
+    #[serde(alias = "players_eliminated")]
+    pub players_eliminated: i64,
+    pub level: i64,
+    #[serde(default)]
+    pub r#traits: Option<Vec<TftTrait>>,
+    #[serde(default)]
+    pub units: Option<Vec<TftUnit>>,
+    #[serde(default)]
+    pub companion: Option<TftCompanion>,
 }

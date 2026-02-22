@@ -654,6 +654,12 @@ impl GameListener {
                                                 champ_level: Some(player.level),
                                                 summoner_level: None,
                                                 rank: None,
+                                                placement: None,
+                                                players_eliminated: None,
+                                                level: None,
+                                                r#traits: None,
+                                                units: None,
+                                                companion: None,
                                             });
                                         }
                                         log::info!(

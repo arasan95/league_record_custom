@@ -1,0 +1,241 @@
+﻿{
+    "json":  {
+                 "endOfGameResult":  "GameComplete",
+                 "gameCreation":  1771730444000,
+                 "gameId":  566727332,
+                 "game_datetime":  "1771732472993",
+                 "game_id":  566727332,
+                 "game_length":  2003.62646484375,
+                 "game_version":  "Linux Version 16.4.748.0682 (Feb 20 2026/12:43:10) [PUBLIC] \u003cReleases/16.4\u003e",
+                 "mapId":  22,
+                 "participants":  [
+                                      {
+                                          "companion":  {
+                                                            "content_ID":  "5897ad9f-4665-4372-8f3e-6c878adb8918",
+                                                            "item_ID":  1,
+                                                            "skin_ID":  1,
+                                                            "species":  "PetTFTAvatar"
+                                                        },
+                                          "gold_left":  0,
+                                          "last_round":  30,
+                                          "level":  9,
+                                          "missions":  {
+                                                           "PlayerScore2":  199.0
+                                                       },
+                                          "placement":  1,
+                                          "players_eliminated":  0,
+                                          "puuid":  "80dc94f4-7da1-5e41-b234-7a3512f09021",
+                                          "pve_score":  645165,
+                                          "pve_wonrun":  true,
+                                          "riotIdGameName":  "テスト",
+                                          "riotIdTagline":  "4897",
+                                          "time_eliminated":  1996.40966796875,
+                                          "total_damage_to_players":  0,
+                                          "traits":  [
+                                                         {
+                                                             "name":  "TFT16_Bilgewater",
+                                                             "num_units":  1,
+                                                             "style":  0,
+                                                             "tier_current":  0,
+                                                             "tier_total":  4
+                                                         },
+                                                         {
+                                                             "name":  "TFT16_Brawler",
+                                                             "num_units":  1,
+                                                             "style":  0,
+                                                             "tier_current":  0,
+                                                             "tier_total":  3
+                                                         },
+                                                         {
+                                                             "name":  "TFT16_Defender",
+                                                             "num_units":  1,
+                                                             "style":  0,
+                                                             "tier_current":  0,
+                                                             "tier_total":  3
+                                                         },
+                                                         {
+                                                             "name":  "TFT16_Demacia",
+                                                             "num_units":  1,
+                                                             "style":  0,
+                                                             "tier_current":  0,
+                                                             "tier_total":  4
+                                                         },
+                                                         {
+                                                             "name":  "TFT16_Gunslinger",
+                                                             "num_units":  1,
+                                                             "style":  0,
+                                                             "tier_current":  0,
+                                                             "tier_total":  2
+                                                         },
+                                                         {
+                                                             "name":  "TFT16_Invoker",
+                                                             "num_units":  1,
+                                                             "style":  0,
+                                                             "tier_current":  0,
+                                                             "tier_total":  2
+                                                         },
+                                                         {
+                                                             "name":  "TFT16_Ionia",
+                                                             "num_units":  1,
+                                                             "style":  0,
+                                                             "tier_current":  0,
+                                                             "tier_total":  4
+                                                         },
+                                                         {
+                                                             "name":  "TFT16_Juggernaut",
+                                                             "num_units":  1,
+                                                             "style":  0,
+                                                             "tier_current":  0,
+                                                             "tier_total":  3
+                                                         },
+                                                         {
+                                                             "name":  "TFT16_Longshot",
+                                                             "num_units":  2,
+                                                             "style":  1,
+                                                             "tier_current":  1,
+                                                             "tier_total":  4
+                                                         },
+                                                         {
+                                                             "name":  "TFT16_Sorcerer",
+                                                             "num_units":  2,
+                                                             "style":  1,
+                                                             "tier_current":  1,
+                                                             "tier_total":  3
+                                                         },
+                                                         {
+                                                             "name":  "TFT16_Yordle",
+                                                             "num_units":  9,
+                                                             "style":  4,
+                                                             "tier_current":  4,
+                                                             "tier_total":  5
+                                                         },
+                                                         {
+                                                             "name":  "TFT16_Zaun",
+                                                             "num_units":  1,
+                                                             "style":  0,
+                                                             "tier_current":  0,
+                                                             "tier_total":  3
+                                                         }
+                                                     ],
+                                          "units":  [
+                                                        {
+                                                            "character_id":  "TFT16_Lulu",
+                                                            "itemNames":  [
+                                                                              "TFT_Item_StatikkShiv",
+                                                                              "TFT_Item_ArchangelsStaff"
+                                                                          ],
+                                                            "name":  "",
+                                                            "rarity":  0,
+                                                            "tier":  3
+                                                        },
+                                                        {
+                                                            "character_id":  "TFT16_Tristana",
+                                                            "itemNames":  [
+                                                                              "TFT_Item_InfinityEdge",
+                                                                              "TFT_Item_MadredsBloodrazor",
+                                                                              "TFT_Item_Deathblade"
+                                                                          ],
+                                                            "name":  "",
+                                                            "rarity":  1,
+                                                            "tier":  3
+                                                        },
+                                                        {
+                                                            "character_id":  "TFT16_Teemo",
+                                                            "itemNames":  [
+
+                                                                          ],
+                                                            "name":  "",
+                                                            "rarity":  1,
+                                                            "tier":  3
+                                                        },
+                                                        {
+                                                            "character_id":  "TFT16_Poppy",
+                                                            "itemNames":  [
+                                                                              "TFT_Item_ChainVest"
+                                                                          ],
+                                                            "name":  "",
+                                                            "rarity":  1,
+                                                            "tier":  3
+                                                        },
+                                                        {
+                                                            "character_id":  "TFT16_Kobuko",
+                                                            "itemNames":  [
+                                                                              "TFT_Item_SparringGloves",
+                                                                              "TFT_Item_RedBuff",
+                                                                              "TFT_Item_AdaptiveHelm"
+                                                                          ],
+                                                            "name":  "",
+                                                            "rarity":  2,
+                                                            "tier":  3
+                                                        },
+                                                        {
+                                                            "character_id":  "TFT16_Kennen",
+                                                            "itemNames":  [
+                                                                              "TFT_Item_ThiefsGloves",
+                                                                              "TFT_Item_ArchangelsStaff",
+                                                                              "TFT_Item_Morellonomicon"
+                                                                          ],
+                                                            "name":  "",
+                                                            "rarity":  2,
+                                                            "tier":  3
+                                                        },
+                                                        {
+                                                            "character_id":  "TFT16_Veigar",
+                                                            "itemNames":  [
+                                                                              "TFT_Item_SpearOfShojin",
+                                                                              "TFT_Item_RabadonsDeathcap",
+                                                                              "TFT5_Item_BlueBuffRadiant"
+                                                                          ],
+                                                            "name":  "",
+                                                            "rarity":  4,
+                                                            "tier":  3
+                                                        },
+                                                        {
+                                                            "character_id":  "TFT16_Fizz",
+                                                            "itemNames":  [
+                                                                              "TFT_Item_Leviathan",
+                                                                              "TFT_Item_GuardianAngel",
+                                                                              "TFT5_Item_TrapClawRadiant"
+                                                                          ],
+                                                            "name":  "",
+                                                            "rarity":  4,
+                                                            "tier":  2
+                                                        },
+                                                        {
+                                                            "character_id":  "TFT16_Ziggs",
+                                                            "itemNames":  [
+                                                                              "TFT_Item_AdaptiveHelm",
+                                                                              "TFT_Item_RabadonsDeathcap",
+                                                                              "TFT_Item_MadredsBloodrazor"
+                                                                          ],
+                                                            "name":  "",
+                                                            "rarity":  6,
+                                                            "tier":  2
+                                                        }
+                                                    ],
+                                          "win":  true
+                                      }
+                                  ],
+                 "queueId":  1220,
+                 "queue_id":  1220,
+                 "tft_game_type":  "pve",
+                 "tft_set_core_name":  "TFTSet16",
+                 "tft_set_number":  16
+             },
+    "metadata":  {
+                     "data_version":  6,
+                     "info_type":  "summary",
+                     "match_id":  "JP1_566727332",
+                     "participants":  [
+                                          "80dc94f4-7da1-5e41-b234-7a3512f09021"
+                                      ],
+                     "private":  false,
+                     "product":  "TFT",
+                     "tags":  [
+                                  "normal",
+                                  "pve",
+                                  "TFTSet16"
+                              ],
+                     "timestamp":  1771732472993
+                 }
+}
