@@ -40,12 +40,12 @@ jobs:
         working-directory: ./src-tauri/target/release/
 
       - name: Generate latest.json
-        shell: powershell
+        shell: pwsh
         run: |
           $version = "${{ github.ref_name }}"
           if ($version.StartsWith("v")) { $version = $version.Substring(1) }
 
-          $sigPaths = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis/" -Filter "*.exe.sig"
+          $sigPaths = @(Get-ChildItem -Path "src-tauri/target/release/bundle/nsis/" -Filter "*.exe.sig")
           if ($sigPaths.Count -eq 0) {
               Write-Error "Failed to find .exe.sig file for auto updater"
               exit 1
@@ -60,7 +60,7 @@ jobs:
           $notes = "Update v$version"
           if (Test-Path "release_notes.json") {
               $rn = Get-Content "release_notes.json" -Raw | ConvertFrom-Json
-              if ($rn.notes) { $notes = $rn.notes }
+              if ($null -ne $rn.notes) { $notes = $rn.notes }
           }
 
           $json = @{
