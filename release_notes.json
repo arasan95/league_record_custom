@@ -1,3 +1,3 @@
 {
-  "notes": "- Added a Discord-style game mode filter (All / LoL / TFT) on the left sidebar navigation.\n- Reorganized bottom navigation buttons: swapped Settings and Folder order, and added a new Refresh button.\n- Significantly improved TFT match data parsing (items, traits, results) using DataDragon.\n- Improved accuracy of fetching and rendering TFT recordings in the sidebar."
+  "notes": "- Resolved an issue where tooltips would keep appearing."
 }

@@ -1,0 +1,139 @@
+{
+  "id": "YoneQ",
+  "name": "斬命刀",
+  "description": "指定方向に突きを放ち、直線上の敵すべてにダメージを与える。<br><br>このスキルが命中すると「つむじ風」のスタックを数秒間得る。2スタック時に「斬命刀」を使用すると一陣の風をまとって前方にダッシュし、敵を<status>ノックアップ</status>させる。<br><br>「斬命刀」は通常攻撃扱いのため、通常攻撃と同じように強化される。",
+  "tooltip": "前方に突きを放ち、<physicalDamage>{{ qdamage }}の物理ダメージ</physicalDamage>を与える。<br /><br />命中時に{{ buffduration }}秒間スタックを獲得する。2スタック時にこのスキルを使用すると一陣の風をまとって前方にダッシュし、{{ q3knockupduration }}秒間<status>ノックアップ</status>させて<physicalDamage>{{ qdamage }}の物理ダメージ</physicalDamage>を与える。 {{ spellmodifierdescriptionappend }}",
+  "leveltip": {
+    "label": [
+      "基本ダメージ"
+    ],
+    "effect": [
+      "{{ basedamage }} -> {{ basedamageNL }}"
+    ]
+  },
+  "maxrank": 5,
+  "cooldown": [
+    4,
+    4,
+    4,
+    4,
+    4
+  ],
+  "cooldownBurn": "4",
+  "cost": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "costBurn": "0",
+  "datavalues": {},
+  "effect": [
+    null,
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "effectBurn": [
+    null,
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+  ],
+  "vars": [],
+  "costType": "コスト無し",
+  "maxammo": "-1",
+  "range": [
+    450,
+    450,
+    450,
+    450,
+    450
+  ],
+  "rangeBurn": "450",
+  "image": {
+    "full": "YoneQ.png",
+    "sprite": "spell16.png",
+    "group": "spell",
+    "x": 384,
+    "y": 48,
+    "w": 48,
+    "h": 48
+  },
+  "resource": "コスト無し"
+}
