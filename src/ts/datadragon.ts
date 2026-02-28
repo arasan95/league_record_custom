@@ -297,7 +297,9 @@ export async function getDetailedChampionData(championId: number, version: strin
 
     const cacheDir = "items_cache";
     const filename = `champion_${targetVersion}_${locale}_${champName}.json`;
+    const cdragonFilename = `cdragon_${targetVersion}_${champName.toLowerCase()}.json`;
     const filePath = `${cacheDir}/${filename}`;
+    const cdragonFilePath = `${cacheDir}/${cdragonFilename}`;
 
     try {
         if (!(await exists(cacheDir, { baseDir: BaseDirectory.AppLocalData }))) {
@@ -307,7 +309,16 @@ export async function getDetailedChampionData(championId: number, version: strin
             const data = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
             const jsonStr = new TextDecoder().decode(data);
             const json = JSON.parse(jsonStr);
-            detailedChampionCache[cacheKey] = json.data[champName];
+            let champData = json.data[champName];
+            if (!champData.cd_merged) {
+                champData = await mergeCDragonData(champName, champData, cdragonFilePath);
+                champData.cd_merged = true;
+                json.data[champName] = champData;
+                try {
+                    await writeFile(filePath, new TextEncoder().encode(JSON.stringify(json)), { baseDir: BaseDirectory.AppLocalData });
+                } catch(e) {}
+            }
+            detailedChampionCache[cacheKey] = champData;
             return detailedChampionCache[cacheKey];
         }
     } catch(e) {}
@@ -321,17 +332,349 @@ export async function getDetailedChampionData(championId: number, version: strin
         }
         if (res.ok) {
              const json = await res.json();
-             detailedChampionCache[cacheKey] = json.data[champName];
+             let champData = json.data[champName];
+
+             champData = await mergeCDragonData(champName, champData, cdragonFilePath);
+             champData.cd_merged = true;
+             json.data[champName] = champData;
+
+             detailedChampionCache[cacheKey] = champData;
              try {
-                 const dataToSave = JSON.stringify(json);
+                 const dataToSave = JSON.stringify(json); // Save combined DDragon + CDragon JSON to cache
                  await writeFile(filePath, new TextEncoder().encode(dataToSave), { baseDir: BaseDirectory.AppLocalData });
              } catch(e) {}
              return detailedChampionCache[cacheKey];
         }
-    } catch (e) {
-        console.error("Failed to fetch detailed champion data", e);
-    }
+    } catch(e) {}
+
     return null;
+}
+
+async function mergeCDragonData(champName: string, champData: any, cdragonFilePath: string) {
+    try {
+        let cdragonData: any = null;
+        if (await exists(cdragonFilePath, { baseDir: BaseDirectory.AppLocalData })) {
+            const cdDataBytes = await readFile(cdragonFilePath, { baseDir: BaseDirectory.AppLocalData });
+            cdragonData = JSON.parse(new TextDecoder().decode(cdDataBytes));
+        } else {
+            const cdRes = await fetch(`https://raw.communitydragon.org/latest/game/data/characters/${champName.toLowerCase()}/${champName.toLowerCase()}.bin.json`);
+            if (cdRes.ok) {
+                cdragonData = await cdRes.json();
+                try {
+                    await writeFile(cdragonFilePath, new TextEncoder().encode(JSON.stringify(cdragonData)), { baseDir: BaseDirectory.AppLocalData });
+                } catch(e) {}
+            }
+        }
+
+        if (cdragonData) {
+            for (let i = 0; i < champData.spells.length; i++) {
+                const spell = champData.spells[i];
+                const slot = ["Q", "W", "E", "R"][i];
+                
+                // Because some champs (like Aatrox) use "AatroxQWrapperCast" or "AatroxQ3",
+                // we search the keys dynamically for the best match.
+                const searchStr1 = `Characters/${champName}/Spells/${champName}${slot}Ability/${champName}${slot}`;
+                const searchStr2 = `Characters/${champName}/Spells/${champName}${slot}Ability`;
+                const searchStr3 = `Characters/${champName}/Spells/${champName}${slot}`;
+                
+                const allKeys = Object.keys(cdragonData);
+                let cdSpell = null;
+                
+                // 1. Try exact matches first
+                if (cdragonData[searchStr1]) cdSpell = cdragonData[searchStr1];
+                else if (cdragonData[searchStr2]) cdSpell = cdragonData[searchStr2];
+                else if (cdragonData[searchStr3]) cdSpell = cdragonData[searchStr3];
+                
+                // 2. Try fuzzy match (e.g. AatroxQWrapperCast)
+                if (!cdSpell) {
+                    const exactPrefix = `Characters/${champName}/Spells/${champName}${slot}`.toLowerCase();
+                    for (const k of allKeys) {
+                        if (k.toLowerCase().startsWith(exactPrefix) && cdragonData[k].mSpell) {
+                            cdSpell = cdragonData[k];
+                            break;
+                        }
+                    }
+                }
+                
+                // 3. Ultimate fallback (just search the ID)
+                if (!cdSpell) {
+                    const idMatch = spell.id.toLowerCase();
+                    for (const k of allKeys) {
+                        if (k.toLowerCase().includes(idMatch) && cdragonData[k].mSpell) {
+                            cdSpell = cdragonData[k];
+                            break;
+                        }
+                    }
+                }
+
+                if (cdSpell && cdSpell.mSpell) {
+                    spell.cd_castTime = cdSpell.mSpell.mCastTime;
+                    spell.cd_missileSpeed = cdSpell.mSpell.missileSpeed;
+                    spell.cd_castRange = cdSpell.mSpell.castRange ? cdSpell.mSpell.castRange[0] : null;
+                    if (cdSpell.mSpell.castRangeDisplayOverride) spell.cd_castRange = cdSpell.mSpell.castRangeDisplayOverride[0];
+                    spell.cd_lineWidth = cdSpell.mSpell.mLineWidth;
+                    
+                    // First gather DataValues early so calculations can reference them
+                    const cdDataValuesMap: Record<string, any[]> = {};
+                    for (const k in cdSpell.mSpell) {
+                        const val = cdSpell.mSpell[k];
+                        if (typeof val === 'number') {
+                            cdDataValuesMap[k.toLowerCase()] = [val];
+                        } else if (Array.isArray(val) && typeof val[0] === 'number') {
+                            cdDataValuesMap[k.toLowerCase()] = val;
+                        }
+                    }
+                    if (cdSpell.mSpell.DataValues) {
+                        for (const dv of cdSpell.mSpell.DataValues) {
+                            if (dv.mName && dv.mValues && Array.isArray(dv.mValues)) {
+                                cdDataValuesMap[dv.mName.toLowerCase()] = dv.mValues;
+                            }
+                        }
+                    }
+                    spell.cd_dataValuesMap = cdDataValuesMap;
+
+                    const cdIsPercentMap: Record<string, boolean> = {};
+                    const cdCalcMap: Record<string, string> = {};
+                    const scalings: string[] = [];
+
+                    if (cdSpell.mSpell.mSpellCalculations) {
+                        const processFormulaParts = (targetCalcKey: string, formulaParts: any[], isPercent: boolean, arrayMultiplier?: any[]) => {
+                            const localScalings = [];
+                            for (const part of formulaParts) {
+                                // 1. Direct Coefficient (Old style)
+                                if (part.__type === "StatByCoefficientCalculationPart" && part.mCoefficient) {
+                                    let statMatch = part.mStat ? String(part.mStat).replace(/.*\./, "") : "Stat";
+                                    const formId = String(part.mStatFormula);
+                                    const statId = String(part.mStat);
+
+                                    if (statMatch.includes("AttackDamage") || statId === "2" || formId === "2") statMatch = "AD";
+                                    else if (statMatch.includes("AbilityPower") || statId === "1" || formId === "1") statMatch = "AP";
+                                    else if (statMatch.includes("Health") || statId === "11") statMatch = "HP";
+                                    else if (statMatch.includes("Armor") || statId === "5") statMatch = "Armor";
+                                    else if (statMatch.includes("SpellBlock") || statMatch.includes("MagicResist") || statId === "6") statMatch = "MR";
+                                    
+                                    if (statMatch === "AD") statMatch = "AD";
+                                    else if (statMatch === "AP") statMatch = "AP";
+
+                                    let color = "";
+                                    if (statMatch === "AD") color = "#ffb74d";
+                                    else if (statMatch === "AP") color = "#bf55d9";
+
+                                    let coeff = part.mCoefficient;
+                                    if (isPercent) coeff *= 100;
+
+                                    if (arrayMultiplier && arrayMultiplier.length > 0) {
+                                        const maxRank = spell.maxrank || 5;
+                                        let mults = arrayMultiplier;
+                                        if (mults.length > maxRank) mults = mults.slice(1, maxRank + 1);
+                                        const allSame = mults.every((v: any) => v === mults[0]);
+                                        if (allSame || mults.length === 0) {
+                                            const mNum = mults.length > 0 ? mults[0] : 1;
+                                            let scaleStr = `+${Math.round(coeff * mNum * 100)}% ${statMatch}`;
+                                            if (color) scaleStr = `<span style="color:${color}">${scaleStr}</span>`;
+                                            localScalings.push(scaleStr);
+                                            scalings.push(scaleStr);
+                                        } else {
+                                            const joined = mults.map((m: any) => Math.round(coeff * m * 100)).join('/');
+                                            let scaleStr = `+${joined}% ${statMatch}`;
+                                            if (color) scaleStr = `<span style="color:${color}">${scaleStr}</span>`;
+                                            localScalings.push(scaleStr);
+                                            scalings.push(scaleStr);
+                                        }
+                                    } else {
+                                        let scaleStr = `+${Math.round(coeff * 100)}% ${statMatch}`;
+                                        if (color) scaleStr = `<span style="color:${color}">${scaleStr}</span>`;
+                                        localScalings.push(scaleStr);
+                                        scalings.push(scaleStr);
+                                    }
+                                }
+                                
+                                // 2. Named Base Value (Kai'Sa RShield Base, etc.)
+                                if (part.__type === "NamedDataValueCalculationPart" && part.mDataValue) {
+                                    const dvKey = part.mDataValue.toLowerCase();
+                                    if (cdDataValuesMap[dvKey]) {
+                                         let arr = [...cdDataValuesMap[dvKey]];
+                                         if (isPercent) {
+                                             arr = arr.map((v: any) => typeof v === 'number' ? Math.round(v * 1000) / 10 : v);
+                                         }
+                                         if (arrayMultiplier && arrayMultiplier.length > 0) {
+                                             arr = arr.map((v: any, i: number) => {
+                                                 const m = arrayMultiplier.length > i ? arrayMultiplier[i] : arrayMultiplier[arrayMultiplier.length - 1];
+                                                 return typeof v === 'number' ? Math.round(v * m * 100)/100 : v;
+                                             });
+                                         }
+                                         cdDataValuesMap[targetCalcKey.toLowerCase()] = arr;
+                                    }
+                                }
+                                
+                                // 3. Named Ratio (Kai'Sa RShield AD/AP ratios, plus Caitlyn Q nested SubParts)
+                                let namedPart: any = null;
+                                if (part.__type === "StatByNamedDataValueCalculationPart") {
+                                    namedPart = part;
+                                } else if (part.__type === "StatBySubPartCalculationPart" && part.mSubpart && part.mSubpart.__type === "NamedDataValueCalculationPart") {
+                                    namedPart = { mDataValue: part.mSubpart.mDataValue, mStat: part.mStat };
+                                }
+
+                                if (namedPart && namedPart.mDataValue) {
+                                    const dvKey = namedPart.mDataValue.toLowerCase();
+                                    if (cdDataValuesMap[dvKey] && cdDataValuesMap[dvKey].length > 0) {
+                                         let statMatch = namedPart.mDataValue;
+                                         const statId = String(namedPart.mStat);
+                                         if (statMatch.includes("ADRatio") || statId === "2") statMatch = "AD";
+                                         else if (statMatch.includes("APRatio") || statId === "1") statMatch = "AP";
+                                         else statMatch = "Stat";
+
+                                         let color = "";
+                                         if (statMatch === "AD") color = "#ffb74d";
+                                         else if (statMatch === "AP") color = "#bf55d9";
+
+                                         const maxRank = spell.maxrank || 5;
+                                         let ranks = cdDataValuesMap[dvKey];
+                                         if (ranks.length > maxRank) {
+                                              ranks = ranks.slice(1, maxRank + 1);
+                                         }
+                                         
+                                         // If there is an external multiplier array apply it before checking uniformness
+                                         if (arrayMultiplier && arrayMultiplier.length > 0) {
+                                             let mults = arrayMultiplier;
+                                             if (mults.length > maxRank) mults = mults.slice(1, maxRank + 1);
+                                             ranks = ranks.map((rVal: any, i: number) => {
+                                                  const m = mults.length > i ? mults[i] : mults[mults.length - 1];
+                                                  return typeof rVal === 'number' ? rVal * m : rVal;
+                                             });
+                                         }
+                                         
+                                         const allSame = ranks.every((v: any) => v === ranks[0]);
+                                         let scaleStr = "";
+                                         const multiplier = isPercent ? 10000 : 100; // If it's a fraction of a percent like 0.0003, multiplying by 10000 gets 3(%)
+
+                                         if (allSame || ranks.length === 0) {
+                                              const coeff = ranks.length > 0 ? ranks[0] : 0;
+                                              scaleStr = `+${Math.round(coeff * multiplier)}% ${statMatch}`;
+                                         } else {
+                                              const joined = ranks.map((v: any) => Math.round(v * multiplier)).join('/');
+                                              scaleStr = `+${joined}% ${statMatch}`;
+                                         }
+                                         if (color) scaleStr = `<span style="color:${color}">${scaleStr}</span>`;
+
+                                         localScalings.push(scaleStr);
+                                         scalings.push(scaleStr);
+                                    }
+                                }
+                            }
+                            if (localScalings.length > 0) {
+                                cdCalcMap[targetCalcKey.toLowerCase()] = localScalings.join(" ");
+                            }
+                        };
+
+                        // First pass: resolve explicit formulas
+                        for (const calcKey in cdSpell.mSpell.mSpellCalculations) {
+                            const calc = cdSpell.mSpell.mSpellCalculations[calcKey];
+                            const isPercent = calc.mDisplayAsPercent === true;
+                            if (isPercent) cdIsPercentMap[calcKey.toLowerCase()] = true;
+                            if (calc.mFormulaParts) {
+                                processFormulaParts(calcKey, calc.mFormulaParts, isPercent);
+                            }
+                        }
+
+                        // Second pass: resolve modified calculations (e.g. Caitlyn Q SecondaryDamage = InitialDamage * SecondaryMult, or Yone R Damage * 0.5)
+                        for (const calcKey in cdSpell.mSpell.mSpellCalculations) {
+                             const calc = cdSpell.mSpell.mSpellCalculations[calcKey];
+                             if (calc.__type === "GameCalculationModified" && calc.mModifiedGameCalculation && calc.mMultiplier) {
+                                  const baseCalcKey = calc.mModifiedGameCalculation;
+                                  const baseCalc = cdSpell.mSpell.mSpellCalculations[baseCalcKey];
+                                  
+                                  let multArray;
+                                  if (calc.mMultiplier.mDataValue) {
+                                       multArray = cdDataValuesMap[calc.mMultiplier.mDataValue.toLowerCase()];
+                                  } else if (calc.mMultiplier.mNumber !== undefined) {
+                                       multArray = [calc.mMultiplier.mNumber];
+                                  }
+                                  
+                             }
+                        }
+
+                        // Determine the BaseDamage array for each GameCalculation so the UI can interpolate it
+                        const cdBaseMap: Record<string, any[]> = {};
+                        for (const calcKey in cdSpell.mSpell.mSpellCalculations) {
+                             const calc = cdSpell.mSpell.mSpellCalculations[calcKey];
+                             if (calc.mFormulaParts) {
+                                 for (const part of calc.mFormulaParts) {
+                                      if (part.__type === "NamedDataValueCalculationPart" && part.mDataValue) {
+                                          const dvKey = part.mDataValue.toLowerCase();
+                                          if (cdDataValuesMap[dvKey]) {
+                                              cdBaseMap[calcKey.toLowerCase()] = cdDataValuesMap[dvKey];
+                                              break; // grab the first valid flat base array
+                                          }
+                                      }
+                                 }
+                             } else if (calc.__type === "GameCalculationModified" && calc.mModifiedGameCalculation) {
+                                  const baseCalcKey = calc.mModifiedGameCalculation.toLowerCase();
+                                  if (cdBaseMap[baseCalcKey]) {
+                                       let arr = [...cdBaseMap[baseCalcKey]];
+                                       if (calc.mMultiplier && calc.mMultiplier.mNumber !== undefined) {
+                                            arr = arr.map(v => typeof v === 'number' ? Math.round(v * calc.mMultiplier.mNumber * 100)/100 : v);
+                                       } else if (calc.mMultiplier && calc.mMultiplier.mDataValue) {
+                                            const mData = cdDataValuesMap[calc.mMultiplier.mDataValue.toLowerCase()];
+                                            if (mData) {
+                                                 arr = arr.map((v, i) => {
+                                                      const m = mData.length > i ? mData[i] : mData[mData.length - 1];
+                                                      return typeof v === 'number' ? Math.round(v * m * 100)/100 : v;
+                                                 });
+                                            }
+                                       }
+                                       cdBaseMap[calcKey.toLowerCase()] = arr;
+                                  }
+                             }
+                        }
+                        spell.cd_baseMap = cdBaseMap;
+                    }
+                    spell.cd_calcMap = cdCalcMap;
+                    // Unique scalings to avoid duplicates
+                    spell.cd_scaling = Array.from(new Set(scalings));
+
+                    // Duplicate block removed
+
+                    // Extract base damages and ratios from DataValues
+                    const damages = [];
+                    if (cdSpell.mSpell.DataValues) {
+                        for (const dv of cdSpell.mSpell.DataValues) {
+                            if (dv.mName && dv.mValues && Array.isArray(dv.mValues)) {
+                                // Skip internal boring identifiers
+                                const nameLow = dv.mName.toLowerCase();
+                                if (nameLow.includes("time") || nameLow.includes("speed") || nameLow.includes("mult")) continue;
+
+                                const maxRank = spell.maxrank || 5;
+                                const ranks = dv.mValues.slice(1, maxRank + 1);
+                                if (ranks.length === 0) continue;
+                                
+                                const allSame = ranks.every((val: any) => val === ranks[0]);
+                                let fmtName = dv.mName.replace("BaseDamage", "Base DMG").replace("Ratio", " Ratio");
+                                
+                                if (allSame) {
+                                    if (ranks[0] === 0) continue;
+                                    let valStr = ranks[0].toString();
+                                    if (nameLow.includes("ratio")) {
+                                        if (ranks[0] < 5) valStr = Math.round(ranks[0]*100) + "%";
+                                    }
+                                    damages.push(`${fmtName}: ${valStr}`);
+                                } else {
+                                    // varying per rank
+                                    const valStr = ranks.map((v: any) => {
+                                        if (v < 5 && nameLow.includes("ratio")) return Math.round(v*100) + "%";
+                                        return Math.round(v);
+                                    }).join("/");
+                                    damages.push(`${fmtName}: ${valStr}`);
+                                }
+                            }
+                        }
+                    }
+                    spell.cd_damages = damages;
+                }
+                    }
+                }
+             } catch(e) { console.error("CDragon fetch failed", e); }
+             return champData;
 }
 
 let cachedSummonersDataByVersion: Record<string, Record<string, any>> = {};

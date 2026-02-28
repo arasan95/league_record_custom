@@ -10,6 +10,7 @@ pub enum AppEvent {
     MarkerflagsChanged { payload: () },
     RecordingStarted,
     GameDetected,
+    GameStarted,
     RecordingFinished { payload: (String, bool) },
 }
 
@@ -35,6 +36,7 @@ impl EventManager for tauri::AppHandle {
             }
             RecordingStarted => self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), ())?,
             GameDetected => self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), ())?,
+            GameStarted => self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), ())?,
             RecordingFinished { payload } => {
                 self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), payload)?
             }

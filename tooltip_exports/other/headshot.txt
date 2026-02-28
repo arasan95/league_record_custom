@@ -1,0 +1,15 @@
+{
+  "mFormulaParts": [
+    {
+      "mDataValue": "BaseDamage",
+      "__type": "NamedDataValueCalculationPart"
+    },
+    {
+      "mStat": 2,
+      "mStatFormula": 2,
+      "mDataValue": "ADRatio",
+      "__type": "StatByNamedDataValueCalculationPart"
+    }
+  ],
+  "__type": "GameCalculation"
+}

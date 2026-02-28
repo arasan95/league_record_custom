@@ -5,7 +5,7 @@ members = ["riot_datatypes"]
 exclude = ["vendor"]
 
 [workspace.package]
-version = "1.0.0"
+version = "1.1.2"
 edition = "2021"
 authors = ["arasan95"]
 license = "GPL-3.0-or-later"
@@ -96,6 +96,10 @@ reqwest = { version = "0.12.2", default-features = false, features = [
 ] }
 tauri-plugin-shell = "2.3.4"
 tauri-plugin-fs = "2.4.5"
+zstd = "0.13.3"
+rayon = "1.11.0"
+byteorder = "1.5.0"
+hex = "0.4.3"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.3", features = [

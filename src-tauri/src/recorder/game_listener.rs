@@ -102,11 +102,14 @@ impl GameListener {
         live_events: Arc<Mutex<Vec<LiveGameEvent>>>,
         player_map: Arc<Mutex<HashMap<String, i32>>>,
         last_game_data: Arc<Mutex<Option<shaco::model::ingame::AllGameData>>>,
+        app_handle: AppHandle,
     ) -> Vec<LiveGameEvent> {
         let client = shaco::ingame::IngameClient::new();
         let mut last_event_id = 0;
         // Cache: ParticipantIndex -> List of Items
         let mut previous_inventory: HashMap<usize, Vec<shaco::model::ingame::PlayerItem>> = HashMap::new();
+        // Flag: fire GameStarted only once (on first successful in-game API response)
+        let mut game_started_fired = false;
 
         loop {
             // Poll every 1 second
@@ -114,6 +117,16 @@ impl GameListener {
 
             match client.all_game_data(Some(last_event_id as u32)).await {
                 Ok(data) => {
+                    // First successful response from in-game API means loading is done and game has begun.
+                    // This is more reliable than LCU GamePhase::InProgress which can fire too early.
+                    if !game_started_fired {
+                        game_started_fired = true;
+                        log::info!("In-game API first success. Emitting GameStarted for Auto Stop.");
+                        if let Err(e) = app_handle.send_event(AppEvent::GameStarted) {
+                            log::error!("Failed to emit GameStarted: {}", e);
+                        }
+                    }
+
                     // Update player map
                     if let Ok(mut map) = player_map.lock() {
                         for (i, p) in data.all_players.iter().enumerate() {
@@ -130,6 +143,7 @@ impl GameListener {
                     let mut new_events = Vec::new();
 
                     // 1. Process Standard Events (Kill, Dragon, etc.)
+
                     for event in data.events {
                         let eid = event.get_event_id();
                         if eid > last_event_id as u32 {
@@ -309,6 +323,7 @@ impl GameListener {
                                             live_events_clone,
                                             player_map_clone,
                                             last_game_data.clone(),
+                                            self.ctx.app_handle.clone(),
                                         ));
 
                                         self.state = State::Recording(
@@ -354,7 +369,7 @@ impl GameListener {
             // wait for game to record
             State::Idle => match sub_resp {
                 SubscriptionResponse::Session(SessionEventData {
-                    phase: GamePhase::GameStart | GamePhase::InProgress,
+                    phase: phase @ (GamePhase::GameStart | GamePhase::InProgress),
                     game_data: GameData { queue, game_id, game_mode },
                 }) if Some(game_id) != self.last_stopped_game_id => {
                     log::info!("LCU Session Event detected. GameID: {}", game_id);
@@ -468,6 +483,7 @@ impl GameListener {
                             live_events_clone,
                             player_map_clone,
                             last_game_data.clone(),
+                            self.ctx.app_handle.clone(),
                         ));
 
                         // Try to fetch LP
@@ -487,6 +503,22 @@ impl GameListener {
                             pid_to_cid,
                         )
                     } else {
+                        // Game mode is not recorded, but we still need to fire GameStarted
+                        // so that Auto Stop works regardless of recording mode.
+                        let app_handle_clone = self.ctx.app_handle.clone();
+                        async_runtime::spawn(async move {
+                            let client = shaco::ingame::IngameClient::new();
+                            loop {
+                                tokio::time::sleep(Duration::from_secs(1)).await;
+                                if client.all_game_data(None).await.is_ok() {
+                                    log::info!("In-game API responded (non-recorded mode). Emitting GameStarted for Auto Stop.");
+                                    if let Err(e) = app_handle_clone.send_event(AppEvent::GameStarted) {
+                                        log::error!("Failed to emit GameStarted (non-recorded): {}", e);
+                                    }
+                                    break; // fire once and exit
+                                }
+                            }
+                        });
                         State::Idle
                     }
                 }
@@ -716,6 +748,7 @@ impl GameListener {
                             }
                         }
                     }
+                    // GameStarted is now fired from run_info_poller on first successful in-game API response.
                     _ => State::Recording(
                         recording_task,
                         highlight_task,

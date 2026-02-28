@@ -1,0 +1,1 @@
+<keywordMajor>プラズマ</keywordMajor>を付与した敵チャンピオンの近くにダッシュして、2秒間、<shield>耐久値70/90/110 (+90% AD + +120% AP)のシールド</shield>を獲得する。?

@@ -11,6 +11,7 @@ mod generate_bindings;
 mod recorder;
 mod state;
 mod util;
+mod wad;
 
 fn main() {
     use simplelog::*;
@@ -70,7 +71,8 @@ fn main() {
             commands::clear_cache,
             commands::download_image,
             commands::save_scoreboard_cache,
-            commands::load_scoreboard_cache
+            commands::load_scoreboard_cache,
+            commands::update_champion_data
         ])
         .setup(|app| app.app_handle().setup().map_err(anyhow::Error::into))
         .build(tauri::generate_context!());
