@@ -1,0 +1,270 @@
+                    // console.log("Champ data:", data);
+                    if (data && data.spells) {
+                        // === Header ===
+                        let html = `
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 8px;">
+                                <div>
+                                    <b style="color:#c8aa6e; font-size: 16px;">${data.name}</b> 
+                                    <span style="color:#aaa; font-size: 12px; margin-left: 5px;">${data.title}</span>
+                                </div>
+                                <div style="color: #888; font-size: 11px;">${(data.tags || []).join(', ')}</div>
+                            </div>`;
+
+                        // === Passive ===
+                        if (data.passive) {
+                            html += `
+                            <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #333;">
+                                <b style="color:#ffeb3b; font-size: 13px;">[Passive] ${data.passive.name}</b><br>
+                                <div style="font-size: 12px; margin-top:2px; color:#ccc; line-height: 1.3;">${data.passive.description}</div>
+                            </div>`;
+                        }
+
+                        // === Spells (QWER) ===
+                        for (let i = 0; i < data.spells.length; i++) {
+                            const spell = data.spells[i];
+                            const key = ["Q", "W", "E", "R"][i];
+                            const costText = spell.costBurn && spell.costBurn !== "0" ? `Cost: ${spell.costBurn}` : "No Cost";
+
+                            html += `
+                            <div style="margin-bottom: 8px;">
+                                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                                    <div>
+                                        <b style="color:#00d2ff; font-size: 13px;">[${key}]</b> 
+                                        <span style="color:#eee; font-size: 13px; font-weight: bold;">${spell.name}</span>
+                                    </div>
+                                    <div style="color:#aaa; font-size: 11px; text-align: right;">
+                                        <span style="color:#ffb74d;">${costText}</span> | CD: ${spell.cooldownBurn}s
+                                    </div>
+                                </div>`;
+
+                            // --- CDragon Extended Detailed Stats ---
+                            let detailItems = [];
+                            const cleanStat = (val: any) => {
+                                if (typeof val === 'number') return Math.round(val * 100) / 100;
+                                if (typeof val === 'string' && !isNaN(Number(val))) return Math.round(Number(val) * 100) / 100;
+                                return val;
+                            };
+
+                            if (spell.cd_castRange) detailItems.push(`🎯 Range: ${cleanStat(spell.cd_castRange)}`);
+                            if (spell.cd_castTime) detailItems.push(`⏱️ Cast: ${cleanStat(spell.cd_castTime)}s`);
+                            if (spell.cd_lineWidth) detailItems.push(`📏 Width: ${cleanStat(spell.cd_lineWidth)}`);
+                            if (spell.cd_missileSpeed) detailItems.push(`🚀 Speed: ${cleanStat(spell.cd_missileSpeed)}`);
+
+                            if (detailItems.length > 0) {
+                                html += `<div style="display: flex; gap: 8px; font-size: 11px; color:#888; margin-top: 2px;">
+                                            ${detailItems.map(d => `<span>${d}</span>`).join('')}
+                                         </div>`;
+                            }
+
+
+
+                            let descriptionHtml = spell.tooltip || spell.description;
+
+                            // Helper function to resolve variables
+                            // Resolves a key (like 'e1', 'a1', 'maximumtraps') to its array of values
+                            const resolveVar = (key: string): any[] | null => {
+                                key = key.toLowerCase();
+                                
+                                // 1. Check effectBurn e1, e2...
+                                if (key.startsWith('e')) {
+                                    const idx = parseInt(key.substring(1), 10);
+                                    if (!isNaN(idx) && spell.effectBurn && spell.effectBurn[idx]) {
+                                        return [spell.effectBurn[idx]];
+                                    }
+                                }
+                                
+                                // 2. Check DataDragon vars list (a1, f1, etc)
+                                if (spell.vars) {
+                                    for (const v of spell.vars) {
+                                        if (v.key && v.key.toLowerCase() === key) {
+                                            return v.coeff; 
+                                        }
+                                    }
+                                }
+
+                                // 3. Check CommunityDragon DataValues Map
+                                if (spell.cd_dataValuesMap) {
+                                     if (spell.cd_dataValuesMap[key]) return spell.cd_dataValuesMap[key];
+                                     for (const k of Object.keys(spell.cd_dataValuesMap)) {
+                                         if (k === `m${key}` || k.includes(key)) return spell.cd_dataValuesMap[k];
+                                     }
+                                }
+
+                                // 4. Check CommunityDragon BaseMap (for GameCalculation base arrays)
+                                if (spell.cd_baseMap) {
+                                     if (spell.cd_baseMap[key]) return spell.cd_baseMap[key];
+                                     for (const k of Object.keys(spell.cd_baseMap)) {
+                                         if (k === `m${key}` || k.includes(key)) return spell.cd_baseMap[k];
+                                     }
+                                }
+
+                                // 5. Retry mapping without the spell slot prefix (e.g. 'wslowpercentage' -> 'slowpercentage')
+                                if (key.length > 2 && /^[qwer]/i.test(key)) {
+                                     const noPrefix = key.substring(1);
+                                     if (spell.cd_dataValuesMap) {
+                                         if (spell.cd_dataValuesMap[noPrefix]) return spell.cd_dataValuesMap[noPrefix];
+                                         for (const k of Object.keys(spell.cd_dataValuesMap)) {
+                                             if (k === `m${noPrefix}` || k.includes(noPrefix)) return spell.cd_dataValuesMap[k];
+                                         }
+                                     }
+                                     if (spell.cd_baseMap) {
+                                         if (spell.cd_baseMap[noPrefix]) return spell.cd_baseMap[noPrefix];
+                                         for (const k of Object.keys(spell.cd_baseMap)) {
+                                             if (k === `m${noPrefix}` || k.includes(noPrefix)) return spell.cd_baseMap[k];
+                                         }
+                                     }
+                                }
+                                
+                                // 4. Check cost or cooldown
+                                if (key === 'cost') return [spell.costBurn];
+                                if (key === 'cooldown') return [spell.cooldownBurn];
+                                
+                                // Manual override for Darius Q
+                                if (spell.id === "DariusCleave") {
+                                    if (key === "bladedamage" && spell.effect && spell.effect[1]) {
+                                        return spell.effect[1];
+                                    }
+                                    if (key === "handledamage" && spell.effect && spell.effect[2]) {
+                                        return spell.effect[2];
+                                    }
+                                }
+                                
+                                return null;
+                            };
+
+                            // Try to evaluate basic JS math inside {{ }}
+                            const evalMath = (expression: string, varsMap: Record<string, string>): number | null => {
+                                try {
+                                    let expr = expression;
+                                    for (const [k, v] of Object.entries(varsMap)) {
+                                        expr = expr.replace(new RegExp(`\\b${k}\\b`, 'gi'), v);
+                                    }
+                                    // only allow basic math characters
+                                    if (!/^[0-9\.\+\-\*\/\(\)\s]+$/.test(expr)) return null;
+                                    const result = Function(`'use strict'; return (${expr})`)();
+                                    return typeof result === 'number' && !isNaN(result) ? result : null;
+                                } catch (e) {
+                                    return null;
+                                }
+                            };
+
+                            const formatArrayObj = (ranks: any[]): string => {
+                                if (!ranks || ranks.length === 0) return "?";
+                                
+                                let actualRanks = ranks;
+                                if (ranks.length > 5) {
+                                     const maxRank = spell.maxrank || 5;
+                                     actualRanks = ranks.slice(1, maxRank + 1);
+                                }
+                                if (actualRanks.length === 0) return "?";
+
+                                // Clean formatting for floats (e.g. 0.1000000149 -> 10 if it's explicitly multiplied later,
+                                // but if it's meant to be a raw multiplier displayed as %, we usually multiply by 100 ourselves if riot didn't.
+                                // Actually, let's just forcefully round down to 1 or 2 decimal places to remove the precision garbage)
+                                const cleanNum = (n: any) => {
+                                     if (typeof n !== 'number') return n;
+                                     return Math.round(n * 100) / 100;
+                                };
+                                const cleanedRanks = actualRanks.map(cleanNum);
+                                
+                                const allSame = cleanedRanks.every((v: any) => v === cleanedRanks[0]);
+                                if (allSame) return cleanedRanks[0].toString();
+                                return cleanedRanks.join("/");
+                            };
+
+                            // Interpolate {{ expression }} inside description
+                            descriptionHtml = descriptionHtml.replace(/\{\{\s*(.*?)\s*\}\}/gi, (match: string, p1: string, offset: number, fullStr: string) => {
+                                const expr = p1.trim().toLowerCase();
+                                if (expr === 'spellmodifierdescriptionappend') return "";
+                                
+                                const nextChar = fullStr.charAt(offset + match.length);
+                                const isPercentFlagged = spell.cd_isPercentMap && spell.cd_isPercentMap[expr];
+                                
+                                // Basic single variable fetch
+                                if (/^[a-z0-9_]+$/.test(expr)) {
+                                    const resolvedArr = resolveVar(expr);
+                                    let valStr = "?";
+                                    if (resolvedArr) {
+                                        valStr = formatArrayObj(resolvedArr);
+                                        if (isPercentFlagged && nextChar !== '%') {
+                                             valStr += '%';
+                                        }
+                                    }
+                                    
+                                    if (spell.cd_calcMap && spell.cd_calcMap[expr]) {
+                                        valStr += ` (${spell.cd_calcMap[expr]})`;
+                                    }
+                                    return valStr;
+                                }
+                                
+                                // Math expression like armor_penetration*100
+                                // Extract all variable names from the expression
+                                const varNames = expr.match(/[a-z_]+/gi);
+                                if (!varNames) return "?";
+                                
+                                const valStrMap: Record<string, string> = {};
+                                const calcStrMap: Record<string, string> = {};
+                                
+                                let allResolved = true;
+                                for (const vName of varNames) {
+                                     const resolvedArr = resolveVar(vName);
+                                     if (!resolvedArr) {
+                                         allResolved = false;
+                                         break;
+                                     }
+                                     valStrMap[vName] = formatArrayObj(resolvedArr);
+                                     if (spell.cd_calcMap && spell.cd_calcMap[vName]) {
+                                         calcStrMap[vName] = spell.cd_calcMap[vName];
+                                     }
+                                }
+                                
+                                if (!allResolved) return "?";
+                                
+                                // Since it's a math expression, if the variables are arrays like [10/20/30], we can't easily eval it unless we map over the arrays.
+                                // For simplicity, if they are arrays, we just execute the math for each rank and rebuild the array string
+                                const ranksCount = spell.maxrank || 5;
+                                const results = [];
+                                for (let i = 0; i < ranksCount; i++) {
+                                     const iterMap: Record<string, string> = {};
+                                     for (const vName of varNames) {
+                                         const arrStr = valStrMap[vName];
+                                         const parts = arrStr.split("/");
+                                         iterMap[vName] = parts.length > 1 ? (parts[i] || parts[parts.length-1]) : parts[0];
+                                     }
+                                     const evaluated = evalMath(expr, iterMap);
+                                     results.push(evaluated !== null ? evaluated : "?");
+                                }
+                                
+                                const allSame = results.every((v) => v === results[0]);
+                                let finalEvalStr = allSame ? results[0].toString() : results.join("/");
+                                
+                                // Append any trailing logic calculations
+                                const calcsToAppend = Object.values(calcStrMap);
+                                if (calcsToAppend.length > 0) {
+                                     finalEvalStr += ` (${calcsToAppend.join(' ')})`;
+                                }
+                                
+                                return finalEvalStr;
+                            });
+
+                            // Colorize Riot's XML tags
+                            descriptionHtml = descriptionHtml.replace(/<physicalDamage>/gi, '<span style="color:#ffb74d">')
+                                .replace(/<\/physicalDamage>/gi, '</span>')
+                                .replace(/<magicDamage>/gi, '<span style="color:#00d2ff">')
+                                .replace(/<\/magicDamage>/gi, '</span>')
+                                .replace(/<status>/gi, '<span style="color:#ff4d4d">')
+                                .replace(/<\/status>/gi, '</span>')
+                                .replace(/<keyword[^>]*>/gi, '<span style="color:#c8aa6e; font-weight:bold;">')
+                                .replace(/<\/keyword[^>]*>/gi, '</span>')
+                                .replace(/<rules>/gi, '<i style="color:#aaa">')
+                                .replace(/<\/rules>/gi, '</i>')
+                                .replace(/<spellName>/gi, '<span style="color:#ffd700">')
+                                .replace(/<\/spellName>/gi, '</span>')
+                                .replace(/<trueDamage>/gi, '<span style="color:#fff">')
+                                .replace(/<\/trueDamage>/gi, '</span>')
+                                .replace(/<healing>/gi, '<span style="color:#11ff11">')
+                                .replace(/<\/healing>/gi, '</span>');
+
+                            html += `<div style="font-size: 12px; margin-top:5px; color:#ddd; line-height: 1.4;">${descriptionHtml}</div>`;
+                            html += `</div>`;
+                        }

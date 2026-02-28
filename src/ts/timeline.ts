@@ -159,6 +159,23 @@ export class InventoryTimeline {
                     while (state.items.length <= slot) {
                         state.items.push(0);
                     }
+                    // If another item already occupies this slot, the LoL API is reusing the slot
+                    // number without firing ItemSold/ItemDestroyed first.
+                    // This happens when a purchase physically displaces an existing item to another
+                    // inventory slot (the game moves it silently). We must NOT discard the old item –
+                    // instead, relocate it to the first available empty slot so it stays visible.
+                    const displaced = state.items[slot];
+                    if (displaced !== 0) {
+                        const emptyIdx = state.items.indexOf(0);
+                        if (emptyIdx !== -1) {
+                            // Move displaced item to the empty slot
+                            state.items[emptyIdx] = displaced;
+                        } else if (state.items.length < 6) {
+                            state.items.push(displaced);
+                        }
+                        // If there is truly no empty slot left (6 items full), the displaced item
+                        // was actually consumed/sold without an event – just overwrite it.
+                    }
                     state.items[slot] = itemId;
                 } else if (itemId === 2055 && slot === 6) {
                     // Force Control Ward in slot 6 into items array if possible

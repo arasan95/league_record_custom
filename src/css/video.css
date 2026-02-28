@@ -478,9 +478,10 @@ body:has(.vjs-fullscreen) {
 .vjs-ruler-tick {
     position: absolute;
     bottom: 0;
-    width: 1px !important;
+    width: 2px !important;
     background-color: rgba(255, 255, 255, 0.7);
-    transform: translateX(-50%);
+    transform: translateX(-50%) scaleX(0.5);
+    transform-origin: center bottom;
 }
 .vjs-ruler-tick.large { height: 50% !important; }
 .vjs-ruler-tick.medium { height: 35% !important; }
@@ -491,7 +492,7 @@ body:has(.vjs-fullscreen) {
     position: absolute;
     top: 100%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translateX(-50%) scaleX(2);
     padding-top: 6px; 
     padding-bottom: 6px; 
     font-size: 11px;

@@ -350,3 +350,32 @@ pub async fn load_scoreboard_cache(video_id: String) -> Result<String, String> {
     let content = std::fs::read_to_string(cache_path).map_err(|e| e.to_string())?;
     Ok(content)
 }
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub async fn update_champion_data(app_handle: AppHandle) -> Result<String, String> {
+    use crate::wad::updater::{extract_all_champions_to_json, get_league_install_dir};
+    use tauri::Manager;
+
+    let install_dir = get_league_install_dir().ok_or("League of Legends install not found")?;
+
+    let app_dir = app_handle.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    let cache_dir = app_dir.join("tooltip_cache");
+    if !cache_dir.exists() {
+        std::fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
+    }
+
+    let output_path = cache_dir.join("tooltip_variable_fallback.json");
+
+    // Perform the heavy extraction in a background task
+    let result = tokio::task::spawn_blocking(move || {
+        extract_all_champions_to_json(&install_dir, &output_path).map(|_| output_path)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?;
+
+    match result {
+        Ok(path) => Ok(path.to_string_lossy().into_owned()),
+        Err(e) => Err(format!("Extraction error: {}", e)),
+    }
+}

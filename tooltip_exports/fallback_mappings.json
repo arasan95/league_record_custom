@@ -1,0 +1,754 @@
+{
+  "AkshanW": {
+    "spell_akshanw_tooltip_{{ gamemodeinteger": "1"
+  },
+  "AlistarE": {
+    "totaldamage": "80/110/140/170/200",
+    "attackbonusdamage": "50"
+  },
+  "AmbessaW": {
+    "calc_shield": "50~320 (+150% AD)"
+  },
+  "BandageToss": {
+    "totaldamage": "70/95/120/145/170"
+  },
+  "Tantrum": {
+    "tantrumdamage": "5/7/9/11/13"
+  },
+  "FlashFrost": {
+    "spell.glacialstorm:slowamount": "20/30/40/50/60"
+  },
+  "AnnieE": {
+    "movespeedcalc": "20~50"
+  },
+  "ApheliosR": {
+    "spell_apheliosr_weaponmod_{{ f1": ""
+  },
+  "AsheQ": {
+    "empowereddamage": "4"
+  },
+  "AsheSpiritOfTheHawk": {
+    "chargecooldown": "3"
+  },
+  "AurelionSolQ": {
+    "burstbonustruedamagetochamps": "0.03%"
+  },
+  "AzirQWrapper": {
+    "totaldamage": "60/80/100/120/140"
+  },
+  "AzirW": {
+    "maxammo": "10"
+  },
+  "BardW": {
+    "f1": "3",
+    "f2": "5"
+  },
+  "BelvethQ": {
+    "f1": "10/15/20/25/30 (+100% AD)"
+  },
+  "BelvethE": {
+    "f2.0": "6"
+  },
+  "PowerFist": {
+    "totaldamage": "175% AD"
+  },
+  "BriarW": {
+    "totalaoedamage": "+60/70/80/90/100% AD",
+    "attackmaxhpheal": "+5% BonusHP"
+  },
+  "BriarE": {
+    "percentmaxhpheal": "5/5.5/6/6.5/7"
+  },
+  "BriarR": {
+    "totalresists": "+20% AD"
+  },
+  "CaitlynW": {
+    "ammorechargetime": "2"
+  },
+  "CamilleQ": {
+    "bonusdamage": "20/25/30/35/40 (+20/25/30/35/40% AD)",
+    "empoweredbonusdamage": "+20/25/30/35/40% AD",
+    "damageconversionpercentage": "40~504"
+  },
+  "CassiopeiaQ": {
+    "tooltiptotaldamage": "75/110/145/180/215"
+  },
+  "CassiopeiaW": {
+    "damagepersecond": "40/50/60/70/80"
+  },
+  "CassiopeiaE": {
+    "basicdamage": "52~120 (+10% Stat)",
+    "healcalc": "+10/11.5/13/14.5/16% Stat",
+    "healcalcminion": "+10/11.5/13/14.5/16% Stat"
+  },
+  "FeralScream": {
+    "totaldamagetooltip": "+70% Stat"
+  },
+  "MissileBarrage": {
+    "attackrefund": "1"
+  },
+  "DariusCleave": {
+    "bladedamage": "100/110/120/130/140",
+    "handledamage": "50/80/110/140/170"
+  },
+  "DariusNoxianTacticsONH": {
+    "empoweredattackdamage": "141/152.5/164/175.5/187% AD"
+  },
+  "DravenRCast": {
+    "rpassivetruedamage": "1"
+  },
+  "DrMundoQ": {
+    "healthrestoreonhitchampionmonster": "40/50/60/70/80",
+    "healthrestoreonhitminion": "20/25/30/35/40"
+  },
+  "DrMundoW": {
+    "grayhealthstorageinitial": "80~95%"
+  },
+  "DrMundoE": {
+    "passivebonusad": "最大体力の1.7/2/2.3/2.6/2.9%"
+  },
+  "EkkoW": {
+    "e0": "2.25",
+    "totalshield": "3"
+  },
+  "EkkoE": {
+    "totaldamage": "50/75/100/125/150"
+  },
+  "EliseHumanW": {
+    "spell.elisehumanw:totaldamage": "4"
+  },
+  "EvelynnR": {
+    "damage": "125/250/375",
+    "critdamage": "2.5"
+  },
+  "EzrealR": {
+    "damagereductionwaveclear.0*100": "0.5"
+  },
+  "FioraR": {
+    "spell.fiorapassive:rdamagetotal": "0.12"
+  },
+  "FizzQ": {
+    "totaldamage": "10/25/40/55/70",
+    "qdamage": "1.5"
+  },
+  "GalioW": {
+    "passiveshieldooctimer": "25/30/35/40/45",
+    "totalpassiveshield": "2",
+    "magicdamagereduction": "15",
+    "physicaldamagereduction": "0.5"
+  },
+  "GangplankQWrapper": {
+    "spell_gangplankqwrapper_tooltip_{{ gamemodeinteger": "10/40/70/100/130"
+  },
+  "GangplankW": {
+    "basehealth": "45/70/95/120/145"
+  },
+  "GangplankE": {
+    "e0": "3/3/4/4/5",
+    "barreldecaytime": "2"
+  },
+  "GarenW": {
+    "resistsfortooltip": "0.25"
+  },
+  "GarenE": {
+    "f1": "25"
+  },
+  "GnarQ": {
+    "spell.gnarq:minitotaldamage": "5/45/85/125/165 (+125% AD)",
+    "spell.gnarq:slowduration": "2",
+    "spell.gnarq:slowamount*100": "0.15/0.2/0.25/0.3/0.35",
+    "spell.gnarq:minicdrefund*100": "0.4"
+  },
+  "GnarW": {
+    "spell.gnarw:minitotaldamage": "0/10/20/30/40 (+100% Stat)",
+    "spell.gnarw:minipercenthpdamage*100": "0.06/0.08/0.1/0.12/0.14",
+    "spell.gnarr:rhypermovementspeedpercent": "40/60/80/100/120",
+    "spell.gnarw:minihasteduration": "3"
+  },
+  "GnarE": {
+    "spell.gnare:miniasduration": "6",
+    "spell.gnare:minibas*100": "0.4/0.45/0.5/0.55/0.6",
+    "spell.gnare:minitotaldamage": "50/85/120/155/190 (+6% BonusHP)",
+    "spell.gnare:movespeedmod*-100": "-0.8"
+  },
+  "GragasQ": {
+    "effect2amount*1.5": "80/120/160/200/240"
+  },
+  "HeimerdingerE": {
+    "slowpercent.0*100": "35"
+  },
+  "HweiQ": {
+    "spell.hweiqe:duration": "2.5",
+    "spell.hweiqe:slowpercent": "30"
+  },
+  "HweiW": {
+    "spell.hweiww:tooltipallymod*100": "15"
+  },
+  "IllaoiQ": {
+    "spell.illaoiq:tentacledamageamp*100": "0.1/0.15/0.2/0.25/0.3",
+    "spell.illaoiq:tentacledamagetotal": "9~180 (+110% AD +40% Stat)"
+  },
+  "IllaoiE": {
+    "timebetweenvesseltentacleslams": "4"
+  },
+  "IllaoiR": {
+    "spell.illaoiw:cooldownduringr": "2"
+  },
+  "IreliaQ": {
+    "healamount": "+9/10/11/12/13% AD"
+  },
+  "IreliaW": {
+    "finalphysicaldr": "40~70",
+    "finalmagicdr": "7~12"
+  },
+  "SowTheWind": {
+    "spell.tailwindself:bonusdamage": "25/30/35/40/45% 増加移動速度"
+  },
+  "JarvanIVGoldenAegis": {
+    "baseshield": "+70% AD",
+    "bonusshield": "+1.3% BonusHP"
+  },
+  "JarvanIVDemacianStandard": {
+    "totaldamage": "80/120/160/200/240 (+80% AP)"
+  },
+  "JayceToTheSkies": {
+    "spell.jaycetotheskies:damage": "60/110/160/210/260 (+135% AD)",
+    "spell.jaycetotheskies:slowduration": "-0.35/-0.4/-0.45/-0.5/-0.55",
+    "spell.jaycetotheskies:slow*-100": "-0.35/-0.4/-0.45/-0.5/-0.55"
+  },
+  "JayceStaticField": {
+    "spell.jaycestaticfield:managain": "15/17/19/21/23",
+    "spell.jaycestaticfield:duration": "4",
+    "spell.jaycestaticfield:damage": "140/200/260/320/380"
+  },
+  "JayceThunderingBlow": {
+    "spell.jaycethunderingblow:flatdamage": "+100% AD",
+    "spell.jaycethunderingblow:perchpdamage*100": "0.08/0.11/0.14/0.16/0.19"
+  },
+  "JayceStanceHtG": {
+    "spell.jaycestancehtg:shredduration": "5",
+    "spell.jaycestancehtg:rangedformshred": "20~35"
+  },
+  "JhinQ": {
+    "tooltipmaxtargetshit": "4"
+  },
+  "JhinE": {
+    "ammorechargeratetooltip": "28/27/26/25/24"
+  },
+  "JinxQ": {
+    "rocketdamage": "110% AD"
+  },
+  "KaisaQ": {
+    "maxdamagedisplay": "90/123.75/157.5/191.25/225",
+    "f11.1": "12/11/10/9/8"
+  },
+  "KaisaW": {
+    "totaldamage": "30/55/80/105/130 (+130% AD +45% AP)",
+    "spell.kaisapassive:pduration": "4"
+  },
+  "KaisaE": {
+    "f10.1": "8",
+    "totalmovespeed": "55/60/65/70/75"
+  },
+  "KatarinaEWrapper": {
+    "daggercooldownreduction": "0.8~1",
+    "tooltipdaggerreduction": "78~96"
+  },
+  "KatarinaR": {
+    "addamagecalc": "25/37.5/50/62.5/75",
+    "totaladdamagecalc": "25/37.5/50/62.5/75"
+  },
+  "KayleE": {
+    "spell.kaylepassive:levelforpassiverank2": "11"
+  },
+  "KaynQ": {
+    "totaldamage": "75/105/135/165/195",
+    "darkinflatdamage": "5"
+  },
+  "KaynW": {
+    "totaldamage": "1"
+  },
+  "KaynE": {
+    "totalhealing": "40"
+  },
+  "KennenShurikenHurlMissile1": {
+    "totaldamage": "75/125/175/225/275"
+  },
+  "KhazixQ": {
+    "spell.khazixq:basedamage": "+110% AD",
+    "spell.khazixq:isodamage": "+110% AD"
+  },
+  "KhazixW": {
+    "basedamage": "65/100/135/170/205"
+  },
+  "KhazixE": {
+    "totaldamage": "65/100/135/170/205 (+20% AD)"
+  },
+  "KhazixR": {
+    "spell.khazixq:effect4amount": "10",
+    "spell.khazixw:effect3amount": "4"
+  },
+  "KindredQ": {
+    "totaldamage": "40/65/90/115/140",
+    "totalqattackspeed": "500"
+  },
+  "KindredW": {
+    "attackheal": "1"
+  },
+  "KSanteQ": {
+    "rcooldownreduction.0*100": "33.3"
+  },
+  "LeblancQ": {
+    "bonusminiondamage": "10~146"
+  },
+  "LeonaShieldOfDaybreak": {
+    "totaldamagetooltip": "1"
+  },
+  "LeonaSolarBarrier": {
+    "bonusarmortooltip": "55/85/115/145/175",
+    "bonusmrtooltip": "20/27.5/35/42.5/50",
+    "totaldamagetooltip": "3"
+  },
+  "LeonaZenithBlade": {
+    "totaldamagetooltip": "50/90/130/170/210"
+  },
+  "LissandraW": {
+    "totaldamage": "70/105/140/175/210"
+  },
+  "LissandraE": {
+    "totaldamage": "70/105/140/175/210"
+  },
+  "LucianR": {
+    "totalnumshots": "22 (+25% クリティカル率)",
+    "totaldamage": "330/660/990 (+550% AD +330% AP)"
+  },
+  "LuluW": {
+    "totalms": "0.25"
+  },
+  "LuxLightStrikeKugel": {
+    "totaldamagett": "25/30/35/40/45"
+  },
+  "Obduracy": {
+    "f1": "+10% 物理防御",
+    "f2": "+30% 物理防御"
+  },
+  "MalzaharQ": {
+    "totaldamagetooltip": "70/105/140/175/210"
+  },
+  "MalzaharE": {
+    "manarestore": "8",
+    "minionexecutethreshold": "2"
+  },
+  "AlphaStrike": {
+    "subesquentdamage": "25% AD"
+  },
+  "Meditate": {
+    "initialdr": "90"
+  },
+  "MelQ": {
+    "initialexplosiondamage": "5/6/7/8/9",
+    "alldamagehit": "6/7/8/9/10 -1"
+  },
+  "MonkeyKingSpinToWin": {
+    "totaldamagett": "+137.5% AD"
+  },
+  "MordekaiserW": {
+    "minhealthtooltip": "5/5.5/6/6.5/7",
+    "maxhealthtooltip": "17.5/20/22.5/25/27.5"
+  },
+  "NaafiriQ": {
+    "spell.naafiriq:totaldamagefirstcast": "35/40/45/50/55 (+20% AD)",
+    "spell.naafiriq:bleedduration": "5",
+    "spell.naafiriq:totalbleeddamage": "35/60/85/110/135 (+80% AD)",
+    "spell.naafiriq:totalmindamagesecondcast": "30/45/60/75/90 (+40% AD)",
+    "spell.naafiriq:totalmaxdamagesecondcast": "30/45/60/75/90 (+70% AD)",
+    "spell.naafiriq:totalhealsecondcast": "45/60/75/90/105 (+40% AD)",
+    "spell.naafirip:packmatetauntduration": "2"
+  },
+  "NaafiriR": {
+    "bonusad": "+20% AD"
+  },
+  "NasusE": {
+    "initialdamage": "10/16/22/28/34",
+    "totaldotdamage": "30/35/40/45/50"
+  },
+  "Bushwhack": {
+    "damagepersecond": "4",
+    "maxtraps": "13/12/11/10/9"
+  },
+  "NilahQ": {
+    "critlifesteal": "+20% CritDmg",
+    "bonusattackspeedcalc": "10~60"
+  },
+  "NilahR": {
+    "champhealingpercent": "20 (+10% CritDmg)",
+    "spell.nilahq:critlifesteal": "+20% CritDmg"
+  },
+  "NocturneUnspeakableHorror": {
+    "totaldamage": "1.25/1.5/1.75/2/2.25"
+  },
+  "NunuE": {
+    "rootduration": "0.5~1.5"
+  },
+  "OlafRecklessStrike": {
+    "totaldamage": "70/115/160/205/250"
+  },
+  "OrianaIzunaCommand": {
+    "totaldamagetooltip": "60/90/120/150/180"
+  },
+  "OrianaRedactCommand": {
+    "totalshieldtooltip": "55/90/125/160/195",
+    "totaldamagetooltip": "6/12/18/24/30"
+  },
+  "OrnnW": {
+    "brittlepercentmaxhpcalc": "10~18"
+  },
+  "OrnnR": {
+    "minstun": "0.5"
+  },
+  "PantheonQ": {
+    "empowereddamagecalc": "20~240",
+    "executedamagecalcmodified": "155% AD"
+  },
+  "PantheonW": {
+    "empowereddamagemultcalcmodified": "+0.4~0.55% AD"
+  },
+  "PantheonE": {
+    "resistscalc": "5~30 (+2.5% AD)"
+  },
+  "PantheonR": {
+    "spell.pantheonq:holddamagecalc": "300/500/700/900/1100 (+100% Stat)"
+  },
+  "PoppyQ": {
+    "basedamage": "0.5"
+  },
+  "PoppyW": {
+    "bonusarmor": "2",
+    "bonusmr": "40",
+    "interruptdamage": "10"
+  },
+  "PoppyE": {
+    "tackledamage": "40/60/80/100/120"
+  },
+  "PykeW": {
+    "movespeed": "45",
+    "e0": "80"
+  },
+  "PykeR": {
+    "reduceddamagefinal": "250 (+80% AD +150% APFlat)"
+  },
+  "QuinnE": {
+    "totaldamage": "50"
+  },
+  "RakanQ": {
+    "totalheal": "40~210 (+55% Stat)"
+  },
+  "RakanR": {
+    "totaldamagetooltip": "100/200/300"
+  },
+  "PowerBall": {
+    "minimummovespeed": "25~39.1",
+    "maximummovespeed": "235~350"
+  },
+  "DefensiveBallCurl": {
+    "bonusarmortooltip": "30 (+60% 物理防御)",
+    "bonusmrtooltip": "10 (+30% 魔法防御)",
+    "returndamagecalc": "10~30 (+10% 物理防御)"
+  },
+  "Tremors2": {
+    "spell.powerball:powerballdamage": "80/120/160/200/240"
+  },
+  "RekSaiQ": {
+    "totaldamagetooltip": "75/112.5/150/187.5/225 (+50% AD)"
+  },
+  "RekSaiE": {
+    "spell.reksaie:basedamage": "100/135/170/205/240",
+    "spell.reksaie:empowereddamage": "100/135/170/205/240"
+  },
+  "RellW_Dismount": {
+    "spell.rellw_dismount:mountedmovespeed": "20/25/30/35/40",
+    "spell.rellw_dismount:dismountdamage": "60/90/120/150/180 (+60% Stat)",
+    "spell.rellw_dismount:shield": "20/40/60/80/100 (+11% BonusHP)",
+    "spell.rellw_dismount:resistanceincrease*100": "0.15",
+    "spell.rellw_dismount:dismountedasboost*100": "0.2",
+    "spell.rellw_dismount:dismountedrangeboost": "75"
+  },
+  "RengarQ": {
+    "empoweredqtotaldamage": "35~290 (+100% AD +20% AD)",
+    "empoweredqas": "5000~10100"
+  },
+  "RengarW": {
+    "totaldamageempowered": "+80% Stat"
+  },
+  "RengarE": {
+    "totalempowereddamage": "50~305 (+80% AD)"
+  },
+  "RengarR": {
+    "bonusdamage": "50% AD"
+  },
+  "RivenMartyr": {
+    "totaldamage": "65/95/125/155/185"
+  },
+  "RivenFeint": {
+    "totalshield": "70/95/120/145/170"
+  },
+  "RumbleFlameThrower": {
+    "monstercap": "65~300"
+  },
+  "RumbleShield": {
+    "shieldduration.1": "10/15/20/25/30"
+  },
+  "RyzeQWrapper": {
+    "spell.ryzer:overloaddamagebonus": "2"
+  },
+  "SejuaniR": {
+    "minordamagetooltip": "125/150/175",
+    "totaldamagetooltip": "1"
+  },
+  "SettW": {
+    "f1": "最大25% (+100 増加ADごとに20%)",
+    "maxgrit": "最大25% (+増加AD100ごとに20%)"
+  },
+  "Deceive": {
+    "qcritdamagemod": "100 +100% CDR -100"
+  },
+  "JackInTheBox": {
+    "trapduration": "0.5/0.75/1/1.25/1.5"
+  },
+  "ShenQ": {
+    "baseflatdamage": "3",
+    "basepercenthealth": "2/2.5/3/3.5/4",
+    "emppercenthealth": "25/30/35/40/45"
+  },
+  "ShenE": {
+    "energyrefund": "30~50"
+  },
+  "ShyvanaDoubleAttack": {
+    "secondhitdamagecalc": "0.2/0.4/0.6/0.8/1",
+    "firsthitdamagecalc": "100% AD"
+  },
+  "ShyvanaFireball": {
+    "dragonexplosioncalc": "75 (+20% Stat +50% AD)",
+    "dragondamagetotalcalc": "40 (+20% Stat +30% AD)"
+  },
+  "Fling": {
+    "basedamage": "50/60/70/80/90"
+  },
+  "SionW": {
+    "totalshield": "60/75/90/105/120",
+    "totaldamage": "40/65/90/115/140"
+  },
+  "SivirW": {
+    "bouncedamage": "+40/42.5/45/47.5/50% AD"
+  },
+  "SivirE": {
+    "totalheal": "1.5"
+  },
+  "SkarnerQ": {
+    "spell.skarnerq:abilitydamage": "10/20/30/40/50",
+    "spell.skarnerq:maxhppercent*100": "9",
+    "spell.skarnerq:slowduration": "1",
+    "spell.skarnerq:slowpercent*100": "40"
+  },
+  "SmolderQ": {
+    "spell.smolderp:passive_qdamageincrease": "0.4"
+  },
+  "SmolderW": {
+    "spell.smolderp:passive_wdamageincrease": "0.55"
+  },
+  "SmolderE": {
+    "spell.smolderp:ebonusdamage": "0.12"
+  },
+  "SonaQ": {
+    "totalstaccatodamage": "30~285 (+30% Stat)"
+  },
+  "SonaW": {
+    "totaldiminuendoweakenpercent": "25"
+  },
+  "SonaE": {
+    "totaltempomovespeedslow": "50"
+  },
+  "SorakaW": {
+    "spell.sorakaq:hotduration": "2.5"
+  },
+  "SylasR": {
+    "pertargetcooldown": "200"
+  },
+  "SyndraQ": {
+    "spell.syndrapassive:q1upgradethreshold": "40"
+  },
+  "SyndraW": {
+    "spell.syndrapassive:wupgradethreshold": "60",
+    "f2": "12/11/10/9/8",
+    "tooltiponlypassivebonuspercent": "1200"
+  },
+  "SyndraE": {
+    "spell.syndrapassive:eupgradethreshold": "80"
+  },
+  "SyndraR": {
+    "spell.syndrapassive:rupgradethreshold": "100"
+  },
+  "TahmKenchQ": {
+    "spell.tahmkenchpassive:totaldamage": "75/120/165/210/255 (+100% Stat)"
+  },
+  "TahmKenchE": {
+    "greyhealthhealingratio": "45~100"
+  },
+  "TalonQ": {
+    "totalhealing": "9~55"
+  },
+  "TaricW": {
+    "bonusarmor": "2.5"
+  },
+  "TaricE": {
+    "totaldamage": "90/130/170/210/250"
+  },
+  "TeemoR": {
+    "ammorechargetime": "30/25/20"
+  },
+  "ThreshE": {
+    "pattackdamagemin": "75/120/165/210/255",
+    "pattackdamagemax": "20/25/30/35/40",
+    "totaldamage": "1"
+  },
+  "ThreshRPenta": {
+    "totaldamage": "250/400/550"
+  },
+  "TwitchExpunge": {
+    "magicdamageperstack": "+35% Stat",
+    "maxmagicdamage": "+35% Stat"
+  },
+  "UdyrQ": {
+    "empoweredlightningbonusmax": "1.5~3 × 100 600 -100 × 100"
+  },
+  "UdyrW": {
+    "lifeonhitawakened": "+1.2% BonusHP +8% Stat"
+  },
+  "UdyrE": {
+    "movespeedbonus": "30~40"
+  },
+  "UdyrR": {
+    "pulsedamage": "10~40 (+35% Stat)",
+    "percenthpblast": "8~14",
+    "empoweredslow": "5%"
+  },
+  "VayneTumble": {
+    "adratiobonus": "+75/85/95/105/115% AD +50% Stat"
+  },
+  "VeigarBalefulStrike": {
+    "spell.veigarpassive:dqkillstacks": "1",
+    "spell.veigarpassive:dqkillstackslarge": "2"
+  },
+  "VeigarDarkMatter": {
+    "spell.veigarpassive:pstacksperdarkmattercdr": "1.2",
+    "spell.veigarpassive:darkmattercdrincrement*100": "8"
+  },
+  "VelkozW": {
+    "ammorechargetime": "1.5"
+  },
+  "VelkozR": {
+    "totaldamage": "500/725/950 (+150% AP)"
+  },
+  "VexR": {
+    "spell.vexr:recastdamagecalc": "150/250/350/450/550",
+    "spell.vexr:rdamagecalc": "75/125/175/225/275",
+    "spell.vexr:takedownwindow": "6"
+  },
+  "ViW": {
+    "spell.vipassive:cdreductionon3hit": "4"
+  },
+  "ViE": {
+    "ammorechargetime": "50"
+  },
+  "ViegoQ": {
+    "secondattackdamage": "+20% AD +15% Stat"
+  },
+  "ViegoR": {
+    "totaldamage": "120% AD"
+  },
+  "ViktorQ": {
+    "shieldlevelscaling": "2.5",
+    "totalaugmentedshieldvalue": "30"
+  },
+  "VladimirQ": {
+    "basedamagetooltip": "80/100/120/140/160",
+    "basehealtooltip": "20/25/30/35/40",
+    "movementspeedonq2": "5",
+    "empowereddamagetooltip": "85",
+    "empoweredhealtooltip": "2.5",
+    "empoweredhealpercenttooltip": "35"
+  },
+  "VladimirE": {
+    "chargehealthtooltip": "8",
+    "mindamagetooltip": "30/45/60/75/90",
+    "maxdamagetooltip": "6"
+  },
+  "VladimirHemoplague": {
+    "damage": "10",
+    "secondaryhealingtooltip": "100"
+  },
+  "VolibearE": {
+    "shieldapratiotooltip": "+75% Stat"
+  },
+  "WarwickQ": {
+    "basebitedamage": "25/37.5/50/62.5/75"
+  },
+  "XerathMageSpear": {
+    "tooltiptotaldamage": "70/100/130/160/190"
+  },
+  "XinZhaoQ": {
+    "bonusdamage": "16/25/34/43/52 (+40% AD)"
+  },
+  "XinZhaoE": {
+    "chargedamage": "+60% Stat"
+  },
+  "YorickE": {
+    "spell.yorickpassive:yorickpassiveghoulmax": "4"
+  },
+  "YorickR": {
+    "yorickbigghoulhealth": "1050"
+  },
+  "YunaraQ": {
+    "calc_damage_spread": "5/10/15/20/25",
+    "spell.yunarar:buff_duration": "5"
+  },
+  "YunaraW": {
+    "spell.yunarar:calc_rw_damage": "160/320/480/640/800",
+    "spell.yunarar:rw_slow_duration": "1",
+    "spell.yunarar:calc_rw_slow_amount": "0.99"
+  },
+  "YuumiW": {
+    "ccattachlockout": "5"
+  },
+  "ZaahenW": {
+    "secondarydamage": "+50% AD"
+  },
+  "ZacE": {
+    "maxstun": "60/105/150/195/240",
+    "damage": "4"
+  },
+  "ZedR": {
+    "rcalculateddamage": "100% AD"
+  },
+  "ZeriR": {
+    "chainphysicaldamage": "10/15/20"
+  },
+  "ZoeW": {
+    "e0": "60"
+  },
+  "ZyraQ": {
+    "initialdamage": "60/100/140/180/220",
+    "spell.zyrap:plantdamage": "15~75 (+20% Stat)",
+    "spell.zyrap:plantduration": "8"
+  },
+  "ZyraW": {
+    "ammorechargetime": "35"
+  },
+  "ZyraE": {
+    "spell.zyrap:plantdamage": "60/95/130/165/200",
+    "spell.zyrap:plantduration": "30"
+  },
+  "ZyraR": {
+    "totaldamage": "1"
+  }
+}

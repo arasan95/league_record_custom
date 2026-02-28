@@ -1,0 +1,29 @@
+{
+  "calc": {
+    "RCalculatedShieldValue": {
+      "mFormulaParts": [
+        {
+          "mDataValue": "RBaseValue",
+          "__type": "NamedDataValueCalculationPart"
+        },
+        {
+          "mStat": 2,
+          "mDataValue": "RTotalADRatio",
+          "__type": "StatByNamedDataValueCalculationPart"
+        },
+        {
+          "mDataValue": "RAPRatio",
+          "__type": "StatByNamedDataValueCalculationPart"
+        }
+      ],
+      "__type": "GameCalculation"
+    }
+  },
+  "data": [
+    "RBaseValue",
+    "RRange",
+    "RShieldDuration",
+    "RTotalADRatio",
+    "RAPRatio"
+  ]
+}

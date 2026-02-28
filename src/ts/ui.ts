@@ -5,25 +5,20 @@ import type { ContentDescriptor } from "video.js/dist/types/utils/dom";
 import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import * as clipboard from "@tauri-apps/plugin-clipboard-manager";
-
 import { commands, type GameMetadata, type GoldFrame, type ParticipantGold, type MarkerFlags, type Recording, type Settings, type MatchTeam, type Participant, type GameEvent } from "./bindings";
-
 import { getChampionIconUrl, getChampionIconUrlById, getTftUnitIconUrl, getTftTraitIconUrl, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, ensureTftDataLoaded, getItemPrice, getChampionNameById, getDetailedChampionData, getSummonerSpellData, getItemData, getTftItemIconUrl } from "./datadragon";
 import { getCurrentPatchVersion, getSpawnTimers } from "./version";
 import { InventoryTimeline } from "./timeline";
 import { getObjectiveConfig } from "./objectives";
 import { formatKeyCombo, saveKeybinds, keyComboToBackendString, loadMouseConfig, saveMouseConfig, type ActionName, type KeyCombo, type MouseConfig } from "./keybinds";
-
-
 import { currentKeybinds, reloadKeybinds } from "./main";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 import { open } from "@tauri-apps/plugin-shell";
-
 import { toVideoId, toVideoName, isFavorite } from "./util";
+import { showGlobalTooltip, hideGlobalTooltip, buildChampionTooltipHtml, buildSummonerSpellTooltipHtml, buildItemTooltipHtml, buildTrinketTooltipHtml } from "./tooltip";
 import { getText, type Language } from "./i18n";
-
 import monoTower from "../assets/match-history-icons/mono-tower.png";
 import monoVoidgrub from "../assets/match-history-icons/mono-voidgrub.png";
 import monoDrake from "../assets/match-history-icons/mono-drake.png";
@@ -37,46 +32,6 @@ try {
     console.warn("Failed to get current window (likely running in browser):", error);
 }
 
-let globalTooltip: HTMLDivElement | null = null;
-let currentTooltipTarget: HTMLElement | null = null;
-
-function showGlobalTooltip(target: HTMLElement, html: string) {
-    if (!globalTooltip) {
-        globalTooltip = document.createElement("div");
-        globalTooltip.className = "league-tooltip";
-        globalTooltip.style.position = "fixed";
-        globalTooltip.style.background = "rgba(10, 20, 30, 0.95)";
-        globalTooltip.style.color = "#eee";
-        globalTooltip.style.padding = "10px";
-        globalTooltip.style.borderRadius = "4px";
-        globalTooltip.style.border = "1px solid #c8aa6e";
-        globalTooltip.style.zIndex = "999999";
-        globalTooltip.style.maxWidth = "500px";
-        globalTooltip.style.fontSize = "16px";
-        globalTooltip.style.lineHeight = "1.4";
-        globalTooltip.style.pointerEvents = "none";
-        document.body.appendChild(globalTooltip);
-    }
-    currentTooltipTarget = target;
-    globalTooltip.innerHTML = html;
-    globalTooltip.style.display = "block";
-
-    const rect = target.getBoundingClientRect();
-    let left = rect.left + rect.width / 2;
-    let top = rect.top - 10;
-
-    globalTooltip.style.left = `${left}px`;
-    globalTooltip.style.top = `${top}px`;
-    globalTooltip.style.transform = "translate(-50%, -100%)";
-    // console.log("Tooltip displayed for rect", rect);
-}
-
-function hideGlobalTooltip() {
-    if (globalTooltip) {
-        globalTooltip.style.display = "none";
-        currentTooltipTarget = null;
-    }
-}
 
 export default class UI {
     private readonly modal;
@@ -226,18 +181,12 @@ export default class UI {
              this.setSidebarWidth(325);
         }
         
-        // Scoreboard Responsive
         const SB_BASE = 220;
         const SCALE_START_H = 850; // Above this, max size
         const SCALE_END_H = 600;   // Below this, collapse
 
         if (this.scoreboardScale !== null && this.scoreboardScale > 0) {
             this.setScoreboardHeight(this.scoreboardScale * SB_BASE, SB_BASE);
-            // If we want to strictly enforce "zoom", setScoreboardHeight does that via zoom property.
-            // But we might want to respect the "Force collapse" if window is TINY?
-            // "height returns to prescribed" - User dislikes the auto-reset.
-            // Let's assume user setting overrides everything except maybe extreme cases?
-            // Actually, simply returning here ensures user setting sticks.
             return;
         }
 
@@ -652,10 +601,6 @@ export default class UI {
     public setAutoPopupState = (checked: boolean) => {
         this.autoPopupCb.checked = checked;
     };
-
-
-
-
     public setRecordingOffset = (offset: number) => {
         this.recordingOffset = offset;
     };
@@ -976,7 +921,6 @@ export default class UI {
             // Determine Side for Border Color and Sidebar Indicator
             let isRedSide = false;
             const selfPart = meta.participants.find(p => p.participantId === meta.participantId);
-            
             if (selfPart && "teamId" in selfPart) {
                     // @ts-ignore
                     if (selfPart.teamId === 200) isRedSide = true;
@@ -1767,20 +1711,9 @@ export default class UI {
         this.events = data.events;
         this.recordingOffset = data.ingameTimeRecStartOffset;
         
-        // DEBUG: Trace ID Map and Refs
-        // console.log("DEBUG: Metadata Participants:", data.participants.map(p => `${p.participantId}:${p.championId}`));
-        // console.log("DEBUG: ID Map:", Array.from(idMap.entries()));
-
-        // Note: The rest of this function renders the *final* state as the initial view.
-        // We will then start updating it on timeupdate.
-        
-        // We use the Main Container #video-header for flex ordering.
-        // It is created by initVideoHeader in main.ts and sits in #main.
-        // Cast to HTMLElement to satisfy TS
         let spectatorHeader = document.getElementById("video-header") as HTMLElement | null;
         
         if (!spectatorHeader) {
-            // Fallback if not found (should be init by main.ts)
             const mainContainer = document.getElementById("main");
             if (mainContainer) {
                  spectatorHeader = this.vjs.dom.createEl("div", {}, { class: "spectator-header", id: "video-header" }) as HTMLElement;
@@ -1822,18 +1755,13 @@ export default class UI {
         const participants100 = data.participants.filter(p => p.teamId === 100);
         const participants200 = data.participants.filter(p => p.teamId === 200);
 
-        // Sort by Role: TOP, JUNGLE, MID, BOT, SUPPORT
-        // New Sorting Logic: Team Composition Fitting & Standard Mode Participant ID Priority
         const sortParticipants = (team: Participant[]) => {
             const slots: { [key: number]: Participant } = {};
             const remaining: Participant[] = [];
 
-            // 1. Identify Fixed Roles: JUNGLE (Smite), SUPPORT (Support Item)
-            // Support Items including upgrades
             const supportItems = [3865, 3866, 3867, 3869, 3870, 3871, 3876, 3877];
             const hasSmite = (p: Participant) => p.spell1Id === 11 || p.spell2Id === 11;
             
-            // Check Stats AND Events for Items (Role Detection Stability)
             const hasSupportItem = (p: Participant) => {
                  // Check current stats
                  const items = [p.stats.item0, p.stats.item1, p.stats.item2, p.stats.item3, p.stats.item4, p.stats.item5];
@@ -1880,17 +1808,7 @@ export default class UI {
             });
 
             if (isStandardMode) {
-                // Step B: Native Slot Assignment for Standard Modes
-                // Logic: Assign remaining players to their "Native" slot (based on ID) if empty.
-                // Native Slots:
-                // 1-5 (Blue): 1=Top, 2=Jg, 3=Mid, 4=Bot, 5=Sup
-                // 6-10 (Red): 6=Top, 7=Jg, 8=Mid, 9=Bot, 10=Sup
-                // Target Slots in UI: 1=Top, 2=Jg, 3=Mid, 4=Bot, 5=Sup
-                
-                // We iterate using a standard loop to handle potential modification of `remaining` if needed,
-                // but simpler to just filter/find.
-                
-                // Clone remaining to avoid mutation issues during iteration
+
                 const currentRemaining = [...remaining];
                 
                 currentRemaining.forEach(p => {
@@ -1910,15 +1828,9 @@ export default class UI {
                     }
                 });
                 
-                // Step C: Fallback for any still empty slots
-                // (e.g. Swapped roles or Off-meta picks that didn't match Jg/Sup logic)
+
             } else {
                 // --- SPATIAL SORTING FOR AI/CUSTOM ---
-                // User Request: Use average X,Y from events < 14 mins to determine lane.
-                // Score = AvgY - AvgX.
-                // Top: High Y, Low X -> High Positive.
-                // Mid: Y ~ X -> Near Zero.
-                // Bot: Low Y, High X -> High Negative.
                 
                 const posSums = new Map<number, { x: number, y: number, count: number }>();
                 const TIME_LIMIT = 14 * 60 * 1000; // 14 mins
@@ -1929,6 +1841,7 @@ export default class UI {
                 // Aggregate positions
                 if (this.events) {
                     for (const e of this.events) {
+                        
                         if (e.timestamp > TIME_LIMIT) break; 
                         
                         if ("ChampionKill" in e) {
@@ -1954,9 +1867,6 @@ export default class UI {
 
                 // Calculate Scores
                 const getSpatialScore = (p: Participant) => {
-                    // Check for Server-Side Persisted Score (laneScore)
-                    // We need to cast 'p' to any because 'laneScore' is not yet in type definition in bindings.ts
-                    // stored locally until we update bindings.
                     const pAny = p as any;
                     if (typeof pAny.laneScore === 'number' && pAny.laneScore !== 0) {
                          return pAny.laneScore;
@@ -1979,8 +1889,6 @@ export default class UI {
                     return sB - sA; // Descending
                 });
 
-                // Assign to Empty Target Slots [1, 3, 4]
-                // 1=Top (Highest Score), 3=Mid, 4=Bot (Lowest Score)
                 const targetSlots = [1, 3, 4].filter(s => !slots[s]);
                 
                 remaining.forEach((p, i) => {
@@ -1989,73 +1897,9 @@ export default class UI {
                      }
                 });
                 
-                // Remove assigned participants from remaining to prevent double assignment in fallback
                 if (remaining.length > 0 && targetSlots.length > 0) {
                      remaining.splice(0, Math.min(remaining.length, targetSlots.length));
                 }
-                /*
-                // --- LEGACY / FALLBACK LOGIC for non-standard modes (ARAM, Arena, etc) ---
-                // Or if user wants Standard Logic everywhere? Request said "Ranked, Normal, Swiftplay".
-                // We keep the heuristic sorts for unknown modes.
-                
-                // 2. Identify BOT (ADC) from remaining
-                // Traits: Heal(7), Barrier(21), Cleanse(1). Marksman Class.
-                const getBotScore = (p: Participant) => {
-                    let score = 0;
-                    if (p.spell1Id === 7 || p.spell2Id === 7) score += 50; // Heal
-                    if (p.spell1Id === 21 || p.spell2Id === 21) score += 20; // Barrier
-                    if (p.spell1Id === 1 || p.spell2Id === 1) score += 20; // Cleanse
-                    if (marksmen.includes(p.championId)) score += 30;
-                    return score;
-                };
-
-                // If Slot 4 (Bot) is empty, find best candidate
-                if (!slots[4]) {
-                    let bestBot: Participant | null = null;
-                    let maxScore = -1;
-                    let bestIdx = -1;
-
-                    remaining.forEach((p, i) => {
-                        const score = getBotScore(p);
-                        if (score > maxScore && score > 0) {
-                            maxScore = score;
-                            bestBot = p;
-                            bestIdx = i;
-                        }
-                    });
-
-                    if (bestBot && bestIdx !== -1) {
-                        slots[4] = bestBot;
-                        remaining.splice(bestIdx, 1);
-                    }
-                }
-
-                // 3. Identify TOP vs MID from remaining
-                const getTopScore = (p: Participant) => {
-                    let score = 0;
-                    if (p.spell1Id === 12 || p.spell2Id === 12) score += 20; // Teleport
-                    if (p.spell1Id === 6 || p.spell2Id === 6) score += 10; // Ghost
-                    return score;
-                };
-
-                // Fill Slots 1 (Top) and 3 (Mid)
-                if (remaining.length === 2 && !slots[1] && !slots[3]) {
-                     const pA = remaining[0];
-                     const pB = remaining[1];
-                     const aTop = getTopScore(pA);
-                     const bTop = getTopScore(pB);
-                     
-                     if (aTop >= bTop) {
-                         slots[1] = pA;
-                         slots[3] = pB;
-                     } else {
-                         slots[1] = pB;
-                         slots[3] = pA;
-                     }
-                     // Clear remaining as we assigned both
-                     remaining.length = 0; 
-                }
-                */
             }
             
             // Universal Fallback: Fill sequentially 1, 3, 4 (and 2, 5 if somehow missed)
@@ -2178,13 +2022,8 @@ export default class UI {
         });
 
 
-        // DIRECT MAPPING: Use participantId as requested.
-        // Assumes Event ID matches Metadata ID exactly.
         idMap.clear();
-        // No mapping needed if IDs are identical, or we can explicit set Identity.
-        // Passing undefined to InventoryTimeline makes it use event.pid directly.
-        
-        // console.log("DEBUG: Using Direct ParticipantID Mapping (No ID Map)");
+
         this.timeline = new InventoryTimeline(this.events, data.participants.map(p => p.participantId), undefined);
 
         // Render Header Team Side
@@ -2522,24 +2361,23 @@ export default class UI {
                 };
 
                 // Add Tooltip for Champion Skills
+                let isHovered = false;
                 img.addEventListener("mouseenter", async () => {
+                    isHovered = true;
                     // console.log("Fetching data for champion:", p.championId);
                     const data = await getDetailedChampionData(p.championId, getCurrentPatchVersion(), settings.language);
+                    if (!isHovered) return; // Prevent old fetch from stealing focus
+
                     // console.log("Champ data:", data);
                     if (data && data.spells) {
-                        let html = `<b style="color:#c8aa6e; font-size: 14px;">${data.name}</b> <span style="color:#aaa;">${data.title}</span><hr style="border-color:#333; margin:5px 0;">`;
-                        for (let i = 0; i < data.spells.length; i++) {
-                            const spell = data.spells[i];
-                            const key = ["Q", "W", "E", "R"][i];
-                            html += `<div style="margin-bottom: 6px;">
-                                <b style="color:#00d2ff;">[${key}]</b> ${spell.name} <span style="color:#aaa; font-size: 13px;">(CD: ${spell.cooldownBurn}s)</span><br>
-                                <div style="font-size: 13px; margin-top:2px; color:#ddd;">${spell.description}</div>
-                            </div>`;
-                        }
-                        showGlobalTooltip(img, html);
+                        const html = buildChampionTooltipHtml(data, settings.language || "ja");
+                        if (html) showGlobalTooltip(img, html);
                     }
                 });
-                img.addEventListener("mouseleave", () => hideGlobalTooltip());
+                img.addEventListener("mouseleave", () => {
+                    isHovered = false;
+                    hideGlobalTooltip();
+                });
 
                 // Champion Wiki Link
                 if (settings.championWikiBaseUrl) {
@@ -2584,10 +2422,7 @@ export default class UI {
                     el.addEventListener("mouseenter", async () => {
                         const spellData = await getSummonerSpellData(id, getCurrentPatchVersion(), settings.language);
                         if (spellData) {
-                            let html = `<b style="color:#c8aa6e; font-size: 13px;">${spellData.name}</b><br>
-                            <span style="color:#aaa; font-size: 13px;">Cooldown: ${spellData.cooldownBurn}s</span><hr style="border-color:#333; margin:5px 0;">
-                            <div style="font-size: 13px; color:#ddd;">${spellData.description}</div>`;
-                            showGlobalTooltip(el, html);
+                            showGlobalTooltip(el, buildSummonerSpellTooltipHtml(spellData));
                         }
                     });
                     el.addEventListener("mouseleave", () => hideGlobalTooltip());
@@ -2669,10 +2504,7 @@ export default class UI {
                         if (currentId === 0) return;
                         const itemData = await getItemData(currentId, settings.language || "ja");
                         if (itemData) {
-                            let html = `<b style="color:#c8aa6e; font-size: 13px;">${itemData.name}</b><br>
-                            <div style="color:#aaa; font-size: 13px; margin-bottom: 5px;">Cost: <span style="color:#e8d154">${itemData.gold?.total || 0}g</span></div>
-                            <div style="font-size: 13px; color:#ddd; max-width: 250px;">${itemData.description}</div>`;
-                            showGlobalTooltip(target, html);
+                            showGlobalTooltip(target, buildItemTooltipHtml(itemData));
                         }
                     });
                     i.addEventListener("mouseleave", () => hideGlobalTooltip());
@@ -2697,9 +2529,7 @@ export default class UI {
                     if (currentId === 0) return;
                     const itemData = await getItemData(currentId, settings.language || "ja");
                     if (itemData) {
-                        let html = `<b style="color:#c8aa6e; font-size: 13px;">${itemData.name}</b><br>
-                        <div style="font-size: 13px; color:#ddd; max-width: 250px;">${itemData.description}</div>`;
-                        showGlobalTooltip(target, html);
+                        showGlobalTooltip(target, buildTrinketTooltipHtml(itemData));
                     }
                 });
                 trinketImg.addEventListener("mouseleave", () => hideGlobalTooltip());
@@ -2712,15 +2542,7 @@ export default class UI {
                 const trinketDiv = this.vjs.dom.createEl("div", {}, { class: "trinket-container" }, [ trinketSlotDiv ]) as HTMLElement;
                 
                 const goldDiv = this.vjs.dom.createEl("div", {}, { class: "total-gold" }, "0") as HTMLElement;
-
-                // Matchup Link (Click on Gold) removed from here
-
-
-                // DATA-BINDING ROBUSTNESS
-                // Embed PID in the DOM row for easy debugging
                 row.dataset.pid = p.participantId.toString();
-                
-                // Priority: 1. Populated summonerName (New recordings), 2. data.player (Old recordings - Me), 3. Fallback ID
                 const nameStr = p.summonerName || (isMe ? `${data.player.gameName}#${data.player.tagLine}` : `P${p.participantId}`); 
                 const name = this.vjs.dom.createEl("div", {}, { class: "player-name" }, nameStr) as HTMLElement;
 
@@ -2731,22 +2553,13 @@ export default class UI {
                      name.addEventListener("click", async (e) => {
                          e.stopPropagation(); // prevent player toggle play/pause if applicable
                          if (!settings.matchHistoryBaseUrl) return; 
-
-                         // Logic: Replace first '#' with '-' then encode? Or replace ALL?
-                         // User example: "MEIY FANBOY#LAU9H" -> "MEIY FANBOY-LAU9H"
-                         // Usually riot IDs are Name#Tag
                          const targetId = nameStr.replace("#", "-");
-                         
-                         // Note: We do NOT encodeURIComponent right away because some sites might want Raw, 
-                         // but typically URL params should be encoded. 
-                         // However, the User's example "MEIY%20FANBOY-LAU9H" suggests standard encoding.
                          const encodedId = encodeURIComponent(targetId);
                          
                          let url = "";
                          if (settings.matchHistoryBaseUrl.includes("{q}")) {
                              url = settings.matchHistoryBaseUrl.replace("{q}", encodedId);
                          } else {
-                             // Fallback for legacy/simple append behavior if {q} is missing
                              url = `${settings.matchHistoryBaseUrl}${encodedId}`;
                          }
                          
@@ -2828,19 +2641,6 @@ export default class UI {
                     metaDiv.append(lvlEl);
                 }
                 
-                // Layout Orders
-                // Goal: Name - Meta - Gold ...
-                // Blue (Left): [Icon 1] ... [KDA ?] [Gold ?] [Meta ?] [Name ?] 
-                // Wait, Blue Left alignment usually: [Icon] [Name] ...
-                // Let's verify standard order again.
-                // UI Code Line 2471: Blue Team (Left Side)
-                // Old: [Meta 0] [Name 1] [Gold 2] ...
-                // New Desired: [Name] [Meta] [Gold] ...
-                
-                // Red (Right):
-                // Old: ... [Gold 8] [Name 9] [Meta 10]
-                // New Desired: ... [Gold] [Meta] [Name]
-                
                 if (teamId === 200) {
                     // Red Team (Right Side)
                     // Desired: ... [Gold] [Meta] [Name]
@@ -2864,32 +2664,6 @@ export default class UI {
                     itemsGrid.style.justifyContent = "flex-start";
                     
                 } else {
-                    // Blue Team (Left Side)
-                    // Desired: [Name] [Meta] [Gold] ...
-                    // Wait, usually Blue (Left) starts with Icon? 
-                    // Inspecting existing order:
-                    // Blue: [Meta 0] [Name 1] [Gold 2] ... [Icon 9] ??
-                    // This implies Right-Aligned Blue Team?
-                    // Line 2489: `itemsGrid.style.flexDirection = "row-reverse";`
-                    // This creates a mirrored look where center is the "spine".
-                    // If Blue is left of spine: [Name] [Meta] [Gold] ... [Icon] (Center)
-                    // If Blue is right of spine: [Icon] ... [Gold] [Meta] [Name]
-                    
-                    // Let's assume standard "Center Spine" layout based on `spec-center` logic.
-                    // If so, Blue usually is [Name...Icon] [Spine] [Icon...Name] (Red)?
-                    // Or [Icon...Name] [Spine] [Name...Icon]?
-                    
-                    // Code says: Blue Order: Meta(0), Name(1), Gold(2)... Icon(9).
-                    // This suggests Blue is on the LEFT of the player row, expanding RIGHT??
-                    // BUT `justifyContent = "flex-end"` on Team Header (Blue).
-                    // This implies Blue text is Right-Aligned, pushing against the Center Spine?
-                    // And Red is Left-Aligned, pushing against Center Spine?
-                    
-                    // Let's Assume:
-                    // Blue (Left Team): [Name] [Meta] [Gold] ... [Icon] -> Center
-                    // old: [Meta] [Name] [Gold] ...
-                    // new: [Name] [Meta] [Gold] ...
-                    
                     name.style.order = "1";
                     metaDiv.style.order = "2"; // Swapped
                     goldDiv.style.order = "3";
@@ -2900,11 +2674,9 @@ export default class UI {
                     kdaDiv.style.order = "8";
                     csDiv.style.order = "9";
                     img.style.order = "10";
-                    
                     metaDiv.style.textAlign = "center"; 
                     metaDiv.style.marginLeft = "0px";
                     metaDiv.style.marginRight = "0px";
-                    
                     // Items in reverse order (6-1) -> RTL inside grid
                     itemsGrid.style.flexDirection = "row-reverse";
                     itemsGrid.style.justifyContent = "flex-end";
@@ -2930,41 +2702,11 @@ export default class UI {
             
             // Race check
             if (this.metadataRenderId !== currentRenderId) return null;
-
-
-            // Save Cache if new data was fetched
-            // We only save if we didn't start with cache, and we have valid results
-            /*
-            if (!cacheData && cachePath && results.length > 0) {
-                 const newCache: Record<string, any> = {};
-                 let hasData = false;
-                 results.forEach(r => {
-                     if (r && r.assets) {
-                         newCache[r.participantId.toString()] = r.assets;
-                         hasData = true;
-                     }
-                 });
-                 
-                 if (hasData) {
-                     try {
-                         // Asynchronous save, fire and forget or await
-                         if (activeVideoId) {
-                            await commands.saveScoreboardCache(activeVideoId, JSON.stringify(newCache));
-                         }
-                     } catch(e) {
-                         console.warn("Failed to write scoreboard cache:", e);
-                     }
-                 }
-            }
-            */
-
             for (const res of results) {
                 if (!res) continue;
-
                 teamDiv.append(res.row);
                 this.csRefs.push(res.csDiv);
                 this.kdaRefs.push(res.kdaDiv);
-
                 this.scoreboardRefs.set(res.participantId, {
                     items: res.itemImgs,
                     trinket: res.trinketImg,
@@ -3052,8 +2794,7 @@ export default class UI {
                         .replace("{My}", myChampName)
                         .replace("{my}", myChampName.toLowerCase())
                         .replace("{Opponent}", targetChampName)
-                        .replace("{opponent}", targetChampName.toLowerCase());
-                    
+                        .replace("{opponent}", targetChampName.toLowerCase()); 
                     try {
                         await open(url);
                     } catch (err) {
@@ -3141,7 +2882,6 @@ export default class UI {
              if (trinketId !== 0) {
                  currentGold += getItemPrice(trinketId, gameVersion);
              }
-
              const tImg = refs.trinket;
              const currentTrinketId = parseInt(tImg.dataset.itemId || "0", 10);
              if (currentTrinketId !== trinketId) {
@@ -3190,33 +2930,13 @@ export default class UI {
                       frameDataMap.set(pg.participantId, pg);
                   });
 
-                 // Update Diffs & CS
                  let t100Total = 0;
                  let t200Total = 0;
 
-                 // Separate teams for Diff calculation
                  const p100 = this.participants.filter(p => p.teamId === 100);
                  const p200 = this.participants.filter(p => p.teamId === 200);
 
-                 // Update CS and Calculate Team Gold Totals
                  this.participants.forEach((p) => {
-                     // Find the correct CS/KDA ref for this participant
-                     // csRefs / kdaRefs are pushed in order of *rendering* (sorted)
-                     // this.participants is now also SORTED (due to sync at line ~1322)
-                     // So index 'i' should match 'p' if everything is consistent.
-                     // BUT, let's verify if p matches the rendering order.
-
-                     // In renderTeam:
-                     // this.csRefs.push(csDiv);
-                     // this.kdaRefs.push(kdaDiv);
-                     
-                     // We iterate renderTeam(100) then renderTeam(200).
-                     // this.participants = [...sorted100, ...sorted200];
-                     
-                     // So this.participants[i] corresponds to this.csRefs[i].
-                     
-                     // However, we need to ensure we are updating the UI with the DATA for 'p'.
-                     
                      const idx = this.participants.indexOf(p);
                      const ref = this.csRefs[idx];
                      
@@ -3265,14 +2985,11 @@ export default class UI {
                      }
                  }
 
-                 // Update Header
                  if (this.team100GoldText) this.team100GoldText.textContent = `${(t100Total / 1000).toFixed(1)}k`;
                  if (this.team200GoldText) this.team200GoldText.textContent = `${(t200Total / 1000).toFixed(1)}k`;
-
                  const lead = t100Total - t200Total;
                  const leadAbs = Math.abs(lead);
                  const leadStr = leadAbs >= 1000 ? `${(leadAbs / 1000).toFixed(1)}k` : `${Math.round(leadAbs)}`;
-
                  if (this.team100LeadText) {
                      this.team100LeadText.textContent = (lead > 0) ? `+${leadStr}` : "";
                      this.team100LeadText.style.color = (lead > 0) ? "gold" : "transparent";
@@ -3375,12 +3092,8 @@ export default class UI {
                  }
              }
              
-             // Update DOM
-             // Update DOM
-             // Update DOM (KDA) based on sorted participants
              this.participants.forEach((p, i) => {
                  const ref = this.kdaRefs[i];
-                 // KDA array is indexed 0-9 corresponding to Participant ID 1-10
                  const stats = kda[p.participantId - 1]; 
                  if (ref && stats) {
                      ref.textContent = `${stats.k} / ${stats.d} / ${stats.a}`;
@@ -3404,10 +3117,6 @@ export default class UI {
              if (this.team200HeraldText) this.team200HeraldText.textContent = `${heralds[200]}`;
         }
         
-             // --- Update Spawn Timers ---
-             // Calculate Next Spawn
-             // SYNC FIX: Use raw player time (seconds) + recording offset.
-             // Do NOT use 'currentTime' variable from above as it has a +2000ms hack for inventory sync.
              const rawVideoSeconds = this.player.currentTime();
              const gameTimeFloat = rawVideoSeconds + this.recordingOffset;
              const now = Math.floor(gameTimeFloat);
@@ -3446,12 +3155,8 @@ export default class UI {
                      }
                  }
 
-                 // --- INITIAL SPAWNS (No previous kills) ---
                  if (!lastEvent) {
                      if (category === "dragon") {
-                         // Standard: 5:00. Swiftplay: 5:00 (Per user)
-                         // Both use 5:00 initial now? User only said interval 5m. 
-                         // Assuming 5:00 initial for both for now.
                          return { time: 300, type: "dragon" }; 
                      }
                      
@@ -3487,19 +3192,9 @@ export default class UI {
                      if (subType === "ELDER_DRAGON") {
                          return { time: killTime + config.elderRespawnTime, type: "dragon" };
                      }
-                     // Check if next is Elder (Soul Logic or Fixed Time)
-                     // Swiftplay: Elder @ 15:00 fixed?
                      if (config.elderSpawnTime > 0) {
-                         // Fixed Elder Time Mode
-                         // If we are past Elder time, next is Elder
-                         // Note: If Dragon killed at 14:00, next is Elder at 15:00? Or Respawn?
-                         // Usually Elder overrides normal dragon after a certain time/soul condition.
-                         // For Swiftplay, "Elder is 15:00".
                          const nextSpawn = killTime + config.dragonInterval;
                          if (nextSpawn >= config.elderSpawnTime) {
-                             // Force Elder if next predicted spawn is past Elder Time?
-                             // Or just if *now* is past it?
-                             // Let's assume after 15:00 all dragons are Elder.
                              return { time: Math.max(nextSpawn, config.elderSpawnTime), type: "dragon" };
                          }
                          return { time: nextSpawn, type: "dragon" };
@@ -3851,8 +3546,6 @@ export default class UI {
         generalWrapper.append(generalGrid);
         generalTabContent.append(generalWrapper);
         // assetsContainer appended to generalGrid below
-
-        // Local copy of binds and mouse config to edit before saving
         const pendingBinds = { ...currentKeybinds };
         const pendingMouseConfig: MouseConfig = loadMouseConfig();
 
@@ -4154,8 +3847,6 @@ export default class UI {
             qualityLabel
         ]);
 
-        // Resolution
-        // Resolution
         // Map display labels to backend enum values (StdResolution)
         const resolutions = [
             { label: "Auto (Window)", value: "" },
@@ -4750,10 +4441,11 @@ export default class UI {
             const tick = document.createElement("div");
             tick.className = "vjs-ruler-tick";
             
-            // Calculate position
             const currentSeconds = i * stepSeconds;
-            const percent = (currentSeconds / duration) * 100;
-            tick.style.left = `${percent}%`;
+            const percent = currentSeconds / duration;
+            
+            // Use percentage to allow responsive resizing when window size changes
+            tick.style.left = `${percent * 100}%`;
 
             // Determine size and add number
             // 30s: small
@@ -4794,17 +4486,6 @@ export default class UI {
                 if (!img) continue; // Should have 6
 
                 const newItemId = itemIds[i] || 0;
-                
-                // Optimization: Store current ID on element to avoid redundant updates?
-                // Or just update img.src. Async fetch might be jittery if we await inside animation frame.
-                // getItemIconUrl is async.
-                // We shouldn't await in a timeupdate loop if possible, or we should cache urls.
-                // getItemIconUrl uses getCachedAssetUrl which IS async.
-                // However, since items are finite, we can fire and forget?
-                
-                // Better approach: timeline should return item URLs? No, logic separation.
-                // We can fire the async update and let it resolve.
-                
                 this.updateItemIcon(img, newItemId);
             }
 
@@ -4822,12 +4503,6 @@ export default class UI {
          this.lastIconUpdate.set(img, itemId);
          
          if (itemId === 0) {
-             // Empty slot transparent or placeholder?
-             // Existing code uses 1x1 pixel or similar if 0? 
-             // getItemIconUrl(0) returns nothing?
-             // Let's use a transparent image or hide it.
-             // DataDragon 0 -> might return nothing.
-             // Let's set src to empty or transparent.
              img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"; // 1x1 transparent
              img.style.opacity = "0"; // or just hide
          } else {
