@@ -625,7 +625,9 @@ async function main() {
         }
 
         // --- Startup Update Check ---
-        if (settings.checkUpdatesOnStartup) {
+        // Use sessionStorage to ensure it only runs once per actual app launch, not on every F5 refresh
+        if (settings.checkUpdatesOnStartup && !sessionStorage.getItem("hasCheckedForUpdates")) {
+            sessionStorage.setItem("hasCheckedForUpdates", "true");
             try {
                 const { check } = await import("@tauri-apps/plugin-updater");
                 const update = await check();
@@ -820,10 +822,14 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
         player.src("");
     } else {
         const settings = await commands.getSettings();
+        
+        // Strip out existing extensions (.mp4, .json, .webm) if present to prevent '.mp4.mp4' duplication
+        const cleanVideoId = videoId.replace(/\.(mp4|json|webm)$/i, "");
+
         // VideoId is now an absolute path (base path without extension), so we use it directly
-        ui.setActiveVideoId(videoId);
-        setMetadata(videoId);
-        player.src({ type: "video/mp4", src: convertFileSrc(videoId + ".mp4") });
+        ui.setActiveVideoId(cleanVideoId);
+        setMetadata(cleanVideoId);
+        player.src({ type: "video/mp4", src: convertFileSrc(cleanVideoId + ".mp4") });
         if (settings.autoplayVideo && allowAutoplay) {
             void player.play()?.catch(() => {});
         }
