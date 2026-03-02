@@ -123,7 +123,8 @@ export const APP_TEXT = {
         keepVideoJsonOnAutoDelete: "Auto Delete Video Only (Keep JSON)",
         language: "Language",
         other: "Other",
-        updateLater: "Later"
+        updateLater: "Later",
+        reportBug: "Report Bug / Feature Request"
     },
     ja: {
         statAD: "AD",
@@ -247,7 +248,8 @@ export const APP_TEXT = {
         keepVideoJsonOnAutoDelete: "自動削除時に動画ファイルのみを削除しJSONは残す",
         language: "言語 / Language",
         other: "その他",
-        updateLater: "後で"
+        updateLater: "後で",
+        reportBug: "不具合報告・機能リクエスト"
     },
     zh: {
         statAD: "攻击力",
@@ -352,7 +354,8 @@ export const APP_TEXT = {
         keepVideoJsonOnAutoDelete: "自动删除时仅删除视频 (保留JSON)",
         language: "语言 / Language",
         other: "其他",
-        updateLater: "稍后"
+        updateLater: "稍后",
+        reportBug: "报告 Bug / 功能请求"
     },
     ko: {
         statAD: "공격력",
@@ -457,7 +460,8 @@ export const APP_TEXT = {
         keepVideoJsonOnAutoDelete: "자동 삭제 시 비디오만 삭제 (JSON 유지)",
         language: "언어 / Language",
         other: "기타",
-        updateLater: "나중에"
+        updateLater: "나중에",
+        reportBug: "버그 신고 / 기능 요청"
     },
     vi: {
         statAD: "SMCK",
@@ -562,7 +566,8 @@ export const APP_TEXT = {
         keepVideoJsonOnAutoDelete: "Chỉ Xóa Video khi Tự động Xóa (Giữ JSON)",
         language: "Ngôn ngữ / Language",
         other: "Khác",
-        updateLater: "Để sau"
+        updateLater: "Để sau",
+        reportBug: "Báo lỗi / Yêu cầu tính năng"
     },
     pt: {
         statAD: "DdA",
@@ -667,7 +672,8 @@ export const APP_TEXT = {
         keepVideoJsonOnAutoDelete: "Exclusão Automática Apenas do Vídeo (Manter JSON)",
         language: "Idioma / Language",
         other: "Outros",
-        updateLater: "Mais tarde"
+        updateLater: "Mais tarde",
+        reportBug: "Relatar Bug / Solicitar Recurso"
     },
     es: {
         statAD: "DA",
@@ -772,7 +778,8 @@ export const APP_TEXT = {
         keepVideoJsonOnAutoDelete: "Borrado Automático Solo Vídeo (Mantener JSON)",
         language: "Idioma / Language",
         other: "Otros",
-        updateLater: "Más tarde"
+        updateLater: "Más tarde",
+        reportBug: "Informar de Error / Solicitar Función"
     },
     fr: {
         statAD: "Dégâts d'Attaque",
@@ -877,7 +884,8 @@ export const APP_TEXT = {
         keepVideoJsonOnAutoDelete: "Suppression automatique de la vidéo uniquement (Conserver JSON)",
         language: "Langue / Language",
         other: "Autre",
-        updateLater: "Plus tard"
+        updateLater: "Plus tard",
+        reportBug: "Signaler un Bug / Demander une Fonctionnalité"
     },
     de: {
         statAD: "Angriffsschaden",
@@ -982,7 +990,8 @@ export const APP_TEXT = {
         keepVideoJsonOnAutoDelete: "Nur Video automatisch löschen (JSON behalten)",
         language: "Sprache / Language",
         other: "Andere",
-        updateLater: "Später"
+        updateLater: "Später",
+        reportBug: "Fehler Melden / Funktion Anfragen"
     },
     ru: {
         statAD: "Сила Атаки",
@@ -1087,7 +1096,8 @@ export const APP_TEXT = {
         keepVideoJsonOnAutoDelete: "Автоудаление Только Видео (Оставить JSON)",
         language: "Язык / Language",
         other: "Другое",
-        updateLater: "Позже"
+        updateLater: "Позже",
+        reportBug: "Сообщить об Ошибке / Запросить Функцию"
     },
     tr: {
         statAD: "Saldırı Gücü",
@@ -1192,7 +1202,8 @@ export const APP_TEXT = {
         keepVideoJsonOnAutoDelete: "Otomatik Silmede Sadece Videoyu Sil (JSON'u Koru)",
         language: "Dil / Language",
         other: "Diğer",
-        updateLater: "Daha sonra"
+        updateLater: "Daha sonra",
+        reportBug: "Hata Bildir / Özellik İste"
     },
     pl: {
         statAD: "Obrażenia od Ataku",
@@ -1297,7 +1308,8 @@ export const APP_TEXT = {
         keepVideoJsonOnAutoDelete: "Automatyczne Usuwanie Wideo (Zachowaj JSON)",
         language: "Język / Language",
         other: "Inne",
-        updateLater: "Później"
+        updateLater: "Później",
+        reportBug: "Zgłoś Błąd / Zgłoś Prośbę O Funkcję"
     },
     it: {
         statAD: "Attacco Fisico",
@@ -1402,7 +1414,8 @@ export const APP_TEXT = {
         keepVideoJsonOnAutoDelete: "Eliminazione automatica solo video (Mantieni JSON)",
         language: "Lingua / Language",
         other: "Altro",
-        updateLater: "Più tardi"
+        updateLater: "Più tardi",
+        reportBug: "Segnala Bug / Richiedi Funzionalità"
     }
 };
 

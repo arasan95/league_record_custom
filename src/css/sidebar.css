@@ -1,7 +1,7 @@
 #sidebar {
     display: grid;
     grid-template-columns: 1fr;
-    grid-template-rows: [header] 1fr [list] 11fr;
+    grid-template-rows: [header] 0.5fr [list] 11fr;
 
     /* border-right: 1px solid #333; */
     border-left: 1px solid #1e1e1e; /* 1px Invisible Safety Buffer for DWM */
@@ -17,6 +17,7 @@
     padding: 10px;
     display: flex;
     flex-direction: column; /* Stack actions and storage */
+    justify-content: center; /* Vertically center content (buttons) */
     gap: 10px;
 }
 

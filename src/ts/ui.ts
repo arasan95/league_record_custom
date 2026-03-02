@@ -55,6 +55,7 @@ export default class UI {
     private readonly searchAllyInput;
     private readonly searchEnemyInput;
     private readonly searchUserInput;
+    private readonly searchQueueInput;
 
     // Storage Elements
     private readonly segClip;
@@ -74,6 +75,7 @@ export default class UI {
     private searchAllyQuery: string = "";
     private searchEnemyQuery: string = "";
     private searchUserQuery: string = "";
+    private searchQueueQuery: string = "";
     
     // Server Nav Filter
     private filterServer: 'ALL' | 'LOL' | 'TFT' | 'SR' | 'ARAM' | 'OTHER' = 'ALL';
@@ -278,6 +280,7 @@ export default class UI {
         this.searchAllyInput = document.querySelector<HTMLInputElement>("#search-ally-input")!;
         this.searchEnemyInput = document.querySelector<HTMLInputElement>("#search-enemy-input")!;
         this.searchUserInput = document.querySelector<HTMLInputElement>("#search-user-input")!;
+        this.searchQueueInput = document.querySelector<HTMLInputElement>("#search-queue-input")!;
         
         // Navigation Buttonsts
         this.navFilterAllBtn = document.querySelector<HTMLButtonElement>("#nav-filter-all")!;
@@ -478,6 +481,8 @@ export default class UI {
                          this.searchBarContainer.style.display = ""; // clear inline
                          if (this.searchInput) this.searchInput.focus();
                     }
+                    // Show stats container immediately when search activates
+                    if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
                 } else {
                     this.filterSearchBtn.classList.remove("active");
                     this.filterSearchBtn.style.color = "";
@@ -485,24 +490,20 @@ export default class UI {
                         this.searchBarContainer.classList.add("hidden");
                     }
                     
-                    // Clear search on close
-                    let searchCleared = false;
-                    if (this.searchQuery !== "" || this.searchAllyQuery !== "" || this.searchEnemyQuery !== "" || this.searchUserQuery !== "") {
-                        // Clear both secondary search inputs
-                        if (this.searchAllyInput) this.searchAllyInput.value = "";
-                        if (this.searchEnemyInput) this.searchEnemyInput.value = "";
-                        if (this.searchUserInput) this.searchUserInput.value = "";
-                        
-                        this.searchQuery = "";
-                        this.searchAllyQuery = "";
-                        this.searchEnemyQuery = "";
-                        this.searchUserQuery = "";
-                        
-                        searchCleared = true;
-                    }
-                    if (searchCleared && this.lastOnVideo) {
-                        this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
-                    }
+                    // Clear all search queries on close
+                    if (this.searchInput) this.searchInput.value = "";
+                    if (this.searchAllyInput) this.searchAllyInput.value = "";
+                    if (this.searchEnemyInput) this.searchEnemyInput.value = "";
+                    if (this.searchUserInput) this.searchUserInput.value = "";
+                    if (this.searchQueueInput) this.searchQueueInput.value = "";
+                    this.searchQuery = "";
+                    this.searchAllyQuery = "";
+                    this.searchEnemyQuery = "";
+                    this.searchUserQuery = "";
+                    this.searchQueueQuery = "";
+                    
+                    // Always re-render to hide stats container and reset filters
+                    if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
                 }
             });
         }
@@ -528,6 +529,12 @@ export default class UI {
         if (this.searchUserInput) {
             this.searchUserInput.addEventListener("input", (e) => {
                 this.searchUserQuery = (e.target as HTMLInputElement).value.toLowerCase();
+                if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+            });
+        }
+        if (this.searchQueueInput) {
+            this.searchQueueInput.addEventListener("input", (e) => {
+                this.searchQueueQuery = (e.target as HTMLInputElement).value.toLowerCase();
                 if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
             });
         }
@@ -961,6 +968,67 @@ export default class UI {
                     }
                 }
                 
+                // Search Filter (Game Mode)
+                if (!shouldHide && this.searchQueueQuery && this.searchQueueQuery !== "") {
+                    const terms = this.searchQueueQuery.split(',').map((t: string) => t.trim()).filter((t: string) => t.length > 0);
+                    if (terms.length > 0) {
+                        for (const term of terms) {
+                            let matchedQueue = false;
+                            
+                            // 1. Check against raw JSON queue name (e.g. "Ranked Solo/Duo")
+                            if (m.queue && m.queue.name) {
+                                const qName = m.queue.name.toLowerCase();
+                                if (qName.includes(term)) {
+                                    matchedQueue = true;
+                                }
+                            }
+                            
+                            // 2. Check against sidebar display names (the short English labels shown in UI)
+                            if (!matchedQueue && m.queue) {
+                                const qId = m.queue.id || 0;
+                                const rawName = (m.queue.name || "").toLowerCase();
+                                
+                                // Derive the display name (same logic as sidebar item rendering)
+                                let displayName = rawName;
+                                if (rawName.includes("practice") || rawName.includes("プラクティス")) displayName = "practice";
+                                else if (rawName.includes("custom") || rawName.includes("カスタム")) displayName = "custom";
+                                else if (rawName.includes("bot") || rawName.includes("co-op") || rawName.includes("intro") || rawName.includes("intermediate") || rawName.includes("入門") || rawName.includes("初級") || rawName.includes("中級")) displayName = "ai";
+                                else if (rawName.includes("aram")) displayName = "aram";
+                                else if (rawName.includes("flex")) displayName = "flex";
+                                else if (rawName.includes("solo") || rawName.includes("solo/duo")) displayName = "solo";
+                                else if (rawName.includes("arena")) displayName = "arena";
+                                else if (rawName.includes("swift") || rawName.includes("swiftplay") || qId === 480 || qId === 490) displayName = "swift";
+                                else if (rawName.includes("urf")) displayName = "urf";
+                                else if (rawName.includes("draft")) displayName = "draft";
+                                else if (rawName.includes("blind")) displayName = "blind";
+                                else if (rawName.includes("quick")) displayName = "quick";
+                                else if (rawName.includes("clash")) displayName = "clash";
+                                else if (rawName.includes("ranked") || rawName.includes("rank")) displayName = "ranked";
+                                else if (rawName.includes("normal")) displayName = "normal";
+                                else if (rawName.includes("tft") || rawName.includes("teamfight")) displayName = "tft";
+                                
+                                // Check if the user's search term matches the display name (partial)
+                                if (displayName.includes(term) || term.includes(displayName)) {
+                                    matchedQueue = true;
+                                }
+                                
+                                // Also check by queueId group as final fallback
+                                if (!matchedQueue) {
+                                    const queueFilterMode = getGameModeByQueueId(qId, m.queue.name || "");
+                                    if (queueFilterMode.toLowerCase().includes(term)) {
+                                        matchedQueue = true;
+                                    }
+                                }
+                            }
+
+                            if (!matchedQueue) {
+                                shouldHide = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
                 // Data Extraction for Stats
                 if (m.participants && m.participantId !== undefined) {
                     const myParInner = m.participants.find((p: any) => p.participantId === m.participantId);
@@ -1173,8 +1241,12 @@ export default class UI {
         // --- Calculate and Update Filtered Stats ---
         const statsContainer = document.getElementById("filtered-stats-container");
         if (statsContainer) {
-            // Always show it. Let's always show it, even for 0 games.
-            statsContainer.style.display = "flex";
+            // Show when search mode is active (button toggled ON)
+            if (this.filterSearch) {
+                statsContainer.style.display = "flex";
+            } else {
+                statsContainer.style.display = "none";
+            }
 
             // Update UI Elements
             const setStat = (id: string, value: string) => {
@@ -4669,11 +4741,17 @@ export default class UI {
             appVersionLine.innerText = `${getText(lang, "appVersion" as any)}: Unknown`;
         });
         
-        const repoLine = this.vjs.dom.createEl("div", {}, { style: "margin-bottom: 20px;" }) as HTMLDivElement;
+        const repoLine = this.vjs.dom.createEl("div", {}, { style: "margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; align-items: center;" }) as HTMLDivElement;
+        
         const repoLink = this.vjs.dom.createEl("a", {
             onclick: () => open("https://github.com/arasan95/League_Record_custom")
         }, { style: "color: #00d2ff; cursor: pointer; text-decoration: underline;" }, "GitHub Repository");
-        repoLine.appendChild(repoLink);
+        
+        const reportBugBtn = this.vjs.dom.createEl("button", {
+            onclick: () => open("https://docs.google.com/forms/d/e/1FAIpQLScM3I0di-DeqQACBhGfrewibuos2xl-pTNv4XoYhK3R0p3ziA/viewform?usp=publish-editor") // TODO: Replace with actual Google Form URL
+        }, { class: "btn-browse", style: "border: 1px solid #c8aa6e; color: #c8aa6e; background: #222; max-width: 300px;" }, getText(lang as any, "reportBug" as any) || "Report Bug / Feature Request");
+        
+        repoLine.append(repoLink, reportBugBtn);
         
         const updateStatusMsg = this.vjs.dom.createEl("div", {}, { style: "font-size: 0.9em; color: #aaa; margin: 10px 0; min-height: 20px;" }) as HTMLDivElement;
         const updateActionsContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; justify-content: center; gap: 10px;" }) as HTMLDivElement;
