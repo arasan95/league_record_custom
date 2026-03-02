@@ -1,5 +1,0 @@
-{
-  "DD_Tooltip": "ライフルをチャージして貫通弾を発射し、<physicalDamage>{{ initialdamage }}の物理ダメージ</physicalDamage>を与える。貫通弾は最初の対象に命中した後に幅が広がり、<physicalDamage>{{ secondarydamage }}の物理ダメージ</physicalDamage>を与える。<br /><br /><spellName>「ヨードルトラップ」</spellName>で可視化された対象へのダメージは減少しない。{{ spellmodifierdescriptionappend }}",
-  "CD_DataValues": [],
-  "CD_Calculations": {}
-}
