@@ -25,14 +25,7 @@ Please install FFmpeg and add it to your system's PATH, or specify the executabl
 
 ## Download
 
-<<<<<<< HEAD
-**[⬇️ Download LeagueRecord Setup (latest)](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_1.1.3_x64-setup.exe)**
-
-Portable version:
-[⬇️ Download LeagueRecord_x64.zip](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_x64.zip)
-=======
-**[Download LeagueRecord Setup (latest)](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_1.1.2_x64-setup.exe)**
->>>>>>> fb48d6c (Edit readme)
+**[Download LeagueRecord Setup (latest)](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_1.1.3_x64-setup.exe)**
 
 or browse all versions: [GitHub Releases](https://github.com/arasan95/league_record_custom/releases)
 
