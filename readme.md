@@ -1,4 +1,4 @@
-# LeagueRecord Custom
+﻿# LeagueRecord Custom
 
 [English](readme.md) | [日本語](README_ja.md)**Note**: This project is a customized version based on [LeagueRecord](https://github.com/FFFFFFFXXXXXXX/league_record).
 This project is a customized clone of LeagueRecord, based on [v2.1.1](https://github.com/FFFFFFFXXXXXXX/league_record/releases/tag/v2.1.1).
@@ -25,7 +25,7 @@ Please install FFmpeg and add it to your system's PATH, or specify the executabl
 
 ## Download
 
-**[⬇️ Download LeagueRecord Setup (latest)](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_1.1.2_x64-setup.exe)**
+**[⬇️ Download LeagueRecord Setup (latest)](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_1.1.3_x64-setup.exe)**
 
 Portable version:
 [⬇️ Download LeagueRecord_x64.zip](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_x64.zip)
