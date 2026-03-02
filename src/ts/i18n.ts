@@ -122,7 +122,8 @@ export const APP_TEXT = {
         checkUpdatesOnStartup: "Check for updates on startup",
         keepVideoJsonOnAutoDelete: "Auto Delete Video Only (Keep JSON)",
         language: "Language",
-        other: "Other"
+        other: "Other",
+        updateLater: "Later"
     },
     ja: {
         statAD: "AD",
@@ -245,7 +246,8 @@ export const APP_TEXT = {
         checkUpdatesOnStartup: "起動時に更新を自動で確認する",
         keepVideoJsonOnAutoDelete: "自動削除時に動画ファイルのみを削除しJSONは残す",
         language: "言語 / Language",
-        other: "その他"
+        other: "その他",
+        updateLater: "後で"
     },
     zh: {
         statAD: "攻击力",
@@ -349,7 +351,8 @@ export const APP_TEXT = {
         tabHotkeys: "热键",
         keepVideoJsonOnAutoDelete: "自动删除时仅删除视频 (保留JSON)",
         language: "语言 / Language",
-        other: "其他"
+        other: "其他",
+        updateLater: "稍后"
     },
     ko: {
         statAD: "공격력",
@@ -453,7 +456,8 @@ export const APP_TEXT = {
         tabHotkeys: "단축키",
         keepVideoJsonOnAutoDelete: "자동 삭제 시 비디오만 삭제 (JSON 유지)",
         language: "언어 / Language",
-        other: "기타"
+        other: "기타",
+        updateLater: "나중에"
     },
     vi: {
         statAD: "SMCK",
@@ -557,7 +561,8 @@ export const APP_TEXT = {
         tabHotkeys: "Phím nóng",
         keepVideoJsonOnAutoDelete: "Chỉ Xóa Video khi Tự động Xóa (Giữ JSON)",
         language: "Ngôn ngữ / Language",
-        other: "Khác"
+        other: "Khác",
+        updateLater: "Để sau"
     },
     pt: {
         statAD: "DdA",
@@ -661,7 +666,8 @@ export const APP_TEXT = {
         tabHotkeys: "Teclas de Atalho",
         keepVideoJsonOnAutoDelete: "Exclusão Automática Apenas do Vídeo (Manter JSON)",
         language: "Idioma / Language",
-        other: "Outros"
+        other: "Outros",
+        updateLater: "Mais tarde"
     },
     es: {
         statAD: "DA",
@@ -765,7 +771,8 @@ export const APP_TEXT = {
         tabHotkeys: "Teclas Rápidas",
         keepVideoJsonOnAutoDelete: "Borrado Automático Solo Vídeo (Mantener JSON)",
         language: "Idioma / Language",
-        other: "Otros"
+        other: "Otros",
+        updateLater: "Más tarde"
     },
     fr: {
         statAD: "Dégâts d'Attaque",
@@ -867,9 +874,10 @@ export const APP_TEXT = {
         prevVideo: "Enregistrement Précédent",
         tabGeneral: "Général",
         tabHotkeys: "Raccourcis",
-        keepVideoJsonOnAutoDelete: "Suppr. Auto Vidéo Uniquement (Garder JSON)",
+        keepVideoJsonOnAutoDelete: "Suppression automatique de la vidéo uniquement (Conserver JSON)",
         language: "Langue / Language",
-        other: "Autre"
+        other: "Autre",
+        updateLater: "Plus tard"
     },
     de: {
         statAD: "Angriffsschaden",
@@ -971,9 +979,10 @@ export const APP_TEXT = {
         prevVideo: "Vorherige Aufnahme",
         tabGeneral: "Allgemein",
         tabHotkeys: "Hotkeys",
-        keepVideoJsonOnAutoDelete: "Video Automatisch Löschen (JSON Behalten)",
+        keepVideoJsonOnAutoDelete: "Nur Video automatisch löschen (JSON behalten)",
         language: "Sprache / Language",
-        other: "Andere"
+        other: "Andere",
+        updateLater: "Später"
     },
     ru: {
         statAD: "Сила Атаки",
@@ -1077,7 +1086,8 @@ export const APP_TEXT = {
         tabHotkeys: "Горячие клавиши",
         keepVideoJsonOnAutoDelete: "Автоудаление Только Видео (Оставить JSON)",
         language: "Язык / Language",
-        other: "Другое"
+        other: "Другое",
+        updateLater: "Позже"
     },
     tr: {
         statAD: "Saldırı Gücü",
@@ -1179,9 +1189,10 @@ export const APP_TEXT = {
         prevVideo: "Önceki Kayıt",
         tabGeneral: "Genel",
         tabHotkeys: "Kısayollar",
-        keepVideoJsonOnAutoDelete: "Otomatik Silerken Sadece Videoyu Sil (JSON'u Tut)",
+        keepVideoJsonOnAutoDelete: "Otomatik Silmede Sadece Videoyu Sil (JSON'u Koru)",
         language: "Dil / Language",
-        other: "Diğer"
+        other: "Diğer",
+        updateLater: "Daha sonra"
     },
     pl: {
         statAD: "Obrażenia od Ataku",
@@ -1285,7 +1296,8 @@ export const APP_TEXT = {
         tabHotkeys: "Skróty",
         keepVideoJsonOnAutoDelete: "Automatyczne Usuwanie Wideo (Zachowaj JSON)",
         language: "Język / Language",
-        other: "Inne"
+        other: "Inne",
+        updateLater: "Później"
     },
     it: {
         statAD: "Attacco Fisico",
@@ -1387,9 +1399,10 @@ export const APP_TEXT = {
         prevVideo: "Video Precedente",
         tabGeneral: "Generale",
         tabHotkeys: "Tasti Rapidi",
-        keepVideoJsonOnAutoDelete: "Eliminazione Automatica Solo Video (Mantieni JSON)",
+        keepVideoJsonOnAutoDelete: "Eliminazione automatica solo video (Mantieni JSON)",
         language: "Lingua / Language",
-        other: "Altro"
+        other: "Altro",
+        updateLater: "Più tardi"
     }
 };
 
