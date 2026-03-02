@@ -1,11 +1,14 @@
 import { exists, mkdir, readFile, writeFile, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { getCachedAssetUrl } from "./assets";
+import { STATIC_ARAM_QUEUES, STATIC_SR_QUEUES, STATIC_TFT_QUEUES, STATIC_OTHER_QUEUES } from "./queues";
 import { getCurrentPatchVersion } from "./version";
 
 // Cache for data
 // Keyed by version -> data
 const cachedItemDataByVersion: Record<string, Record<string, any>> = {};
+const cachedRuneDataByVersion: Record<string, Record<string, any>> = {};
 let cachedChampionData: Record<string, any> | null = null;
+let cachedChampionEnglishData: Record<string, any> | null = null;
 
 // TFT Cache Maps
 let tftTraitIconMap: Record<string, string> = {};
@@ -137,18 +140,46 @@ function getBaseUrl() {
 }
 
 // Ensure data is loaded
-async function ensureDataLoaded() {
-    if (cachedChampionData) return;
+export async function ensureDataLoaded(langStr: string = "ja") {
+    if (cachedChampionData && cachedChampionEnglishData) return;
     
     try {
         const version = getCurrentPatchVersion();
-        const championListUrl = `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`;
+        const locale = getDDragonLocale(langStr);
+        const championListUrl = `https://ddragon.leagueoflegends.com/cdn/${version}/data/${locale}/champion.json`;
+        const championEnglishListUrl = `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`;
         
-        const champRes = await fetch(championListUrl);
+        const [champRes, champEnRes] = await Promise.all([
+            fetch(championListUrl),
+            fetch(championEnglishListUrl)
+        ]);
+
         if (champRes.ok) cachedChampionData = (await champRes.json()).data;
+        if (champEnRes.ok) cachedChampionEnglishData = (await champEnRes.json()).data;
     } catch (e) {
         console.error("Failed to load DataDragon champion data:", e);
     }
+}
+
+/**
+ * Derives the game mode category (SR, ARAM, TFT, OTHER) from a queue ID based on static mappings.
+ * @param queueId The ID from metadata
+ * @param fallbackQueueName Optional name from metadata just in case ID is unknown
+ */
+export function getGameModeByQueueId(queueId: number, fallbackQueueName: string = ""): 'SR' | 'ARAM' | 'TFT' | 'OTHER' | 'UNKNOWN' {
+    if (STATIC_TFT_QUEUES.includes(queueId)) return 'TFT';
+    if (STATIC_ARAM_QUEUES.includes(queueId)) return 'ARAM';
+    if (STATIC_SR_QUEUES.includes(queueId)) return 'SR';
+    if (STATIC_OTHER_QUEUES.includes(queueId)) return 'OTHER';
+    
+    // Fallback checks using name if ID is somehow entirely missing or unknown 0
+    const fallbackName = fallbackQueueName.toLowerCase();
+    if (fallbackName === "teamfight tactics" || fallbackName.includes("tft")) return 'TFT';
+    if (fallbackName.includes("aram") || fallbackName.includes("howling abyss")) return 'ARAM';
+    if (fallbackName.includes("arena") || fallbackName.includes("urf") || fallbackName.includes("nexus blitz") || fallbackName.includes("spellbook")) return 'OTHER';
+    if (fallbackName.includes("rift") || fallbackName.includes("draft") || fallbackName.includes("blind") || fallbackName.includes("quickplay") || fallbackName.includes("swiftplay") || fallbackName.includes("normal") || fallbackName.includes("practice") || fallbackName.includes("bot")) return 'SR';
+    
+    return 'UNKNOWN';
 }
 
 /**
@@ -264,6 +295,94 @@ export async function getItemData(itemId: number, langStr: string = "ja"): Promi
     const locale = getDDragonLocale(langStr);
     const cacheKey = `${version}_${locale}`;
     return cachedItemDataByVersion[cacheKey] ? cachedItemDataByVersion[cacheKey][itemId] : null;
+}
+
+export async function ensureRuneDataLoaded(version: string, langStr: string = "ja") {
+    const locale = getDDragonLocale(langStr);
+    const cacheKey = `${version}_${locale}`;
+    
+    // 1. In-memory check
+    if (cachedRuneDataByVersion[cacheKey]) return;
+
+    const cacheDir = "items_cache";
+    const filename = `rune_${version}_${locale}.json`;
+    const filePath = `${cacheDir}/${filename}`;
+
+    try {
+        if (!(await exists(cacheDir, { baseDir: BaseDirectory.AppLocalData }))) {
+            await mkdir(cacheDir, { baseDir: BaseDirectory.AppLocalData, recursive: true });
+        }
+
+        // 2. Local file check
+        if (await exists(filePath, { baseDir: BaseDirectory.AppLocalData })) {
+            const data = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
+            const jsonStr = new TextDecoder().decode(data);
+            cachedRuneDataByVersion[cacheKey] = JSON.parse(jsonStr);
+            return;
+        }
+
+        // 3. Fetch from DataDragon
+        let targetVersion = version;
+        if (version.split('.').length > 3) {
+             const parts = version.split('.');
+             targetVersion = `${parts[0]}.${parts[1]}.1`;
+        }
+
+        let url = `https://ddragon.leagueoflegends.com/cdn/${targetVersion}/data/${locale}/runesReforged.json`;
+        
+        const fetchRuneData = async (u: string) => {
+             const res = await fetch(u);
+             if (res.ok) return await res.json();
+             return null;
+        };
+
+        let result = await fetchRuneData(url);
+        
+        if (!result && targetVersion !== version) {
+             url = `https://ddragon.leagueoflegends.com/cdn/${version}/data/${locale}/runesReforged.json`;
+             result = await fetchRuneData(url);
+        }
+
+        if (!result) {            
+             const currentVer = getCurrentPatchVersion();
+             if (currentVer !== version && currentVer !== targetVersion) {
+                 url = `https://ddragon.leagueoflegends.com/cdn/${currentVer}/data/${locale}/runesReforged.json`;
+                 result = await fetchRuneData(url);
+             }
+        }
+
+        if (!result) {
+            console.error(`Failed to fetch rune data for version ${version} (and fallbacks).`);
+            return;
+        }
+        
+        // 4. Flatten the rune tree to { [runeId]: RuneData }
+        const flatRuneCache: Record<string, any> = {};
+        for (const tree of result) {
+            for (const slot of tree.slots) {
+                for (const rune of slot.runes) {
+                    flatRuneCache[rune.id] = rune;
+                }
+            }
+        }
+        
+        cachedRuneDataByVersion[cacheKey] = flatRuneCache;
+
+        // 5. Save flattened cache to local file
+        const dataToSave = JSON.stringify(flatRuneCache);
+        await writeFile(filePath, new TextEncoder().encode(dataToSave), { baseDir: BaseDirectory.AppLocalData });
+
+    } catch (e) {
+        console.error(`Error ensuring rune data for version ${version}:`, e);
+    }
+}
+
+export async function getRuneData(runeId: number, langStr: string = "ja"): Promise<any> {
+    const version = getCurrentPatchVersion();
+    await ensureRuneDataLoaded(version, langStr);
+    const locale = getDDragonLocale(langStr);
+    const cacheKey = `${version}_${locale}`;
+    return cachedRuneDataByVersion[cacheKey] ? cachedRuneDataByVersion[cacheKey][runeId] : null;
 }
 
 export async function getChampionData(championIdOrName: string | number): Promise<any> {
@@ -614,7 +733,15 @@ async function mergeCDragonData(champName: string, champData: any, cdragonFilePa
                                        let arr = [...cdBaseMap[baseCalcKey]];
                                        if (calc.mMultiplier && calc.mMultiplier.mNumber !== undefined) {
                                             arr = arr.map(v => typeof v === 'number' ? Math.round(v * calc.mMultiplier.mNumber * 100)/100 : v);
-                                       } else if (calc.mMultiplier && calc.mMultiplier.mDataValue) {
+                                       } else if (calc.mMultiplier && calc.mMultiplier.__type === "NamedDataValueCalculationPart" && calc.mMultiplier.mDataValue) {
+                                             const mData = cdDataValuesMap[calc.mMultiplier.mDataValue.toLowerCase()];
+                                             if (mData) {
+                                                  arr = arr.map((v, i) => {
+                                                       const m = mData.length > i ? mData[i] : mData[mData.length - 1];
+                                                       return typeof v === 'number' ? Math.round(v * m * 100)/100 : v;
+                                                  });
+                                             }
+                                        } else if (calc.mMultiplier && calc.mMultiplier.mDataValue) {
                                             const mData = cdDataValuesMap[calc.mMultiplier.mDataValue.toLowerCase()];
                                             if (mData) {
                                                  arr = arr.map((v, i) => {
@@ -876,6 +1003,25 @@ export async function getChampionNameById(championId: number): Promise<string | 
     if (!cachedChampionData) return null;
     const entry = Object.values(cachedChampionData).find((c: any) => c.key == championId) as any;
     return entry ? entry.id : null; // entry.id is the internal name (e.g. "MonkeyKing"), entry.name is display name (e.g. "Wukong"). Wiki likely uses ID or Name. User said "English Champion Name". Usually ID is safer for URLs but Name might be required. Let's use ID (Caitlyn, Ahri, etc are IDs).
+}
+
+/**
+ * Returns the English internal ID (e.g. "MonkeyKing", "Caitlyn") synchronously if data is cached.
+ */
+export function getChampionEnglishNameByIdSync(championId: number): string | null {
+    if (!cachedChampionEnglishData) return null;
+    const entry = Object.values(cachedChampionEnglishData).find((c: any) => c.key == championId) as any;
+    // For English names, the entry.name in en_US is the proper capitalized english string.
+    return entry ? entry.name : null;
+}
+
+/**
+ * Returns the Localized display name (e.g. "ウーコン", "ケイトリン") synchronously if data is cached.
+ */
+export function getChampionLocalizedNameByIdSync(championId: number): string | null {
+    if (!cachedChampionData) return null;
+    const entry = Object.values(cachedChampionData).find((c: any) => c.key == championId) as any;
+    return entry ? entry.name : null;
 }
 
 export async function getItemIconUrl(itemId: number): Promise<string> {

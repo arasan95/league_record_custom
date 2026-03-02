@@ -29,19 +29,51 @@
           <button class="server-icon active" id="nav-filter-all" title="All Matches">All</button>
           <div class="server-nav-divider"></div>
           <button class="server-icon" id="nav-filter-lol" title="League of Legends"></button>
+          
+          <button class="server-icon gamemode-icon" id="nav-filter-sr" title="Summoner's Rift"></button>
+          
+          <div id="role-filters" class="hidden">
+              <button class="role-icon" id="role-filter-top" title="Top Lane" data-role="TOP"></button>
+              <button class="role-icon" id="role-filter-jungle" title="Jungle" data-role="JUNGLE"></button>
+              <button class="role-icon" id="role-filter-middle" title="Middle Lane" data-role="MIDDLE"></button>
+              <button class="role-icon" id="role-filter-bottom" title="Bottom Lane" data-role="BOTTOM"></button>
+              <button class="role-icon" id="role-filter-utility" title="Support" data-role="UTILITY"></button>
+          </div>
+
+          <button class="server-icon gamemode-icon" id="nav-filter-aram" title="ARAM"></button>
+          <button class="server-icon gamemode-icon" id="nav-filter-other" title="Arena / URF"></button>
+
           <button class="server-icon" id="nav-filter-tft" title="Teamfight Tactics"></button>
           
           <div class="server-nav-bottom">
+              <!-- Storage Info Bar (Vertical) -->
+              <div class="storage-info" title="Storage Usage">
+                  <div class="storage-bar">
+                      <div class="storage-seg seg-norm"></div>
+                      <div class="storage-seg seg-star"></div>
+                      <div class="storage-seg seg-clip"></div>
+                      <div class="storage-overlay">
+                          <div class="storage-pct" id="storage-pct">0%</div>
+                          <div class="storage-current">
+                              <span id="size-total">-</span><span style="font-size: 8px;">GB</span>
+                          </div>
+                      </div>
+                  </div>
+                  <div class="storage-max-text">
+                      <span id="size-max">∞</span><span style="font-size: 9px; margin-left:1px;">GB</span>
+                  </div>
+              </div>
+
+              <button id="vid-folder-btn" class="nav-action-btn" title="Open Recordings Folder">
+                  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                  </svg>
+              </button>
               <button id="refresh-btn" class="nav-action-btn" title="Refresh List">
                   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
                       <polyline points="23 4 23 10 17 10"></polyline>
                       <polyline points="1 20 1 14 7 14"></polyline>
                       <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                  </svg>
-              </button>
-              <button id="vid-folder-btn" class="nav-action-btn" title="Open Recordings Folder">
-                  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                   </svg>
               </button>
               <button id="settings-btn" class="nav-action-btn" title="Settings">
@@ -51,6 +83,7 @@
                   </svg>
               </button>
           </div>
+          <div id="dwm-dummy"></div>
       </nav>
 
       <div id="sidebar">
@@ -88,21 +121,44 @@
                   </svg>
               </button>
           </div>
-          <div id="search-bar-container" style="display: none; padding: 4px 8px 8px 8px;">
-              <input type="text" id="search-input" placeholder="Search Champion..." style="width: 100%; padding: 4px; box-sizing: border-box; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px;" autocomplete="off" spellcheck="false" />
+          <div id="search-bar-container" class="hidden">
+              <input type="text" id="search-input" class="search-input" placeholder="Search (Self Champion)" autocomplete="off" spellcheck="false" />
+              <input type="text" id="search-ally-input" class="search-input" placeholder="Search (Ally Champion)" autocomplete="off" spellcheck="false" />
+              <input type="text" id="search-enemy-input" class="search-input" placeholder="Search (Enemy Champion)" autocomplete="off" spellcheck="false" />
+              <input type="text" id="search-user-input" class="search-input" placeholder="Search (User Name)" autocomplete="off" spellcheck="false" />
           </div>
           
-          <!-- Storage Info Bar -->
-          <div class="storage-info" title="Storage Usage">
-              <div class="storage-bar">
-                  <div class="storage-seg seg-clip"></div>
-                  <div class="storage-seg seg-star"></div>
-                  <div class="storage-seg seg-norm"></div>
+          <!-- Filtered Stats Container -->
+          <div id="filtered-stats-container" style="display: none;">
+              <div class="stats-row top-stats">
+                  <div class="stat-box">
+                      <span class="stat-label">Win Rate</span>
+                      <span class="stat-value" id="stat-winrate">0% (0W 0L)</span>
+                  </div>
+                  <div class="stat-box">
+                      <span class="stat-label">Recent 20</span>
+                      <span class="stat-value" id="stat-recent20">0%</span>
+                  </div>
               </div>
-              <div class="storage-text">
-                  <span id="size-total">-</span> / <span id="size-max">-</span> GB
+              <div class="stats-row side-stats">
+                  <div class="stat-box blue-side">
+                      <span class="stat-label">Blue Side WR</span>
+                      <span class="stat-value" id="stat-blue-winrate">0%</span>
+                  </div>
+                  <div class="stat-box red-side">
+                      <span class="stat-label">Red Side WR</span>
+                      <span class="stat-value" id="stat-red-winrate">0%</span>
+                  </div>
+              </div>
+              <div class="stats-row bottom-stats">
+                  <div class="stat-box">
+                      <span class="stat-label">Average KDA</span>
+                      <span class="stat-value" id="stat-kda">0.0 / 0.0 / 0.0</span>
+                      <span class="stat-subtext" id="stat-kda-ratio">0.00:1 KDA</span>
+                  </div>
               </div>
           </div>
+          
         </div>
         <ul id="sidebar-content"></ul>
       </div>

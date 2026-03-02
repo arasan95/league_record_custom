@@ -223,6 +223,10 @@ impl SettingsWrapper {
         self.0.write().unwrap().confirm_delete = confirm_delete;
     }
 
+    pub fn keep_video_json_on_auto_delete(&self) -> bool {
+        self.0.read().unwrap().keep_video_json_on_auto_delete
+    }
+
     pub fn hightlight_hotkey(&self) -> Option<String> {
         self.0.read().unwrap().hightlight_hotkey.clone()
     }
@@ -318,6 +322,7 @@ pub struct Settings {
     pub champion_matchup_url: Option<String>,
     pub champion_build_url: Option<String>,
     pub check_updates_on_startup: bool,
+    pub keep_video_json_on_auto_delete: bool,
 }
 
 const DEFAULT_DEBUG_LOG: bool = false;
@@ -338,6 +343,7 @@ const DEFAULT_MATCH_HISTORY_BASE_URL: Option<String> = None;
 const DEFAULT_CHAMPION_MATCHUP_URL: &str = "https://dpm.lol/champions/{My}/matchups?opponent={Opponent}";
 const DEFAULT_CHAMPION_BUILD_URL: &str = "https://dpm.lol/champions/{q}/build";
 const DEFAULT_CHECK_UPDATES_ON_STARTUP: bool = true;
+const DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE: bool = false;
 
 #[inline]
 fn default_recordings_folder() -> PathBuf {
@@ -395,6 +401,7 @@ impl Default for Settings {
             champion_matchup_url: Some(DEFAULT_CHAMPION_MATCHUP_URL.to_string()),
             champion_build_url: Some(DEFAULT_CHAMPION_BUILD_URL.to_string()),
             check_updates_on_startup: DEFAULT_CHECK_UPDATES_ON_STARTUP,
+            keep_video_json_on_auto_delete: DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE,
         }
     }
 }
@@ -519,6 +526,10 @@ impl<'de> Deserialize<'de> for Settings {
                         "checkUpdatesOnStartup" => {
                             settings.check_updates_on_startup =
                                 map.next_value().unwrap_or(DEFAULT_CHECK_UPDATES_ON_STARTUP);
+                        }
+                        "keepVideoJsonOnAutoDelete" => {
+                            settings.keep_video_json_on_auto_delete =
+                                map.next_value().unwrap_or(DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE);
                         }
                         _ => { /* ignored */ }
                     }

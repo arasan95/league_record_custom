@@ -6,7 +6,6 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::AppHandle;
 
 /// Attempt to find League of Legends installation directory
 pub fn get_league_install_dir() -> Option<PathBuf> {

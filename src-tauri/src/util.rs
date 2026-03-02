@@ -26,7 +26,16 @@ macro_rules! cancellable {
 }
 
 pub fn compare_time(a: &Path, b: &Path) -> Result<Ordering> {
-    let a_time = a.metadata()?.created()?;
-    let b_time = b.metadata()?.created()?;
+    let get_created = |p: &Path| -> Result<std::time::SystemTime> {
+        let mp4 = p.with_extension("mp4");
+        if mp4.exists() {
+            return Ok(mp4.metadata()?.created()?);
+        }
+        let json = p.with_extension("json");
+        Ok(json.metadata()?.created()?)
+    };
+
+    let a_time = get_created(a)?;
+    let b_time = get_created(b)?;
     Ok(a_time.cmp(&b_time).reverse())
 }

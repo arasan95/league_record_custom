@@ -1,0 +1,813 @@
+{
+  "Characters/Nilah/Spells/NilahQAbility": {
+    "__type": "AbilityObject",
+    "mRootSpell": "Characters/Nilah/Spells/NilahQAbility/NilahQ",
+    "mChildSpells": [
+      "Characters/Nilah/Spells/NilahQAbility/NilahQ",
+      "Characters/Nilah/Spells/NilahQAbility/NilahQWrapper",
+      "Characters/Nilah/Spells/NilahQAbility/NilahQAttack",
+      "Characters/Nilah/Spells/NilahQAbility/NilahEQMis",
+      "Characters/Nilah/Spells/NilahQAbility/NilahQAttack2"
+    ],
+    "mName": "NilahQAbility"
+  },
+  "Characters/Nilah/Spells/NilahQAbility/NilahQ": {
+    "__type": "SpellObject",
+    "ObjectName": "NilahQ",
+    "mScriptName": "NilahQ",
+    "mSpell": {
+      "__type": "SpellDataResource",
+      "DataValues": [
+        {
+          "__type": "SpellDataValue",
+          "mName": "BaseDamage",
+          "mValues": [
+            -10.0,
+            0.0,
+            10.0,
+            20.0,
+            30.0,
+            40.0,
+            50.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "CheatingThreshold",
+          "mValues": [
+            20.0,
+            20.0,
+            20.0,
+            20.0,
+            20.0,
+            20.0,
+            20.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "QADRatio",
+          "mValues": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "CastRange",
+          "mValues": [
+            600.0,
+            600.0,
+            600.0,
+            600.0,
+            600.0,
+            600.0,
+            600.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "CritHealScalar",
+          "mValues": [
+            0.2,
+            0.2,
+            0.2,
+            0.2,
+            0.2,
+            0.2,
+            0.2
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "CritArmorPenScalar",
+          "mValues": [
+            0.3,
+            0.3,
+            0.3,
+            0.3,
+            0.3,
+            0.3,
+            0.3
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "MinionMod",
+          "mValues": [
+            0.33,
+            0.33,
+            0.33,
+            0.33,
+            0.33,
+            0.33,
+            0.33
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "BuffDuration",
+          "mValues": [
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "RangeIncrease",
+          "mValues": [
+            125.0,
+            125.0,
+            125.0,
+            125.0,
+            125.0,
+            125.0,
+            125.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "MonsterMod",
+          "mValues": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "ShieldDuration",
+          "mValues": [
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "CritDamageRatio"
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "ActiveCritScaling",
+          "mValues": [
+            0.7,
+            0.7,
+            0.7,
+            0.7,
+            0.7,
+            0.7,
+            0.7
+          ]
+        }
+      ],
+      "mSpellCalculations": {
+        "DamageCalc": {
+          "__type": "GameCalculation",
+          "mMultiplier": {
+            "__type": "SumOfSubPartsCalculationPart",
+            "mSubparts": [
+              {
+                "__type": "NumberCalculationPart",
+                "mNumber": 1.0
+              },
+              {
+                "__type": "ProductOfSubPartsCalculationPart",
+                "mPart1": {
+                  "__type": "StatByNamedDataValueCalculationPart",
+                  "mStat": 8,
+                  "mDataValue": "ActiveCritScaling"
+                },
+                "mPart2": {
+                  "__type": "SumOfSubPartsCalculationPart",
+                  "mSubparts": [
+                    {
+                      "__type": "StatByCoefficientCalculationPart",
+                      "mStat": 9,
+                      "mCoefficient": 1.0
+                    },
+                    {
+                      "__type": "NumberCalculationPart",
+                      "mNumber": -1.0
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "BaseDamage"
+            },
+            {
+              "__type": "StatByNamedDataValueCalculationPart",
+              "mStat": 2,
+              "mDataValue": "QADRatio"
+            }
+          ]
+        },
+        "AttackTotalDamageTooltip": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "StatByCoefficientCalculationPart",
+              "mStat": 2,
+              "mCoefficient": 1.0
+            }
+          ]
+        },
+        "BonusAttackSpeedCalc": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "ByCharLevelInterpolationCalculationPart",
+              "mStartValue": 10.0,
+              "mEndValue": 60.0
+            }
+          ]
+        },
+        "CritLifesteal": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "StatByNamedDataValueCalculationPart",
+              "mStat": 8,
+              "mDataValue": "CritHealScalar"
+            }
+          ],
+          "mDisplayAsPercent": true
+        },
+        "CritArmorPen": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "StatByNamedDataValueCalculationPart",
+              "mStat": 8,
+              "mDataValue": "CritArmorPenScalar"
+            }
+          ],
+          "mDisplayAsPercent": true
+        }
+      },
+      "mAmmoUsed": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "castRangeDisplayOverride": [
+        600.0,
+        600.0,
+        600.0,
+        600.0,
+        600.0,
+        600.0,
+        600.0
+      ]
+    }
+  },
+  "Characters/Nilah/Spells/NilahWAbility": {
+    "__type": "AbilityObject",
+    "mRootSpell": "Characters/Nilah/Spells/NilahWAbility/NilahW",
+    "mChildSpells": [
+      "Characters/Nilah/Spells/NilahWAbility/NilahW"
+    ],
+    "mName": "NilahWAbility"
+  },
+  "Characters/Nilah/Spells/NilahWAbility/NilahW": {
+    "__type": "SpellObject",
+    "ObjectName": "NilahW",
+    "mScriptName": "NilahW",
+    "mSpell": {
+      "__type": "SpellDataResource",
+      "DataValues": [
+        {
+          "__type": "SpellDataValue",
+          "mName": "MoveSpeedPercent",
+          "mValues": [
+            0.125,
+            0.15,
+            0.175,
+            0.2,
+            0.225,
+            0.25,
+            0.275
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "BaseDuration",
+          "mValues": [
+            2.25,
+            2.25,
+            2.25,
+            2.25,
+            2.25,
+            2.25,
+            2.25
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "ShareBaseDuration",
+          "mValues": [
+            1.5,
+            1.5,
+            1.5,
+            1.5,
+            1.5,
+            1.5,
+            1.5
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "ExtensionBonus",
+          "mValues": [
+            0.75,
+            0.75,
+            0.75,
+            0.75,
+            0.75,
+            0.75,
+            0.75
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "AreaTriggerSize",
+          "mValues": [
+            150.0,
+            150.0,
+            150.0,
+            150.0,
+            150.0,
+            150.0,
+            150.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "MagicDamageReduction",
+          "mValues": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0.25
+          ]
+        }
+      ],
+      "mCastTime": 0.013,
+      "castRadius": [
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0
+      ]
+    }
+  },
+  "Characters/Nilah/Spells/NilahRAbility": {
+    "__type": "AbilityObject",
+    "mRootSpell": "Characters/Nilah/Spells/NilahRAbility/NilahR",
+    "mChildSpells": [
+      "Characters/Nilah/Spells/NilahRAbility/NilahR"
+    ],
+    "mName": "NilahRAbility",
+    "mType": 2,
+    "AbilityTraits": 2574
+  },
+  "Characters/Nilah/Spells/NilahEAbility": {
+    "__type": "AbilityObject",
+    "mRootSpell": "Characters/Nilah/Spells/NilahEAbility/NilahE",
+    "mChildSpells": [
+      "Characters/Nilah/Spells/NilahEAbility/NilahE"
+    ],
+    "mName": "NilahEAbility"
+  },
+  "Characters/Nilah/Spells/NilahEAbility/NilahE": {
+    "__type": "SpellObject",
+    "ObjectName": "NilahE",
+    "mScriptName": "NilahE",
+    "mSpell": {
+      "__type": "SpellDataResource",
+      "DataValues": [
+        {
+          "__type": "SpellDataValue",
+          "mName": "BaseDamage",
+          "mValues": [
+            50.0,
+            60.0,
+            70.0,
+            80.0,
+            90.0,
+            100.0,
+            110.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "DashSpeed",
+          "mValues": [
+            2200.0,
+            2200.0,
+            2200.0,
+            2200.0,
+            2200.0,
+            2200.0,
+            2200.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "DashTotalDistance",
+          "mValues": [
+            600.0,
+            600.0,
+            600.0,
+            600.0,
+            600.0,
+            600.0,
+            600.0
+          ]
+        }
+      ],
+      "mSpellCalculations": {
+        "DashDamage": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "BaseDamage"
+            },
+            {
+              "__type": "StatByCoefficientCalculationPart",
+              "mStat": 2,
+              "mStatFormula": 2,
+              "mCoefficient": 0.2
+            }
+          ]
+        }
+      },
+      "mMaxAmmo": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "castConeDistance": 100.0
+    }
+  },
+  "Characters/Nilah/Spells/NilahPassiveAbility": {
+    "__type": "AbilityObject",
+    "mRootSpell": "Characters/Nilah/Spells/NilahPassiveAbility/NilahPassive",
+    "mChildSpells": [
+      "Characters/Nilah/Spells/NilahPassiveAbility/NilahPassive",
+      "Characters/Nilah/Spells/NilahPassiveAbility/NilahPMissile"
+    ],
+    "mName": "NilahPassiveAbility",
+    "mType": 3,
+    "AbilityTraits": 12
+  },
+  "Characters/Nilah/Spells/NilahPassiveAbility/NilahPassive": {
+    "__type": "SpellObject",
+    "ObjectName": "NilahPassive",
+    "mScriptName": "NilahPassive",
+    "mSpell": {
+      "__type": "SpellDataResource",
+      "DataValues": [
+        {
+          "__type": "SpellDataValue",
+          "mName": "ExperiencePercentage",
+          "mValues": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "HealDistance",
+          "mValues": [
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "ShieldIncrease",
+          "mValues": [
+            0.15,
+            0.15,
+            0.15,
+            0.15,
+            0.15,
+            0.15,
+            0.15
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "HealingIncrease",
+          "mValues": [
+            0.075,
+            0.075,
+            0.075,
+            0.075,
+            0.075,
+            0.075,
+            0.075
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "ShieldMaxDuration",
+          "mValues": [
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0
+          ]
+        }
+      ],
+      "castConeDistance": 0.0,
+      "missileSpeed": 1200.0
+    }
+  },
+  "Characters/Nilah/Spells/NilahRAbility/NilahR": {
+    "__type": "SpellObject",
+    "ObjectName": "NilahR",
+    "mScriptName": "NilahR",
+    "mSpell": {
+      "__type": "SpellDataResource",
+      "DataValues": [
+        {
+          "__type": "SpellDataValue",
+          "mName": "Duration",
+          "mValues": [
+            6.0,
+            6.0,
+            6.0,
+            6.0,
+            6.0,
+            6.0,
+            6.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "DamageBase",
+          "mValues": [
+            25.0,
+            125.0,
+            225.0,
+            325.0,
+            425.0,
+            525.0,
+            625.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "ShieldBase",
+          "mValues": [
+            15.0,
+            65.0,
+            115.0,
+            165.0,
+            215.0,
+            265.0,
+            315.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "DamagePerTick",
+          "mValues": [
+            5.0,
+            15.0,
+            25.0,
+            35.0,
+            45.0,
+            55.0,
+            65.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "OtherHealingPercent",
+          "mValues": [
+            0.1,
+            0.1,
+            0.1,
+            0.1,
+            0.1,
+            0.1,
+            0.1
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Microslow",
+          "mValues": [
+            -0.1,
+            -0.1,
+            -0.1,
+            -0.1,
+            -0.1,
+            -0.1,
+            -0.1
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "NumTicks",
+          "mValues": [
+            6.0,
+            6.0,
+            6.0,
+            6.0,
+            6.0,
+            6.0,
+            6.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "TickDelay",
+          "mValues": [
+            0.2,
+            0.2,
+            0.2,
+            0.2,
+            0.2,
+            0.2,
+            0.2
+          ]
+        }
+      ],
+      "mSpellCalculations": {
+        "DamageCalc": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "DamageBase"
+            },
+            {
+              "__type": "StatByCoefficientCalculationPart",
+              "mStat": 2,
+              "mStatFormula": 2,
+              "mCoefficient": 1.0
+            }
+          ]
+        },
+        "ShieldCalc": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "ShieldBase"
+            },
+            {
+              "__type": "StatByCoefficientCalculationPart",
+              "mStat": 2,
+              "mStatFormula": 2,
+              "mCoefficient": 1.0
+            }
+          ]
+        },
+        "DamagePerTickCalc": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "DamagePerTick"
+            },
+            {
+              "__type": "StatByCoefficientCalculationPart",
+              "mStat": 2,
+              "mStatFormula": 2,
+              "mCoefficient": 0.1
+            }
+          ]
+        },
+        "DamagePerTickCalcTooltip": {
+          "__type": "GameCalculationModified",
+          "mMultiplier": {
+            "__type": "NumberCalculationPart",
+            "mNumber": 4.0
+          },
+          "tooltipOnly": true,
+          "mModifiedGameCalculation": "DamagePerTickCalc"
+        },
+        "ChampHealingPercent": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "NumberCalculationPart",
+              "mNumber": 0.2
+            },
+            {
+              "__type": "StatByCoefficientCalculationPart",
+              "mStat": 8,
+              "mCoefficient": 0.1
+            }
+          ],
+          "mDisplayAsPercent": true
+        }
+      },
+      "castRadius": [
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0
+      ],
+      "castConeDistance": 100.0
+    }
+  },
+  "Characters/Nilah/CharacterRecords/Root": {
+    "__type": "CharacterRecord",
+    "mCharacterName": "Nilah",
+    "hpPerLevel": 101.0,
+    "baseStaticHPRegen": 1.2,
+    "hpRegenPerLevel": 0.18,
+    "healthBarHeight": 103.0,
+    "primaryAbilityResource": {
+      "__type": "AbilityResourceSlotInfo",
+      "arType": 0,
+      "arBase": 350.0,
+      "arPerLevel": 35.0,
+      "arBaseStaticRegen": 1.64,
+      "arRegenPerLevel": 0.14
+    },
+    "damagePerLevel": 2.0,
+    "armorPerLevel": 4.2,
+    "baseSpellBlock": 32.0,
+    "spellBlockPerLevel": 2.05,
+    "critDamageMultiplier": 2.0,
+    "attackSpeedPerLevel": 1.25,
+    "acquisitionRange": 400.0,
+    "spellNames": [
+      "NilahQAbility/NilahQ",
+      "NilahWAbility/NilahW",
+      "NilahEAbility/NilahE",
+      "NilahRAbility/NilahR"
+    ],
+    "mAbilities": [
+      "Characters/Nilah/Spells/NilahWAbility",
+      "Characters/Nilah/Spells/NilahQAbility",
+      "Characters/Nilah/Spells/NilahEAbility",
+      "Characters/Nilah/Spells/NilahRAbility",
+      "Characters/Nilah/Spells/NilahPassiveAbility"
+    ],
+    "passiveName": "game_character_passiveName_Nilah",
+    "passiveLuaName": "NilahPassive",
+    "passiveSpell": "NilahPassive"
+  }
+}

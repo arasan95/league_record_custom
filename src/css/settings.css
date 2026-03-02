@@ -15,7 +15,7 @@
 
 #settings-modal-content {
   text-align: left;
-  max-width: 800px; /* Widened for Discord-like appearance */
+  max-width: 900px; /* Widened for Discord-like appearance */
   width: 95%;
   margin: 0 auto; /* Center the modal horizontally */
   display: flex; /* Turn into flex container for sticky footer layout */
@@ -132,8 +132,11 @@
 
 .settings-checkbox-group {
   display: flex;
+  flex-direction: row-reverse;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
+  width: 100%;
 }
 
 /* Switches */

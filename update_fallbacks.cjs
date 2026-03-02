@@ -45,4 +45,8 @@ d['RengarR']['bonusdamage'] = '50% AD';
 if (!d['XinZhaoQ']) d['XinZhaoQ'] = {};
 d['XinZhaoQ']['bonusdamage'] = '16/25/34/43/52 (+40% AD)';
 
+if (!d['FizzQ']) d['FizzQ'] = {};
+d['FizzQ']['qdamage'] = '10/25/40/55/70';
+delete d['FizzQ']['totaldamage'];
+
 fs.writeFileSync('tooltip_exports/fallback_mappings.json', JSON.stringify(d, null, 2));

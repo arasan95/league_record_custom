@@ -31,6 +31,24 @@ jobs:
           $path = "src-tauri/Cargo.toml"
           (Get-Content $path) -replace '^version = ".*"', "version = `"$version`"" | Set-Content $path
 
+          # Update README version links
+          (Get-Content readme.md -Encoding utf8) -replace 'LeagueRecord_.*_x64-setup\.exe', "LeagueRecord_${version}_x64-setup.exe" | Set-Content readme.md -Encoding utf8
+          (Get-Content README_ja.md -Encoding utf8) -replace 'LeagueRecord_.*_x64-setup\.exe', "LeagueRecord_${version}_x64-setup.exe" | Set-Content README_ja.md -Encoding utf8
+
+      - name: Commit and Push README changes
+        shell: bash
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add readme.md README_ja.md
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "docs: update version in READMEs to ${{ github.ref_name }}"
+            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            git push origin HEAD:main
+          else
+            echo "No changes in READMEs."
+          fi
+
       - run: bun install --linker=isolated && bun run --bun tauri build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
