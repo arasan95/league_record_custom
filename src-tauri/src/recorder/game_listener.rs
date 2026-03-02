@@ -369,7 +369,7 @@ impl GameListener {
             // wait for game to record
             State::Idle => match sub_resp {
                 SubscriptionResponse::Session(SessionEventData {
-                    phase: phase @ (GamePhase::GameStart | GamePhase::InProgress),
+                    phase: _phase @ (GamePhase::GameStart | GamePhase::InProgress),
                     game_data: GameData { queue, game_id, game_mode },
                 }) if Some(game_id) != self.last_stopped_game_id => {
                     log::info!("LCU Session Event detected. GameID: {}", game_id);
