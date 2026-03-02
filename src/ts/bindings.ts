@@ -26,6 +26,9 @@ async openRecordingsFolder() : Promise<void> {
 async deleteVideo(videoId: string) : Promise<boolean> {
     return await TAURI_INVOKE("delete_video", { videoId });
 },
+async deleteVideoOnly(videoId: string) : Promise<boolean> {
+    return await TAURI_INVOKE("delete_video_only", { videoId });
+},
 async renameVideo(videoId: string, newVideoId: string) : Promise<boolean> {
     return await TAURI_INVOKE("rename_video", { videoId, newVideoId });
 },
@@ -153,8 +156,8 @@ export type ParticipantGold = { participantId: number; totalGold: number; minion
 export type Player = { gameName: string; tagLine: string; summonerId?: number | null }
 export type Position = { x: number; y: number }
 export type Queue = { id: number; name: string; isRanked: boolean }
-export type Recording = { videoId: string; metadata: MetadataFile | null }
-export type Settings = { markerFlags: MarkerFlags; debugLog: boolean; recordingsFolder: string; clipsFolder: string; filenameFormat: string; encodingQuality: number; outputResolution: StdResolution | null; framerate: Framerate; recordAudio: AudioSource; autostart: boolean; maxRecordingAgeDays: number | null; maxRecordingsSizeGb: number | null; confirmDelete: boolean; hightlightHotkey: string | null; startRecordingHotkey: string | null; stopRecordingHotkey: string | null; gameModes: string[] | null; autoplayVideo: boolean; autoStopPlayback: boolean; autoSelectRecording: boolean; autoPopupOnEnd: boolean; ffmpegPath: string | null; developerMode: boolean; matchHistoryBaseUrl: string | null; scrollFrameStepModifier: string | null; scoreboardScale: number | null; playRecordingSounds: boolean; language: string; championWikiBaseUrl: string | null; championMatchupUrl: string | null; championBuildUrl: string | null; checkUpdatesOnStartup: boolean }
+export type Recording = { videoId: string; metadata: MetadataFile | null; videoExists: boolean }
+export type Settings = { markerFlags: MarkerFlags; debugLog: boolean; recordingsFolder: string; clipsFolder: string; filenameFormat: string; encodingQuality: number; outputResolution: StdResolution | null; framerate: Framerate; recordAudio: AudioSource; autostart: boolean; maxRecordingAgeDays: number | null; maxRecordingsSizeGb: number | null; confirmDelete: boolean; hightlightHotkey: string | null; startRecordingHotkey: string | null; stopRecordingHotkey: string | null; gameModes: string[] | null; autoplayVideo: boolean; autoStopPlayback: boolean; autoSelectRecording: boolean; autoPopupOnEnd: boolean; ffmpegPath: string | null; developerMode: boolean; matchHistoryBaseUrl: string | null; scrollFrameStepModifier: string | null; scoreboardScale: number | null; playRecordingSounds: boolean; language: string; championWikiBaseUrl: string | null; championMatchupUrl: string | null; championBuildUrl: string | null; checkUpdatesOnStartup: boolean; keepVideoJsonOnAutoDelete: boolean }
 export type Stats = { kills: number; deaths: number; assists: number; largestMultiKill: number; neutralMinionsKilled: number; neutralMinionsKilledEnemyJungle: number; neutralMinionsKilledTeamJungle: number; totalMinionsKilled: number; visionScore: number; visionWardsBoughtInGame: number; wardsPlaced: number; wardsKilled: number; 
 /**
  * remake

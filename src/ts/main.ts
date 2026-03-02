@@ -14,6 +14,7 @@ import { DEFAULT_KEYBINDS, isAction, loadKeybinds, loadMouseConfig, type Keybind
 import { TitleBar } from "./titlebar";
 import { initPatchVersion } from "./version";
 import { initTooltipFallback } from "./tooltip";
+import { ensureDataLoaded } from "./datadragon";
 
 // initDebug();
 
@@ -198,6 +199,9 @@ async function main() {
 
     // handle context menu based on developer mode
     await initPatchVersion();
+    
+    // Make sure DataDragon champion lists are eagerly loaded so synchronous UI rendering works
+    await ensureDataLoaded("ja");
     
     // --- ADDED WAD EXTRACTOR TRIGGER ---
     console.log("Initializing dynamic tooltip fallbacks...");
@@ -496,8 +500,9 @@ async function main() {
         // 1. Partial Sidebar Update (Refresh List Items)
         payload.forEach(videoId => {
             commands.getMetadata(videoId).then(metadata => {
-                // Construct strictly typed Recording object
-                const recording = { videoId, metadata }; 
+                // Construct strictly typed Recording object. 
+                // MetadataChanged implies it's a new or updated recording, so the video likely exists and will be updated properly on the next full refresh.
+                const recording = { videoId, metadata, videoExists: true }; 
                 ui.updateRecordingItem(recording);
             });
         });
@@ -625,8 +630,7 @@ async function main() {
                 const { check } = await import("@tauri-apps/plugin-updater");
                 const update = await check();
                 if (update) {
-                    // Use showErrorModal temporarily for notification
-                    ui.showErrorModal(`Update Available: v${update.version}\n\nPlease check the About tab in Settings to install.`);
+                    ui.showUpdateModal(update, settings.language || "ja");
                 }
             } catch (e: any) {
                 // Ignore remote update check failures in dev/unconfigured environments
@@ -698,7 +702,7 @@ async function main() {
 
     const videoIds = await updateSidebar();
     checkLatestAndRetry(videoIds);
-    const firstVideo = videoIds[0];
+    const firstVideo = videoIds.find(v => v.videoExists);
     if (firstVideo) {
         void setVideo(firstVideo.videoId, false);
         player.one("canplay", ui.showWindow);
@@ -718,7 +722,7 @@ async function updateSidebar(forceUpdateIds: string[] = []) {
         commands.getRecordingsList(),
         commands.getRecordingsSize(),
     ]);
-    ui.updateSideBar(recordingsSize, recordings, setVideo, commands.toggleFavorite, showRenameModal, showDeleteModal, forceUpdateIds);
+    ui.updateSideBar(recordingsSize, recordings, setVideo, commands.toggleFavorite, showRenameModal, showDeleteModal, handleDeleteVideoOnly, forceUpdateIds);
 
     if (!ui.setActiveVideoId(activeVideoId)) {
         void setVideo(null);
@@ -816,10 +820,10 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
         player.src("");
     } else {
         const settings = await commands.getSettings();
-        // VideoId is now an absolute path, so we use it directly
+        // VideoId is now an absolute path (base path without extension), so we use it directly
         ui.setActiveVideoId(videoId);
         setMetadata(videoId);
-        player.src({ type: "video/mp4", src: convertFileSrc(videoId) });
+        player.src({ type: "video/mp4", src: convertFileSrc(videoId + ".mp4") });
         if (settings.autoplayVideo && allowAutoplay) {
             void player.play()?.catch(() => {});
         }
@@ -1045,13 +1049,41 @@ async function renameVideo(videoId: string, newVideoId: string) {
     }
 }
 
-function showDeleteModal(videoId: string) {
+function showDeleteModal(videoId: string, isFavorite: boolean = false) {
     // eslint-disable-next-line always-return
     commands.confirmDelete().then((confirmDelete) => {
-        if (confirmDelete) {
-            ui.showDeleteModal(videoId, deleteVideo);
+        if (confirmDelete || isFavorite) {
+            ui.showDeleteModal(videoId, deleteVideo, isFavorite);
         } else {
             deleteVideo(videoId);
+        }
+    });
+}
+
+function handleDeleteVideoOnly(videoId: string, isFavorite: boolean = false) {
+    commands.confirmDelete().then((confirmDelete) => {
+        if (confirmDelete || isFavorite) {
+            ui.showDeleteVideoOnlyModal(videoId, (vId: string) => {
+                // Optimistic UI Update
+                ui.markRecordingAsVideoDeleted(vId);
+                // Background task
+                commands.deleteVideoOnly(vId).then(ok => {
+                    if (!ok) {
+                        ui.showErrorModal("Error deleting video file!");
+                        void updateSidebar(); // Rollback if failed
+                    }
+                });
+            }, isFavorite);
+        } else {
+            // Optimistic UI Update
+            ui.markRecordingAsVideoDeleted(videoId);
+            // Background task
+            commands.deleteVideoOnly(videoId).then(ok => {
+                if (!ok) {
+                    ui.showErrorModal("Error deleting video file!");
+                    void updateSidebar(); // Rollback if failed
+                }
+            });
         }
     });
 }
@@ -1120,6 +1152,11 @@ let activeStepBackwardInterval: number | null = null;
 let originalPlaybackRate = 1.0;
 
 function handleKeyUpEvents(event: KeyboardEvent) {
+    const target = event.target as HTMLElement;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        return;
+    }
+
     // Since we don't have preventDefault in keyup usually, we just check our states
     if (isSteppingForward && isAction(event, "stepForward", currentKeybinds)) {
         isSteppingForward = false;
@@ -1141,6 +1178,11 @@ function handleKeyUpEvents(event: KeyboardEvent) {
 }
 
 async function handleKeyboardEvents(event: KeyboardEvent) {
+    const target = event.target as HTMLElement;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        return;
+    }
+
     if (ui.modalIsOpen()) {
         // Allow Escape to close modal, unless captured by rebind logic (which should stop prop before here)
         if (event.key === "Escape") {

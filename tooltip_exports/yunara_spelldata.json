@@ -1,0 +1,948 @@
+{
+  "Characters/Yunara/Spells/YunaraQAbility": {
+    "__type": "AbilityObject",
+    "mRootSpell": "Characters/Yunara/Spells/YunaraQAbility/YunaraQ",
+    "mChildSpells": [
+      "{6c88b28c}",
+      "{40721c48}"
+    ],
+    "mName": "YunaraQAbility"
+  },
+  "Characters/Yunara/Spells/YunaraQAbility/YunaraQ": {
+    "__type": "SpellObject",
+    "ObjectName": "YunaraQ",
+    "mScriptName": "YunaraQ",
+    "mSpell": {
+      "__type": "SpellDataResource",
+      "DataValues": [
+        {
+          "__type": "SpellDataValue",
+          "mName": "Resource_Max",
+          "mValues": [
+            8.0,
+            8.0,
+            8.0,
+            8.0,
+            8.0,
+            8.0,
+            8.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Resource_Champion",
+          "mValues": [
+            2.0,
+            2.0,
+            2.0,
+            2.0,
+            2.0,
+            2.0,
+            2.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Resource_Nonchampion",
+          "mValues": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Resource_Loss",
+          "mValues": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Resource_Loss_Interval",
+          "mValues": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Resource_Duration",
+          "mValues": [
+            6.0,
+            6.0,
+            6.0,
+            6.0,
+            6.0,
+            6.0,
+            6.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Buff_Duration",
+          "mValues": [
+            5.0,
+            5.0,
+            5.0,
+            5.0,
+            5.0,
+            5.0,
+            5.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Spread_Radius",
+          "mValues": [
+            300.0,
+            300.0,
+            300.0,
+            300.0,
+            300.0,
+            300.0,
+            300.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Spread_AD_Ratio",
+          "mValues": [
+            0.3,
+            0.3,
+            0.3,
+            0.3,
+            0.3,
+            0.3,
+            0.3
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Spread_Lifesteal_Efficacy",
+          "mValues": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Spread_Onhit_Efficacy",
+          "mValues": [
+            0.3,
+            0.3,
+            0.3,
+            0.3,
+            0.3,
+            0.3,
+            0.3
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Attack_Speed",
+          "mValues": [
+            0.1,
+            0.2,
+            0.3,
+            0.4,
+            0.5,
+            0.6,
+            0.7
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Damage",
+          "mValues": [
+            0.0,
+            5.0,
+            10.0,
+            15.0,
+            20.0,
+            25.0,
+            30.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Damage_Passive",
+          "mValues": [
+            0.0,
+            5.0,
+            10.0,
+            15.0,
+            20.0,
+            25.0,
+            30.0
+          ]
+        }
+      ],
+      "mSpellCalculations": {
+        "Calc_Passive_Damage": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "Damage_Passive"
+            },
+            {
+              "__type": "StatByCoefficientCalculationPart",
+              "mCoefficient": 0.2
+            }
+          ]
+        },
+        "Calc_Attack_Speed": {
+          "__type": "GameCalculation",
+          "mSimpleTooltipCalculationDisplay": 5,
+          "mExpandedTooltipCalculationDisplay": 5,
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "Attack_Speed"
+            }
+          ],
+          "mDisplayAsPercent": true
+        },
+        "Calc_Damage": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "Damage"
+            },
+            {
+              "__type": "StatByCoefficientCalculationPart",
+              "mCoefficient": 0.2
+            }
+          ]
+        },
+        "Calc_Damage_Spread": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "StatByNamedDataValueCalculationPart",
+              "mStat": 2,
+              "mDataValue": "{9e3635ce}"
+            }
+          ]
+        },
+        "Calc_Minion_Execute_Threshold": {
+          "__type": "GameCalculation",
+          "mSimpleTooltipCalculationDisplay": 5,
+          "mExpandedTooltipCalculationDisplay": 5,
+          "mFormulaParts": [
+            {
+              "__type": "NumberCalculationPart",
+              "mNumber": 0.3
+            }
+          ],
+          "mDisplayAsPercent": true
+        },
+        "Calc_Minion_Execute_Amp": {
+          "__type": "GameCalculation",
+          "mSimpleTooltipCalculationDisplay": 5,
+          "mExpandedTooltipCalculationDisplay": 5,
+          "mFormulaParts": [
+            {
+              "__type": "NumberCalculationPart",
+              "mNumber": 2.5
+            }
+          ],
+          "mDisplayAsPercent": true
+        }
+      },
+      "castRadius": [
+        300.0,
+        300.0,
+        300.0,
+        300.0,
+        300.0,
+        300.0,
+        300.0
+      ],
+      "castConeDistance": 0.0,
+      "missileSpeed": 2000.0
+    }
+  },
+  "{12e31e59}": {
+    "__type": "SpellObject",
+    "ObjectName": "YunaraQPassive",
+    "mScriptName": "YunaraQPassive"
+  },
+  "{4cf3490c}": {
+    "__type": "AbilityObject",
+    "mRootSpell": "{171bcf58}",
+    "mChildSpells": [
+      "{6d91f7f9}"
+    ],
+    "mName": "YunaraPassiveAbility",
+    "mType": 3
+  },
+  "{171bcf58}": {
+    "__type": "SpellObject",
+    "ObjectName": "YunaraPassive",
+    "mScriptName": "YunaraPassive",
+    "mSpell": {
+      "__type": "SpellDataResource",
+      "mSpellCalculations": {
+        "Calc_Damage_Amp": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "NumberCalculationPart",
+              "mNumber": 0.1
+            },
+            {
+              "__type": "StatByCoefficientCalculationPart",
+              "mCoefficient": 0.001
+            }
+          ],
+          "mDisplayAsPercent": true,
+          "mPrecision": 1
+        }
+      },
+      "castConeDistance": 0.0
+    }
+  },
+  "{6d91f7f9}": {
+    "__type": "SpellObject",
+    "ObjectName": "YunaraCombatTracker",
+    "mScriptName": "YunaraCombatTracker"
+  },
+  "Characters/Yunara/Spells/YunaraEAbility": {
+    "__type": "AbilityObject",
+    "mRootSpell": "Characters/Yunara/Spells/YunaraEAbility/YunaraE",
+    "mChildSpells": [
+      "{e9fad66a}"
+    ],
+    "mName": "YunaraEAbility"
+  },
+  "{178212d9}": {
+    "__type": "SpellObject",
+    "ObjectName": "YunaraEPassive",
+    "mScriptName": "YunaraEPassive"
+  },
+  "Characters/Yunara/Spells/YunaraEAbility/YunaraE": {
+    "__type": "SpellObject",
+    "ObjectName": "YunaraE",
+    "mScriptName": "YunaraE",
+    "mSpell": {
+      "__type": "SpellDataResource",
+      "DataValues": [
+        {
+          "__type": "SpellDataValue",
+          "mName": "Buff_Duration",
+          "mValues": [
+            1.5,
+            1.5,
+            1.5,
+            1.5,
+            1.5,
+            1.5,
+            1.5
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Move_Speed",
+          "mValues": [
+            0.25,
+            0.3,
+            0.35,
+            0.4,
+            0.45,
+            0.5,
+            0.55
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Move_Speed_Modifier",
+          "mValues": [
+            1.5,
+            1.5,
+            1.5,
+            1.5,
+            1.5,
+            1.5,
+            1.5
+          ]
+        }
+      ],
+      "mSpellCalculations": {
+        "Calc_Move_Speed": {
+          "__type": "GameCalculation",
+          "mSimpleTooltipCalculationDisplay": 5,
+          "mExpandedTooltipCalculationDisplay": 5,
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "Move_Speed"
+            }
+          ],
+          "mDisplayAsPercent": true
+        },
+        "Calc_Move_Speed_Enhanced": {
+          "__type": "GameCalculationModified",
+          "mMultiplier": {
+            "__type": "NamedDataValueCalculationPart",
+            "mDataValue": "{c5483e4c}"
+          },
+          "mSimpleTooltipCalculationDisplay": 5,
+          "mExpandedTooltipCalculationDisplay": 5,
+          "mModifiedGameCalculation": "Calc_Move_Speed"
+        }
+      },
+      "castConeDistance": 0.0,
+      "missileSpeed": 0.0
+    }
+  },
+  "Characters/Yunara/Spells/YunaraWAbility": {
+    "__type": "AbilityObject",
+    "mRootSpell": "Characters/Yunara/Spells/YunaraWAbility/YunaraW",
+    "mChildSpells": [
+      "{dbba96be}"
+    ],
+    "mName": "YunaraWAbility",
+    "AbilityTraits": 8192
+  },
+  "{71488fad}": {
+    "__type": "SpellObject",
+    "ObjectName": "YunaraWPassive",
+    "mScriptName": "YunaraWPassive"
+  },
+  "Characters/Yunara/Spells/YunaraWAbility/YunaraW": {
+    "__type": "SpellObject",
+    "ObjectName": "YunaraW",
+    "mScriptName": "YunaraW",
+    "mSpell": {
+      "__type": "SpellDataResource",
+      "DataValues": [
+        {
+          "__type": "SpellDataValue",
+          "mName": "Cast_Time_Base",
+          "mValues": [
+            0.45,
+            0.45,
+            0.45,
+            0.45,
+            0.45,
+            0.45,
+            0.45
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Cast_Time_Min",
+          "mValues": [
+            0.225,
+            0.225,
+            0.225,
+            0.225,
+            0.225,
+            0.225,
+            0.225
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Cast_Time_Attack_Speed_Cap",
+          "mValues": [
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            100.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Cast_Time_Base_Empowered",
+          "mValues": [
+            0.6,
+            0.6,
+            0.6,
+            0.6,
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Cast_Time_Min_Empowered",
+          "mValues": [
+            0.45,
+            0.45,
+            0.45,
+            0.45,
+            0.45,
+            0.45,
+            0.45
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Cast_Time_Attack_Speed_Cap_Empowered",
+          "mValues": [
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            100.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Linger_Duration",
+          "mValues": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Damage",
+          "mValues": [
+            15.0,
+            55.0,
+            95.0,
+            135.0,
+            175.0,
+            215.0,
+            255.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "ADRatio",
+          "mValues": [
+            0.85,
+            0.85,
+            0.85,
+            0.85,
+            0.85,
+            0.85,
+            0.85
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "APRatio",
+          "mValues": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "DPS_Modifier",
+          "mValues": [
+            0.6,
+            0.6,
+            0.6,
+            0.6,
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Slow_Duration",
+          "mValues": [
+            1.5,
+            1.5,
+            1.5,
+            1.5,
+            1.5,
+            1.5,
+            1.5
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Slow_Amount",
+          "mValues": [
+            0.99,
+            0.99,
+            0.99,
+            0.99,
+            0.99,
+            0.99,
+            0.99
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "Minion_Execute_Tick_Count",
+          "mValues": [
+            6.0,
+            6.0,
+            6.0,
+            6.0,
+            6.0,
+            6.0,
+            6.0
+          ]
+        }
+      ],
+      "mSpellCalculations": {
+        "Calc_Damage_Initial": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "Damage"
+            },
+            {
+              "__type": "StatByNamedDataValueCalculationPart",
+              "mStat": 2,
+              "mStatFormula": 2,
+              "mDataValue": "ADRatio"
+            },
+            {
+              "__type": "StatByNamedDataValueCalculationPart",
+              "mDataValue": "APRatio"
+            }
+          ]
+        },
+        "Calc_Damage_Per_Second": {
+          "__type": "GameCalculationModified",
+          "mMultiplier": {
+            "__type": "NamedDataValueCalculationPart",
+            "mDataValue": "{62fc6412}"
+          },
+          "mModifiedGameCalculation": "Calc_Damage_Initial"
+        },
+        "{669adf33}": {
+          "__type": "GameCalculationModified",
+          "mMultiplier": {
+            "__type": "{f3cbe7b2}",
+            "mSpellCalculationKey": "Calc_Minion_Damage_Mod"
+          },
+          "mModifiedGameCalculation": "Calc_Damage_Initial"
+        },
+        "Calc_Slow": {
+          "__type": "GameCalculation",
+          "mSimpleTooltipCalculationDisplay": 5,
+          "mExpandedTooltipCalculationDisplay": 5,
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "Slow_Amount"
+            }
+          ],
+          "mDisplayAsPercent": true
+        },
+        "Calc_Minion_Damage_Mod": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "ByCharLevelBreakpointsCalculationPart",
+              "mLevel1Value": 0.5,
+              "mBreakpoints": [
+                {
+                  "__type": "Breakpoint",
+                  "mLevel": 9,
+                  "mAdditionalBonusAtThisLevel": 0.25
+                },
+                {
+                  "__type": "Breakpoint",
+                  "mLevel": 13,
+                  "mAdditionalBonusAtThisLevel": 0.25
+                }
+              ]
+            }
+          ],
+          "mDisplayAsPercent": true
+        }
+      },
+      "castRadius": [
+        150.0,
+        150.0,
+        150.0,
+        150.0,
+        150.0,
+        150.0,
+        150.0
+      ],
+      "castConeDistance": 100.0,
+      "missileSpeed": 2150.0
+    }
+  },
+  "Characters/Yunara/Spells/YunaraRAbility": {
+    "__type": "AbilityObject",
+    "mRootSpell": "Characters/Yunara/Spells/YunaraRAbility/YunaraR",
+    "mName": "YunaraRAbility",
+    "mType": 2,
+    "AbilityTraits": 1
+  },
+  "Characters/Yunara/Spells/YunaraRAbility/YunaraR": {
+    "__type": "SpellObject",
+    "ObjectName": "YunaraR",
+    "mScriptName": "YunaraR",
+    "mSpell": {
+      "__type": "SpellDataResource",
+      "DataValues": [
+        {
+          "__type": "SpellDataValue",
+          "mName": "Buff_Duration",
+          "mValues": [
+            15.0,
+            15.0,
+            15.0,
+            15.0,
+            15.0,
+            15.0,
+            15.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "RW_Damage_Base",
+          "mValues": [
+            160.0,
+            160.0,
+            320.0,
+            480.0,
+            640.0,
+            800.0,
+            960.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "RW_ADRatio",
+          "mValues": [
+            1.2,
+            1.2,
+            1.2,
+            1.2,
+            1.2,
+            1.2,
+            1.2
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "RW_APRatio",
+          "mValues": [
+            0.75,
+            0.75,
+            0.75,
+            0.75,
+            0.75,
+            0.75,
+            0.75
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "RW_Slow_Duration",
+          "mValues": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "RW_Slow_Amount",
+          "mValues": [
+            0.99,
+            0.99,
+            0.99,
+            0.99,
+            0.99,
+            0.99,
+            0.99
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "RE_Dash_Speed",
+          "mValues": [
+            1200.0,
+            1350.0,
+            1500.0,
+            1650.0,
+            1800.0,
+            1950.0,
+            2100.0
+          ]
+        },
+        {
+          "__type": "SpellDataValue",
+          "mName": "RW_CDR",
+          "mValues": [
+            0.8,
+            0.8,
+            0.8,
+            0.8,
+            0.8,
+            0.8,
+            0.8
+          ]
+        }
+      ],
+      "mSpellCalculations": {
+        "Calc_RW_Damage": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "RW_Damage_Base"
+            },
+            {
+              "__type": "StatByNamedDataValueCalculationPart",
+              "mStat": 2,
+              "mStatFormula": 2,
+              "mDataValue": "{96806f45}"
+            },
+            {
+              "__type": "StatByNamedDataValueCalculationPart",
+              "mDataValue": "{7edb0429}"
+            }
+          ]
+        },
+        "Calc_RW_Slow_Amount": {
+          "__type": "GameCalculation",
+          "mSimpleTooltipCalculationDisplay": 5,
+          "mExpandedTooltipCalculationDisplay": 5,
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "{df09786b}"
+            }
+          ],
+          "mDisplayAsPercent": true
+        },
+        "{42964db5}": {
+          "__type": "GameCalculation",
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "RE_Dash_Speed"
+            }
+          ]
+        },
+        "Calc_RW_Cooldown_Reduction": {
+          "__type": "GameCalculation",
+          "mSimpleTooltipCalculationDisplay": 5,
+          "mExpandedTooltipCalculationDisplay": 5,
+          "mFormulaParts": [
+            {
+              "__type": "NamedDataValueCalculationPart",
+              "mDataValue": "{cc1c79e2}"
+            }
+          ],
+          "mDisplayAsPercent": true
+        }
+      },
+      "mAmmoUsed": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "castRadius": [
+        400.0,
+        400.0,
+        400.0,
+        400.0,
+        400.0,
+        400.0,
+        400.0
+      ],
+      "castConeDistance": 0.0,
+      "missileSpeed": 2000.0
+    }
+  },
+  "{bc92b6e7}": {
+    "__type": "SpellObject",
+    "ObjectName": "YunaraRPassive",
+    "mScriptName": "YunaraRPassive"
+  },
+  "Characters/Yunara/CharacterRecords/Root": {
+    "__type": "CharacterRecord",
+    "mCharacterName": "Yunara",
+    "hpPerLevel": 110.0,
+    "baseStaticHPRegen": 0.8,
+    "hpRegenPerLevel": 0.11,
+    "healthBarHeight": 110.0,
+    "primaryAbilityResource": {
+      "__type": "AbilityResourceSlotInfo",
+      "arType": 0,
+      "arBase": 275.0,
+      "arPerLevel": 45.0,
+      "arBaseStaticRegen": 1.5,
+      "arRegenPerLevel": 0.15
+    },
+    "damagePerLevel": 2.5,
+    "armorPerLevel": 4.4,
+    "baseSpellBlock": 30.0,
+    "spellBlockPerLevel": 1.3,
+    "critDamageMultiplier": 2.0,
+    "attackSpeedPerLevel": 2.0,
+    "acquisitionRange": 800.0,
+    "spellNames": [
+      "YunaraQAbility/YunaraQ",
+      "YunaraWAbility/YunaraW",
+      "YunaraEAbility/YunaraE",
+      "YunaraRAbility/YunaraR"
+    ],
+    "mAbilities": [
+      "Characters/Yunara/Spells/YunaraQAbility",
+      "Characters/Yunara/Spells/YunaraWAbility",
+      "Characters/Yunara/Spells/YunaraEAbility",
+      "Characters/Yunara/Spells/YunaraRAbility",
+      "{4cf3490c}"
+    ],
+    "passiveName": "Spell_YunaraPassive_Name",
+    "passiveLuaName": "YunaraPassive",
+    "passiveSpell": "YunaraPassive"
+  }
+}

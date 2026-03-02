@@ -940,10 +940,12 @@
   {
     "champion": "Ekko",
     "spell": "EkkoW",
-    "hasQuestionMark": false,
-    "missingVariables": [],
+    "hasQuestionMark": true,
+    "missingVariables": [
+      "totalshield"
+    ],
     "tooltipBase": "<spellPassive>自動効果:</spellPassive> 体力が30%未満の敵に対して、通常攻撃が<magicDamage>減少体力の{{ missinghealthpercent }}にあたる魔法ダメージ</magicDamage>を与える。<br /><br /><spellActive>発動効果:</spellActive> 発動後、少ししてから時空の法則が捻じ曲げられた空間を作り出す。この空間は1.5秒間持続し、範囲内にいる敵に{{ e0 }}%の<status>スロウ効果</status>を与える。自身がこの空間に入ると空間が爆発し、{{ e2 }}秒間対象を<status>スタン</status>させて、自身は<shield>耐久値{{ totalshield }}のシールド</shield>を獲得する。{{ spellmodifierdescriptionappend }}",
-    "tooltipEvaluated": "<spellPassive>自動効果:</spellPassive> 体力が30%未満の敵に対して、通常攻撃が<magicDamage>減少体力の300% (+300% AD)にあたる魔法ダメージ</magicDamage>を与える。<br /><br /><spellActive>発動効果:</spellActive> 発動後、少ししてから時空の法則が捻じ曲げられた空間を作り出す。この空間は1.5秒間持続し、範囲内にいる敵に2.25%の<status>スロウ効果</status>を与える。自身がこの空間に入ると空間が爆発し、2.25秒間対象を<status>スタン</status>させて、自身は<shield>耐久値3のシールド</shield>を獲得する。"
+    "tooltipEvaluated": "<spellPassive>自動効果:</spellPassive> 体力が30%未満の敵に対して、通常攻撃が<magicDamage>減少体力の300% (+300% AD)にあたる魔法ダメージ</magicDamage>を与える。<br /><br /><spellActive>発動効果:</spellActive> 発動後、少ししてから時空の法則が捻じ曲げられた空間を作り出す。この空間は1.5秒間持続し、範囲内にいる敵に40%の<status>スロウ効果</status>を与える。自身がこの空間に入ると空間が爆発し、2.25秒間対象を<status>スタン</status>させて、自身は<shield>耐久値? (+150% AD)のシールド</shield>を獲得する。"
   },
   {
     "champion": "Ekko",
@@ -1124,10 +1126,12 @@
   {
     "champion": "Fizz",
     "spell": "FizzQ",
-    "hasQuestionMark": false,
-    "missingVariables": [],
+    "hasQuestionMark": true,
+    "missingVariables": [
+      "totaldamage"
+    ],
     "tooltipBase": "敵に向かって突進して反対側へ突き抜け、<physicalDamage>{{ totaldamage }}の物理ダメージ</physicalDamage>と<magicDamage>{{ qdamage }}の魔法ダメージ</magicDamage>を与える。{{ spellmodifierdescriptionappend }}",
-    "tooltipEvaluated": "敵に向かって突進して反対側へ突き抜け、<physicalDamage>10/25/40/55/70の物理ダメージ</physicalDamage>と<magicDamage>1.5の魔法ダメージ</magicDamage>を与える。"
+    "tooltipEvaluated": "敵に向かって突進して反対側へ突き抜け、<physicalDamage>? (+100% AD)の物理ダメージ</physicalDamage>と<magicDamage>10/25/40/55/70の魔法ダメージ</magicDamage>を与える。"
   },
   {
     "champion": "Fizz",
@@ -5207,7 +5211,7 @@
     "hasQuestionMark": false,
     "missingVariables": [],
     "tooltipBase": "{{ buff_duration }}秒間、<speed>移動速度が{{ calc_move_speed }}</speed>増加する。敵チャンピオンに向かっている場合は<speed>移動速度が{{ calc_move_speed_enhanced }}</speed>まで増加する。<br /><br /><keywordMajor>超越状態 - 触れ得ぬ影</keywordMajor>: 指定方向にダッシュする。{{ spellmodifierdescriptionappend }}",
-    "tooltipEvaluated": "1.5秒間、<speed>移動速度が30/35/40/45/50%</speed>増加する。敵チャンピオンに向かっている場合は<speed>移動速度が0.3/0.35/0.4/0.45/0.5</speed>まで増加する。<br /><br /><keywordMajor>超越状態 - 触れ得ぬ影</keywordMajor>: 指定方向にダッシュする。"
+    "tooltipEvaluated": "1.5秒間、<speed>移動速度が30/35/40/45/50%</speed>増加する。敵チャンピオンに向かっている場合は<speed>移動速度が0.45/0.525/0.6/0.675/0.75</speed>まで増加する。<br /><br /><keywordMajor>超越状態 - 触れ得ぬ影</keywordMajor>: 指定方向にダッシュする。"
   },
   {
     "champion": "Yunara",

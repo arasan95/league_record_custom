@@ -27,39 +27,76 @@
     justify-content: space-between; /* Spread buttons */
 }
 /* ... icon btn styles ... */
-/* Storage Info */
+/* Storage Info (Vertical in Server Nav) */
 .storage-info {
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    margin-bottom: 4px;
 }
 
 .storage-bar {
-    width: 100%;
-    height: 6px;
+    width: 32px;
+    height: 160px;
     background: #333;
-    border-radius: 3px;
+    border-radius: 6px;
     display: flex;
+    flex-direction: column;
+    justify-content: flex-end; /* Fill from bottom to top */
     overflow: hidden;
+    position: relative;
+    border: 1px solid #444; /* Give it some edge */
+}
+
+.storage-overlay {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    pointer-events: none;
+}
+
+.storage-pct {
+    text-align: center;
+    color: #aaa;
+    font-size: 10px;
+    font-weight: 800;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+}
+
+.storage-current {
+    text-align: center;
+    color: #aaa;
+    font-size: 9px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
 }
 
 .storage-seg {
-    height: 100%;
-    transition: width 0.5s ease-out;
+    width: 100%;
+    transition: height 0.5s ease-out;
 }
 
 .seg-clip { background-color: #5c7a7e; } /* Lighter Cyan */
 .seg-star { background-color: #605842; } /* Lighter Gold */
 .seg-norm { background-color: #555555; }
 
-.storage-text {
+.storage-max-text {
     display: flex;
-    justify-content: flex-end; /* Align to right */
-    font-size: 14px; /* Larger text */
+    flex-direction: row;
+    align-items: baseline;
+    font-size: 10px;
     font-weight: bold;
-    color: #eee;
-    align-items: center;
+    color: #aaa;
+    line-height: 1.1;
     margin-top: 2px;
 }
 
@@ -93,6 +130,74 @@
     margin: 0 !important;   /* Override default .btn margin */
 }
 
+
+/* --- Filtered Stats Container --- */
+#filtered-stats-container {
+    background: #1a1a1a;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 8px;
+    margin: 4px 8px 8px 8px;
+    display: flex; /* Will be set from JS when active */
+    flex-direction: column;
+    gap: 6px;
+}
+
+.stats-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.stat-box {
+    flex: 1;
+    background: #252525;
+    border-radius: 4px;
+    padding: 4px 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border: 1px solid transparent;
+}
+
+.stat-label {
+    font-size: 0.75em;
+    color: #999;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.stat-value {
+    font-size: 0.95em;
+    font-weight: bold;
+    color: #fff;
+    font-family: 'Cinzel', serif;
+}
+
+.stat-subtext {
+    font-size: 0.75em;
+    color: #bbb;
+    margin-top: 1px;
+}
+
+.blue-side {
+    border-color: rgba(10, 203, 230, 0.3);
+    background: rgba(10, 203, 230, 0.05);
+}
+
+.blue-side .stat-value {
+    color: #0acbe6;
+}
+
+.red-side {
+    border-color: rgba(230, 59, 59, 0.3);
+    background: rgba(230, 59, 59, 0.05);
+}
+
+.red-side .stat-value {
+    color: #ff6b6b;
+}
+
 .icon-btn:hover {
     background: rgba(255, 255, 255, 0.1) !important;
     color: #fff !important;
@@ -123,6 +228,32 @@
     background: rgba(213, 102, 255, 0.15) !important;
 }
 
+#search-bar-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px;
+}
+
+#search-bar-container.hidden {
+    display: none !important;
+}
+
+.search-input {
+    width: 100%;
+    padding: 4px;
+    box-sizing: border-box;
+    background: #222;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #d566ff;
+}
+
 #sidebar #sidebar-info #size {
     text-align: center;
     color: #ffffff;
@@ -141,7 +272,7 @@
 
 /* Specific Scrollbar for Sidebar - Black Background */
 #sidebar #sidebar-content::-webkit-scrollbar {
-    width: 12px; /* Increased to accommodate borders */
+    width: 11px; /* Increased to accommodate borders */
 }
 
 #sidebar #sidebar-content::-webkit-scrollbar-track {
@@ -448,18 +579,24 @@
     display: flex;
 }
 
-.favorite, .rename, .delete {
+.favorite, .rename, .delete, .delete-video-only {
     font-size: 16px;
     color: #666;
     transition: color 0.2s;
     background: rgba(0,0,0,0.5); /* Background for visibility */
     border-radius: 3px;
     padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 25px;
 }
 
 .favorite:hover { color: gold; }
 .rename:hover { color: rgb(69, 255, 137); }
 .delete:hover { color: red; }
+.delete-video-only:hover { color: orange; }
 
 /* Fallback for no-metadata (just text) */
 .video-name {
@@ -681,6 +818,16 @@ img.tft-trait {
     background-color: #2a2a2a;
 }
 
+/* --- Deleted Video Style --- */
+.video-deleted {
+    opacity: 0.6;
+}
+
+.video-deleted .sidebar-time {
+    text-decoration: line-through;
+    color: #999;
+}
+
 /* ========================================================================= */
 /* Server Navigation Bar (Discord-like)                                      */
 /* ========================================================================= */
@@ -697,6 +844,19 @@ img.tft-trait {
     overflow-y: auto;
     overflow-x: hidden;
     margin-right: 2px;
+    position: relative; /* the dummy relies on this */
+}
+
+/* DWM dummy block to prevent incorrect artifacts on alt-tab */
+#dwm-dummy {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background-color: #000;
+    pointer-events: none;
+    z-index: 9999;
 }
 
 /* Hide scrollbar for server nav */
@@ -724,18 +884,6 @@ img.tft-trait {
     text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
 }
 
-.server-icon:hover {
-    border-radius: 16px;
-    background-color: #3f3f3f;
-    color: #fff;
-}
-
-.server-icon.active {
-    border-radius: 16px;
-    background-color: #3f3f3f;
-    color: #fff;
-}
-
 /* Active/Hover Indicator (Left Pillar) */
 .server-icon::before {
     content: "";
@@ -748,6 +896,18 @@ img.tft-trait {
     background-color: #fff;
     border-radius: 0 16px 16px 0;
     transition: transform 0.2s ease, height 0.2s ease;
+}
+
+.server-icon:hover {
+    border-radius: 16px;
+    background-color: #3f3f3f;
+    color: #fff;
+}
+
+.server-icon.active {
+    border-radius: 16px;
+    background-color: #3f3f3f;
+    color: #fff;
 }
 
 .server-icon:hover::before {
@@ -771,6 +931,122 @@ img.tft-trait {
 #nav-filter-lol:hover, #nav-filter-lol.active {
     background-color: #3f3f3f;
 }
+
+/* Sub-Filters (Game Modes) */
+.gamemode-icon {
+    width: 44px; /* Increased back for better resolution */
+    height: 44px;
+    margin-top: -6px; /* pull them a bit closer to LoL */
+    border-radius: 8px; /* Remove the 50% circular clipping to show full corners */
+}
+
+/* Keep the indicator pillar matched to the size */
+.gamemode-icon::before {
+    height: 44px;
+}
+
+#nav-filter-sr {
+    background-image: url('../assets/icon/game-select-icon-default.png');
+    background-size: 100%; /* Show fully without clipping */
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: transparent;
+    color: transparent;
+}
+
+#nav-filter-sr:hover, #nav-filter-sr.active {
+    background-image: url('../assets/icon/game-select-icon-hover.png');
+    background-color: transparent; /* They have their own hover graphics */
+    border-radius: 8px !important;
+}
+
+#nav-filter-aram {
+    background-image: url('../assets/icon/aram_game-select-icon-default.png');
+    background-size: 100%;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: transparent;
+    color: transparent;
+}
+
+#nav-filter-aram:hover, #nav-filter-aram.active {
+    background-image: url('../assets/icon/aram_game-select-icon-hover.png');
+    background-color: transparent;
+    border-radius: 8px !important;
+}
+
+#nav-filter-other {
+    background-image: url('../assets/icon/gamemodecommon_icon-empty.png');
+    background-size: 100%;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: transparent;
+    color: transparent;
+}
+
+#nav-filter-other:hover, #nav-filter-other.active {
+    background-image: url('../assets/icon/gamemodecommon_icon-hover.png');
+    background-color: transparent;
+    border-radius: 8px !important;
+}
+
+/* Role Filters (under Game Mode) */
+#role-filters {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    max-height: 250px;
+    transition: max-height 0.3s ease-in-out, opacity 0.3s, margin-top 0.3s, margin-bottom 0.3s;
+    opacity: 1;
+}
+
+#role-filters.hidden {
+    max-height: 0;
+    opacity: 0;
+    margin-top: -7px;
+    margin-bottom: -7px;
+    pointer-events: none;
+}
+
+.role-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    background-color: transparent;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    cursor: pointer;
+    transition: transform 0.2s, filter 0.2s, background-image 0s; /* immediate image change */
+    filter: brightness(0.8);
+}
+
+.role-icon:hover, .role-icon.active {
+    filter: brightness(1.1);
+    transform: scale(1.05);
+}
+
+/* Individual Role Icon Defaults & Hovers */
+#role-filter-top { background-image: url('../assets/icon/icon-position-top.png'); }
+#role-filter-top:hover, #role-filter-top.active { background-image: url('../assets/icon/icon-position-top-hover.png'); }
+
+#role-filter-jungle { background-image: url('../assets/icon/icon-position-jungle.png'); }
+#role-filter-jungle:hover, #role-filter-jungle.active { background-image: url('../assets/icon/icon-position-jungle-hover.png'); }
+
+#role-filter-middle { background-image: url('../assets/icon/icon-position-middle.png'); }
+#role-filter-middle:hover, #role-filter-middle.active { background-image: url('../assets/icon/icon-position-middle-hover.png'); }
+
+#role-filter-bottom { background-image: url('../assets/icon/icon-position-bottom.png'); }
+#role-filter-bottom:hover, #role-filter-bottom.active { background-image: url('../assets/icon/icon-position-bottom-hover.png'); }
+
+#role-filter-utility { background-image: url('../assets/icon/icon-position-utility.png'); }
+#role-filter-utility:hover, #role-filter-utility.active { background-image: url('../assets/icon/icon-position-utility-hover.png'); }
+
 
 #nav-filter-tft {
     background-image: url('../assets/icon/TFT.png');

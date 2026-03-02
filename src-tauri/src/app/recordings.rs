@@ -17,7 +17,6 @@ pub trait RecordingManager {
 
 impl RecordingManager for AppHandle {
     fn get_recordings(&self) -> Vec<PathBuf> {
-        // get all mp4 files in ~/Videos/%folder-name%
         let mut recordings = Vec::<PathBuf>::new();
         let settings = self.state::<SettingsWrapper>();
         let currently_recording = self.state::<CurrentlyRecording>().get();
@@ -34,15 +33,16 @@ impl RecordingManager for AppHandle {
                     }
 
                     if let Some(ext) = path.extension() {
-                        if ext == "mp4" {
-                            recordings.push(path);
+                        if ext == "mp4" || ext == "json" {
+                            recordings.push(path.with_extension(""));
                         }
                     }
                 }
             }
         }
 
-        // Remove duplicates in case folders are the same or nested
+        // Remove duplicates in case folders are the same or nested,
+        // or if both .mp4 and .json exist for the same base name.
         recordings.sort();
         recordings.dedup();
 
@@ -78,13 +78,16 @@ impl RecordingManager for AppHandle {
         // split recordings into 'favorites' and 'others' by json metadata 'favorite' value
         // in case reading the metadata fails put the recording into favorites so it doesn't get deleted
         let (favorites, others): (Vec<_>, Vec<_>) = recordings.into_iter().partition(|recording| {
-            action::get_recording_metadata(recording, false)
+            let mut with_ext = recording.clone();
+            with_ext.set_extension("mp4");
+            action::get_recording_metadata(&with_ext, false)
                 .map(|metadata_file| metadata_file.is_favorite())
                 .unwrap_or(true)
         });
 
         // get sum of sizes of recordings marked as favorites
-        for recording in favorites {
+        for mut recording in favorites {
+            recording.set_extension("mp4");
             match recording.metadata() {
                 Ok(metadata) => total_size += metadata.len(),
                 Err(e) => log::warn!(
@@ -94,15 +97,23 @@ impl RecordingManager for AppHandle {
             }
         }
 
-        for recording in others {
+        for mut recording in others {
+            recording.set_extension("mp4");
             match recording.metadata() {
                 Ok(metadata) => total_size += metadata.len(),
                 Err(e) => log::warn!("failed to get size of recording {}: {e}", recording.display(),),
             }
 
             if total_size > max_size {
-                if let Err(e) = action::delete_recording(recording) {
-                    log::error!("failed to delete file due to size limit: {e}");
+                let keep_json = self.state::<SettingsWrapper>().keep_video_json_on_auto_delete();
+                if keep_json {
+                    if let Err(e) = action::delete_video_file_only(recording) {
+                        log::error!("failed to delete file due to size limit: {e}");
+                    }
+                } else {
+                    if let Err(e) = action::delete_recording(recording) {
+                        log::error!("failed to delete file due to size limit: {e}");
+                    }
                 }
             }
         }
@@ -122,11 +133,19 @@ impl RecordingManager for AppHandle {
         let Some(max_days) = self.state::<SettingsWrapper>().max_recording_age() else { return };
         let max_age = Duration::from_secs(max_days * 24 * 60 * 60);
         let now = SystemTime::now();
-        for recording in self.get_recordings() {
+        for mut recording in self.get_recordings() {
+            recording.set_extension("mp4");
             // in case checking 'too_old(...)' or 'is_favorite(...)' fails default to not deleting the file
             if too_old(&recording, max_age, now).unwrap_or(false) && !is_favorite(&recording).unwrap_or(true) {
-                if let Err(e) = action::delete_recording(recording) {
-                    log::error!("failed to delete file due to age limit: {e}");
+                let keep_json = self.state::<SettingsWrapper>().keep_video_json_on_auto_delete();
+                if keep_json {
+                    if let Err(e) = action::delete_video_file_only(recording) {
+                        log::error!("failed to delete file due to age limit: {e}");
+                    }
+                } else {
+                    if let Err(e) = action::delete_recording(recording) {
+                        log::error!("failed to delete file due to age limit: {e}");
+                    }
                 }
             }
         }
@@ -164,24 +183,36 @@ pub mod action {
         Ok(true)
     }
 
-    pub fn delete_recording(recording: PathBuf) -> Result<()> {
-        fs::remove_file(&recording)?;
+    pub fn delete_recording(mut recording: PathBuf) -> Result<()> {
+        recording.set_extension("mp4");
+        if recording.exists() {
+            fs::remove_file(&recording)?;
+        }
 
         let mut metadata_file = recording;
         metadata_file.set_extension("json");
-        fs::remove_file(metadata_file)?;
+        if metadata_file.exists() {
+            fs::remove_file(metadata_file)?;
+        }
 
         Ok(())
     }
 
+    pub fn delete_video_file_only(mut recording: PathBuf) -> Result<()> {
+        recording.set_extension("mp4");
+        if recording.exists() {
+            fs::remove_file(&recording)?;
+        }
+        Ok(())
+    }
+
     pub fn get_recording_metadata(video_path: &Path, fetch: bool) -> Result<MetadataFile> {
-        let video_path = video_path.to_owned();
-        if !video_path.is_file() {
+        let metadata_path = video_path.with_extension("json");
+        let mp4_path = video_path.with_extension("mp4");
+
+        if !metadata_path.is_file() && !mp4_path.is_file() {
             bail!("no such video");
         }
-
-        let mut metadata_path = video_path;
-        metadata_path.set_extension("json");
 
         let filedata = if metadata_path.exists() && fs::metadata(&metadata_path)?.is_file() {
             let reader = BufReader::new(File::open(&metadata_path)?);

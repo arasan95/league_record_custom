@@ -323,6 +323,10 @@ async function run() {
                      if (key.startsWith('e')) {
                          const idx = parseInt(key.substring(1), 10);
                          if (!isNaN(idx) && spell.effectBurn && spell.effectBurn[idx]) return [spell.effectBurn[idx]];
+                         if (!isNaN(idx) && cdSpellData && cdSpellData.mSpell && cdSpellData.mSpell.mEffectAmount && cdSpellData.mSpell.mEffectAmount[idx]) {
+                             const ea = cdSpellData.mSpell.mEffectAmount[idx];
+                             if (ea && ea.value) return ea.value;
+                         }
                      }
 
                      // 2. DDragon vars (a1, f1, etc)
@@ -353,7 +357,7 @@ async function run() {
                          if (spell.cd_dataValuesMap[key]) return spell.cd_dataValuesMap[key];
                          const keys = Object.keys(spell.cd_dataValuesMap);
                          for (const k of keys) {
-                              if (k === `m${key}` || k.includes(key)) return spell.cd_dataValuesMap[k];
+                              if (k === `m${key}` || (!/^e\d$/.test(key) && k.includes(key))) return spell.cd_dataValuesMap[k];
                          }
                      }
                      
@@ -362,7 +366,7 @@ async function run() {
                          if (spell.cd_baseMap[key]) return spell.cd_baseMap[key];
                          const keys = Object.keys(spell.cd_baseMap);
                          for (const k of keys) {
-                              if (k === `m${key}` || k.includes(key)) return spell.cd_baseMap[k];
+                              if (k === `m${key}` || (!/^e\d$/.test(key) && k.includes(key))) return spell.cd_baseMap[k];
                          }
                      }
 
@@ -372,13 +376,13 @@ async function run() {
                           if (spell.cd_dataValuesMap) {
                               if (spell.cd_dataValuesMap[noPrefix]) return spell.cd_dataValuesMap[noPrefix];
                               for (const k of Object.keys(spell.cd_dataValuesMap)) {
-                                  if (k === `m${noPrefix}` || k.includes(noPrefix)) return spell.cd_dataValuesMap[k];
+                                  if (k === `m${noPrefix}` || (!/^e\d$/.test(noPrefix) && k.includes(noPrefix))) return spell.cd_dataValuesMap[k];
                               }
                           }
                           if (spell.cd_baseMap) {
                               if (spell.cd_baseMap[noPrefix]) return spell.cd_baseMap[noPrefix];
                               for (const k of Object.keys(spell.cd_baseMap)) {
-                                  if (k === `m${noPrefix}` || k.includes(noPrefix)) return spell.cd_baseMap[k];
+                                  if (k === `m${noPrefix}` || (!/^e\d$/.test(noPrefix) && k.includes(noPrefix))) return spell.cd_baseMap[k];
                               }
                           }
                      }

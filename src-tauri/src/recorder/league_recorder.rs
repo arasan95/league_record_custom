@@ -44,7 +44,11 @@ impl LeagueRecorder {
                                 cancel_token: cancel_token.clone(),
                             };
 
-                            if let Err(e) = GameListener::new(ctx, manual_stop_tx.subscribe(), manual_start_tx.subscribe()).run().await {
+                            if let Err(e) =
+                                GameListener::new(ctx, manual_stop_tx.subscribe(), manual_start_tx.subscribe())
+                                    .run()
+                                    .await
+                            {
                                 log::error!("stopped listening for games: {e}");
                             }
                         }
