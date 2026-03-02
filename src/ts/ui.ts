@@ -86,11 +86,7 @@ export default class UI {
     
     // Store latest recordings to re-render locally
     private lastRecordings: ReadonlyArray<Recording> = [];
-
     private currentQueueId: number = 0;
-
-
-
     private readonly checkboxKill;
     private readonly checkboxDeath;
     private readonly checkboxAssist;
@@ -98,16 +94,12 @@ export default class UI {
     private readonly checkboxDragon;
     private readonly checkboxVoidgrub;
     private readonly checkboxHerald;
-    
     private readonly checkboxBaron;
-    
     private videoHeader: HTMLElement | null = null;
     private player: any = null;
-    
     private sidebarContainer: HTMLDivElement | null = null;
     private scoreboardEl: HTMLElement | null = null;
     private scoreboardScale: number | null = null;
-    
     // Core methods
     
     public setSidebarWidth(newWidth: number) {
@@ -222,7 +214,6 @@ export default class UI {
     private goldTimeline: GoldFrame[] = [];
     private goldDiffRefs: HTMLElement[] = [];
     private participants: Participant[] = [];
-    
     private team100GoldText: HTMLElement | null = null;
     private team200GoldText: HTMLElement | null = null;
     private team100LeadText: HTMLElement | null = null;
@@ -239,8 +230,6 @@ export default class UI {
     private team200VoidgrubText: HTMLElement | null = null;
     private team100HeraldText: HTMLElement | null = null;
     private team200HeraldText: HTMLElement | null = null;
-
-
     private baronTimerText: HTMLElement | null = null;
     private baronTimerIcon: HTMLImageElement | null = null;
     private baronTimerGroup2: HTMLElement | null = null;
@@ -248,16 +237,12 @@ export default class UI {
     private baronTimerIcon2: HTMLImageElement | null = null;
     private dragonTimerText: HTMLElement | null = null;
     private dragonTimerIcon: HTMLImageElement | null = null;
-
     private headerTimeText: HTMLElement | null = null;
-
     private roleFiltersContainer: HTMLDivElement | null = null;
     private roleFilterBtns: HTMLButtonElement[] | null = null;
     private filterRole: string | null = null;
-
     private kdaRefs: HTMLElement[] = [];
     private csRefs: HTMLElement[] = [];
-    
     private events: GameEvent[] = [];
     private recordingOffset: number = 0;
     private metadataRenderId = 0;
@@ -267,7 +252,6 @@ export default class UI {
     private seekDebounce: any = null; // Timeout ID
     private seekRaf: number | null = null;
     private frameDuration: number = 1/60; // Default to 60fps
-
     private readonly vjs: typeof videojs;
 
     constructor(vjs: typeof videojs) {
@@ -1829,6 +1813,9 @@ export default class UI {
      * Shows a rich update modal with release notes and a direct update button.
      */
     public showUpdateModal = (update: any, lang: string) => {
+        // Ensure settings-mode is removed so the modal gets its standard background and styling, preventing double-box on startup
+        this.modalContent.classList.remove("settings-mode");
+        
         const title = this.vjs.dom.createEl("h2", {}, { style: "color: #e8d154; margin-top: 0; margin-bottom: 15px;" }, `${getText(lang as any, "updateAvailable" as any)} (v${update.version})`);
         
         const contentBox = this.vjs.dom.createEl("div", {}, { 
@@ -1857,16 +1844,19 @@ export default class UI {
                     laterBtn.disabled = false;
                 }
             }
-        }, { class: "btn-browse", style: "border: 1px solid #c8aa6e; margin-right: 15px; padding: 8px 16px; font-weight: bold; background: #222; color: #c8aa6e; cursor: pointer;" }, getText(lang as any, "updateRestart" as any) || "Update & Restart") as HTMLButtonElement;
+        }, { class: "btn-browse", style: "border: 1px solid #c8aa6e; padding: 8px 16px; font-weight: bold; background: #222; color: #c8aa6e; cursor: pointer;" }, getText(lang as any, "updateRestart" as any) || "Update & Restart") as HTMLButtonElement;
 
         const laterBtn = this.vjs.dom.createEl("button", {
             onclick: this.hideModal
-        }, { class: "btn" }, "Later") as HTMLButtonElement;
+        }, { class: "btn", style: "margin-right: 15px;" }, getText(lang as any, "updateLater" as any) || "Later") as HTMLButtonElement;
 
-        const btnContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; justify-content: center; align-items: center;" }, [updateBtn, laterBtn]);
+        const btnContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; justify-content: flex-end; align-items: center;" }, [laterBtn, updateBtn]);
 
-        // Override default modal width for this specific modal to give more reading space
-        const wrapper = this.vjs.dom.createEl("div", {}, { style: "width: 100%; max-width: 600px; margin: 0 auto;" }, [title, contentBox, statusMsg, btnContainer]);
+        // Wrap the content, relying on #modal-content for the primary background and border
+        const wrapper = this.vjs.dom.createEl("div", {}, { 
+            style: "width: 100%; max-width: 600px; margin: 0 auto; padding: 10px;" 
+        }, [title, contentBox, statusMsg, btnContainer]);
+
         this.showModal([wrapper]);
     };
     public showRenameModal = (
