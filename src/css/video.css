@@ -741,7 +741,7 @@ input[type="checkbox"]:not([id]):checked,
 .vjs-control-bar, .vjs-control-bar *,
 .controls-bar, .controls-bar *,
 #modal-content, #modal-content *,
-#sidebar, #sidebar * {
+#sidebar, #sidebar *, #server-nav * {
     font-family: 'Inter', sans-serif;
 }
 

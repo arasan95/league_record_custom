@@ -1,0 +1,191 @@
+{
+  "__type": "SpellObject",
+  "ObjectName": "EkkoW",
+  "mScriptName": "EkkoW",
+  "mSpell": {
+    "__type": "SpellDataResource",
+    "mEffectAmount": [
+      {
+        "__type": "SpellEffectAmount",
+        "value": [
+          375,
+          375,
+          375,
+          375,
+          375,
+          375,
+          375
+        ]
+      },
+      {
+        "__type": "SpellEffectAmount",
+        "value": [
+          2.25,
+          2.25,
+          2.25,
+          2.25,
+          2.25,
+          2.25,
+          2.25
+        ]
+      },
+      {
+        "__type": "SpellEffectAmount",
+        "value": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ]
+      },
+      {
+        "__type": "SpellEffectAmount",
+        "value": [
+          80,
+          100,
+          120,
+          140,
+          160,
+          180,
+          200
+        ]
+      },
+      {
+        "__type": "SpellEffectAmount",
+        "value": [
+          150,
+          150,
+          150,
+          150,
+          150,
+          150,
+          150
+        ]
+      },
+      {
+        "__type": "SpellEffectAmount",
+        "value": [
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15
+        ]
+      },
+      {
+        "__type": "SpellEffectAmount",
+        "value": [
+          1.5,
+          1.5,
+          1.5,
+          1.5,
+          1.5,
+          1.5,
+          1.5
+        ]
+      },
+      {
+        "__type": "SpellEffectAmount",
+        "value": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ]
+      },
+      {
+        "__type": "SpellEffectAmount",
+        "value": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ]
+      },
+      {
+        "__type": "SpellEffectAmount",
+        "value": [
+          40,
+          40,
+          40,
+          40,
+          40,
+          40,
+          40
+        ]
+      }
+    ],
+    "DataValues": [
+      {
+        "__type": "SpellDataValue",
+        "mName": "BaseOnHitDamage",
+        "mValues": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ]
+      }
+    ],
+    "mSpellCalculations": {
+      "MissingHealthPercent": {
+        "__type": "GameCalculation",
+        "mMultiplier": {
+          "__type": "NumberCalculationPart",
+          "mNumber": 0.01
+        },
+        "tooltipOnly": true,
+        "mFormulaParts": [
+          {
+            "__type": "NamedDataValueCalculationPart",
+            "mDataValue": "BaseOnHitDamage"
+          },
+          {
+            "__type": "StatByCoefficientCalculationPart",
+            "mCoefficient": 0.03
+          }
+        ],
+        "mDisplayAsPercent": true
+      },
+      "TotalShield": {
+        "__type": "GameCalculation",
+        "tooltipOnly": true,
+        "mFormulaParts": [
+          {
+            "__type": "EffectValueCalculationPart",
+            "mEffectIndex": 4
+          },
+          {
+            "__type": "StatByCoefficientCalculationPart",
+            "mCoefficient": 1.5
+          }
+        ]
+      }
+    },
+    "castRadius": [
+      375,
+      375,
+      375,
+      375,
+      375,
+      375,
+      375
+    ],
+    "castConeDistance": 100,
+    "missileSpeed": 0
+  }
+}

@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::fs::metadata;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -38,7 +37,10 @@ pub fn get_recordings_path(settings: State<SettingsWrapper>) -> PathBuf {
 pub fn get_recordings_size(app_handle: AppHandle) -> f32 {
     let mut size = 0;
     for file in app_handle.get_recordings() {
-        if let Ok(metadata) = metadata(file) {
+        if let Ok(metadata) = std::fs::metadata(file.with_extension("mp4")) {
+            size += metadata.len();
+        }
+        if let Ok(metadata) = std::fs::metadata(file.with_extension("json")) {
             size += metadata.len();
         }
     }
@@ -51,6 +53,7 @@ pub fn get_recordings_size(app_handle: AppHandle) -> f32 {
 pub struct Recording {
     video_id: String,
     metadata: Option<MetadataFile>,
+    video_exists: bool,
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -62,16 +65,25 @@ pub fn get_recordings_list(app_handle: AppHandle) -> Vec<Recording> {
     let mut ret = Vec::new();
     for path in recordings {
         if let Some(video_id) = path.to_str().map(|s| s.to_string()) {
+            let mut mp4_path = path.clone();
+            mp4_path.set_extension("mp4");
+            let video_exists = mp4_path.exists();
+
             match action::get_recording_metadata(&path, true) {
                 Ok(metadata) => {
                     ret.push(Recording {
                         video_id,
                         metadata: Some(metadata),
+                        video_exists,
                     });
                 }
                 Err(e) => {
                     println!("Error parsing {}: {}", video_id, e);
-                    ret.push(Recording { video_id, metadata: None });
+                    ret.push(Recording {
+                        video_id,
+                        metadata: None,
+                        video_exists,
+                    });
                 }
             }
         }
@@ -110,6 +122,20 @@ pub fn delete_video(video_id: String, _state: State<SettingsWrapper>) -> bool {
         Ok(_) => true,
         Err(e) => {
             log::error!("failed to delete video: {e}");
+            false
+        }
+    }
+}
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub fn delete_video_only(video_id: String, _state: State<SettingsWrapper>) -> bool {
+    let recording = PathBuf::from(video_id);
+
+    match action::delete_video_file_only(recording) {
+        Ok(_) => true,
+        Err(e) => {
+            log::error!("failed to delete video file only: {e}");
             false
         }
     }

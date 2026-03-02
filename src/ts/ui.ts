@@ -6,7 +6,7 @@ import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import * as clipboard from "@tauri-apps/plugin-clipboard-manager";
 import { commands, type GameMetadata, type GoldFrame, type ParticipantGold, type MarkerFlags, type Recording, type Settings, type MatchTeam, type Participant, type GameEvent } from "./bindings";
-import { getChampionIconUrl, getChampionIconUrlById, getTftUnitIconUrl, getTftTraitIconUrl, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, ensureTftDataLoaded, getItemPrice, getChampionNameById, getDetailedChampionData, getSummonerSpellData, getItemData, getTftItemIconUrl } from "./datadragon";
+import { getChampionIconUrl, getChampionIconUrlById, getTftUnitIconUrl, getTftTraitIconUrl, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, ensureTftDataLoaded, getItemPrice, getChampionNameById, getChampionEnglishNameByIdSync, getChampionLocalizedNameByIdSync, getDetailedChampionData, getSummonerSpellData, getItemData, getRuneData, getTftItemIconUrl, getGameModeByQueueId } from "./datadragon";
 import { getCurrentPatchVersion, getSpawnTimers } from "./version";
 import { InventoryTimeline } from "./timeline";
 import { getObjectiveConfig } from "./objectives";
@@ -17,7 +17,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 import { open } from "@tauri-apps/plugin-shell";
 import { toVideoId, toVideoName, isFavorite } from "./util";
-import { showGlobalTooltip, hideGlobalTooltip, buildChampionTooltipHtml, buildSummonerSpellTooltipHtml, buildItemTooltipHtml, buildTrinketTooltipHtml } from "./tooltip";
+import { showGlobalTooltip, hideGlobalTooltip, buildChampionTooltipHtml, buildSummonerSpellTooltipHtml, buildItemTooltipHtml, buildTrinketTooltipHtml, buildRuneTooltipHtml } from "./tooltip";
 import { getText, type Language } from "./i18n";
 import monoTower from "../assets/match-history-icons/mono-tower.png";
 import monoVoidgrub from "../assets/match-history-icons/mono-voidgrub.png";
@@ -52,6 +52,9 @@ export default class UI {
     private readonly filterSearchBtn;
     private readonly searchBarContainer;
     private readonly searchInput;
+    private readonly searchAllyInput;
+    private readonly searchEnemyInput;
+    private readonly searchUserInput;
 
     // Storage Elements
     private readonly segClip;
@@ -59,6 +62,7 @@ export default class UI {
     private readonly segNorm;
     private readonly sizeTotalText;
     private readonly sizeMaxText;
+    private readonly storagePctText;
 
     private maxStorageGb: number = 0; // Loaded from settings
 
@@ -66,12 +70,18 @@ export default class UI {
     private filterClip = false;
     private filterRanked = false;
     private filterSearch = false;
-    private searchQuery = "";
+    private searchQuery: string = "";
+    private searchAllyQuery: string = "";
+    private searchEnemyQuery: string = "";
+    private searchUserQuery: string = "";
     
     // Server Nav Filter
-    private filterServer: 'ALL' | 'LOL' | 'TFT' = 'ALL';
+    private filterServer: 'ALL' | 'LOL' | 'TFT' | 'SR' | 'ARAM' | 'OTHER' = 'ALL';
     private readonly navFilterAllBtn;
     private readonly navFilterLolBtn;
+    private readonly navFilterSrBtn;
+    private readonly navFilterAramBtn;
+    private readonly navFilterOtherBtn;
     private readonly navFilterTftBtn;
     
     // Store latest recordings to re-render locally
@@ -144,8 +154,9 @@ export default class UI {
         scale = Math.min(scale, 1.2); 
 
         const info = this.sidebarContainer.querySelector("#sidebar-info");
+        const sbcontent = this.sidebarContainer.querySelector("#sidebar-content");
         if (info) (info as HTMLElement).style.setProperty("zoom", scale.toFixed(3));
-        if (this.sidebar) (this.sidebar as HTMLElement).style.setProperty("zoom", scale.toFixed(3));
+        if (sbcontent) (sbcontent as HTMLElement).style.setProperty("zoom", scale.toFixed(3));
     }
 
     public setScoreboardHeight(targetHeight: number, baseHeight: number) {
@@ -240,6 +251,10 @@ export default class UI {
 
     private headerTimeText: HTMLElement | null = null;
 
+    private roleFiltersContainer: HTMLDivElement | null = null;
+    private roleFilterBtns: HTMLButtonElement[] | null = null;
+    private filterRole: string | null = null;
+
     private kdaRefs: HTMLElement[] = [];
     private csRefs: HTMLElement[] = [];
     
@@ -276,18 +291,29 @@ export default class UI {
         this.filterSearchBtn = document.querySelector<HTMLButtonElement>("#filter-search-btn")!;
         this.searchBarContainer = document.querySelector<HTMLDivElement>("#search-bar-container")!;
         this.searchInput = document.querySelector<HTMLInputElement>("#search-input")!;
+        this.searchAllyInput = document.querySelector<HTMLInputElement>("#search-ally-input")!;
+        this.searchEnemyInput = document.querySelector<HTMLInputElement>("#search-enemy-input")!;
+        this.searchUserInput = document.querySelector<HTMLInputElement>("#search-user-input")!;
         
-        // Server Nav Elements
+        // Navigation Buttonsts
         this.navFilterAllBtn = document.querySelector<HTMLButtonElement>("#nav-filter-all")!;
         this.navFilterLolBtn = document.querySelector<HTMLButtonElement>("#nav-filter-lol")!;
+        this.navFilterSrBtn = document.querySelector<HTMLButtonElement>("#nav-filter-sr")!;
+        this.navFilterAramBtn = document.querySelector<HTMLButtonElement>("#nav-filter-aram")!;
+        this.navFilterOtherBtn = document.querySelector<HTMLButtonElement>("#nav-filter-other")!;
         this.navFilterTftBtn = document.querySelector<HTMLButtonElement>("#nav-filter-tft")!;
         
-        // Storage Elements
+        // Role Filters
+        this.roleFiltersContainer = document.querySelector<HTMLDivElement>("#role-filters")!;
+        this.roleFilterBtns = Array.from(document.querySelectorAll<HTMLButtonElement>(".role-icon"));
+
+        // Storage Elementsts
         this.segClip = document.querySelector<HTMLDivElement>(".seg-clip")!;
         this.segStar = document.querySelector<HTMLDivElement>(".seg-star")!;
         this.segNorm = document.querySelector<HTMLDivElement>(".seg-norm")!;
         this.sizeTotalText = document.querySelector<HTMLSpanElement>("#size-total")!;
         this.sizeMaxText = document.querySelector<HTMLSpanElement>("#size-max")!;
+        this.storagePctText = document.querySelector<HTMLDivElement>("#storage-pct")!;
         
         // Resize Handler for Physical Pixel Layout
         this.handleResize(); // Initial check
@@ -297,10 +323,48 @@ export default class UI {
         const updateServerNavActiveState = () => {
             this.navFilterAllBtn?.classList.remove('active');
             this.navFilterLolBtn?.classList.remove('active');
+            this.navFilterSrBtn?.classList.remove('active');
+            this.navFilterAramBtn?.classList.remove('active');
+            this.navFilterOtherBtn?.classList.remove('active');
             this.navFilterTftBtn?.classList.remove('active');
+
             if (this.filterServer === 'ALL') this.navFilterAllBtn?.classList.add('active');
-            if (this.filterServer === 'LOL') this.navFilterLolBtn?.classList.add('active');
+            if (this.filterServer === 'LOL' || this.filterServer === 'SR' || this.filterServer === 'ARAM' || this.filterServer === 'OTHER') {
+                this.navFilterLolBtn?.classList.add('active'); // LoL itself stays active for submodes
+            }
+            if (this.filterServer === 'SR') this.navFilterSrBtn?.classList.add('active');
+            if (this.filterServer === 'ARAM') this.navFilterAramBtn?.classList.add('active');
+            if (this.filterServer === 'OTHER') this.navFilterOtherBtn?.classList.add('active');
             if (this.filterServer === 'TFT') this.navFilterTftBtn?.classList.add('active');
+
+            // Handle Role Filter Container Visibility
+            if (this.roleFiltersContainer) {
+                if (this.filterServer === 'SR' || this.filterServer === 'LOL' || this.filterServer === 'ARAM' || this.filterServer === 'OTHER') {
+                    // It makes most sense for SR/LOL, let's keep it visible for those.
+                    if (this.filterServer === 'SR') {
+                        this.roleFiltersContainer.classList.remove('hidden');
+                    } else {
+                        // For ARAM or TFT, roles don't really apply same way, reset it.
+                        this.roleFiltersContainer.classList.add('hidden');
+                        this.filterRole = null; 
+                    }
+                } else {
+                    this.roleFiltersContainer.classList.add('hidden');
+                    this.filterRole = null;
+                }
+            }
+
+            // Update Role filter Buttons Active state 
+            if (this.roleFilterBtns) {
+                this.roleFilterBtns.forEach((btn: HTMLButtonElement) => {
+                    const r = btn.getAttribute('data-role');
+                    if (this.filterRole && r === this.filterRole) {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                });
+            }
         };
 
         if (this.navFilterAllBtn) {
@@ -312,16 +376,53 @@ export default class UI {
         }
         if (this.navFilterLolBtn) {
             this.navFilterLolBtn.addEventListener("click", () => {
-                this.filterServer = 'LOL';
+                this.filterServer = this.filterServer === 'LOL' ? 'ALL' : 'LOL';
+                updateServerNavActiveState();
+                if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+            });
+        }
+        if (this.navFilterSrBtn) {
+            this.navFilterSrBtn.addEventListener("click", () => {
+                this.filterServer = this.filterServer === 'SR' ? 'LOL' : 'SR';
+                updateServerNavActiveState();
+                if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+            });
+        }
+        if (this.navFilterAramBtn) {
+            this.navFilterAramBtn.addEventListener("click", () => {
+                this.filterServer = this.filterServer === 'ARAM' ? 'LOL' : 'ARAM';
+                updateServerNavActiveState();
+                if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+            });
+        }
+        if (this.navFilterOtherBtn) {
+            this.navFilterOtherBtn.addEventListener("click", () => {
+                this.filterServer = this.filterServer === 'OTHER' ? 'LOL' : 'OTHER';
                 updateServerNavActiveState();
                 if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
             });
         }
         if (this.navFilterTftBtn) {
             this.navFilterTftBtn.addEventListener("click", () => {
-                this.filterServer = 'TFT';
+                this.filterServer = this.filterServer === 'TFT' ? 'ALL' : 'TFT';
                 updateServerNavActiveState();
                 if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+            });
+        }
+        
+        // Role Button Handlers
+        if (this.roleFilterBtns) {
+            this.roleFilterBtns.forEach((btn: HTMLButtonElement) => {
+                btn.addEventListener("click", () => {
+                    const role = btn.getAttribute('data-role');
+                    if (this.filterRole === role) {
+                        this.filterRole = null; // Toggle off
+                    } else {
+                        this.filterRole = role; // Toggle on
+                    }
+                    updateServerNavActiveState();
+                    if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+                });
             });
         }
         
@@ -389,27 +490,60 @@ export default class UI {
                     this.filterSearchBtn.classList.add("active");
                     this.filterSearchBtn.style.color = "#ffaa00"; // Orange for search
                     if (this.searchBarContainer) {
-                         this.searchBarContainer.style.display = "block";
+                         this.searchBarContainer.classList.remove("hidden");
+                         this.searchBarContainer.style.display = ""; // clear inline
                          if (this.searchInput) this.searchInput.focus();
                     }
                 } else {
                     this.filterSearchBtn.classList.remove("active");
                     this.filterSearchBtn.style.color = "";
-                    if (this.searchBarContainer) this.searchBarContainer.style.display = "none";
+                    if (this.searchBarContainer) {
+                        this.searchBarContainer.classList.add("hidden");
+                    }
                     
                     // Clear search on close
-                    if (this.searchQuery !== "") {
+                    let searchCleared = false;
+                    if (this.searchQuery !== "" || this.searchAllyQuery !== "" || this.searchEnemyQuery !== "" || this.searchUserQuery !== "") {
+                        // Clear both secondary search inputs
+                        if (this.searchAllyInput) this.searchAllyInput.value = "";
+                        if (this.searchEnemyInput) this.searchEnemyInput.value = "";
+                        if (this.searchUserInput) this.searchUserInput.value = "";
+                        
                         this.searchQuery = "";
-                        if (this.searchInput) this.searchInput.value = "";
-                        if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+                        this.searchAllyQuery = "";
+                        this.searchEnemyQuery = "";
+                        this.searchUserQuery = "";
+                        
+                        searchCleared = true;
+                    }
+                    if (searchCleared && this.lastOnVideo) {
+                        this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
                     }
                 }
             });
         }
-        
         if (this.searchInput) {
             this.searchInput.addEventListener("input", (e) => {
                 this.searchQuery = (e.target as HTMLInputElement).value.toLowerCase();
+                if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+            });
+        }
+        
+        if (this.searchAllyInput) {
+            this.searchAllyInput.addEventListener("input", (e) => {
+                this.searchAllyQuery = (e.target as HTMLInputElement).value.toLowerCase();
+                if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+            });
+        }
+        if (this.searchEnemyInput) {
+            this.searchEnemyInput.addEventListener("input", (e) => {
+                this.searchEnemyQuery = (e.target as HTMLInputElement).value.toLowerCase();
+                if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+            });
+        }
+        if (this.searchUserInput) {
+            this.searchUserInput.addEventListener("input", (e) => {
+                this.searchUserQuery = (e.target as HTMLInputElement).value.toLowerCase();
                 if (this.lastOnVideo) this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
             });
         }
@@ -481,6 +615,9 @@ export default class UI {
             }
             if (s.scoreboardScale) {
                 this.scoreboardScale = s.scoreboardScale;
+            }
+            if (s.language) {
+                this.currentLanguage = s.language;
             }
         }).catch(err => console.error("Failed to load settings:", err));
     }
@@ -623,7 +760,9 @@ export default class UI {
     private lastOnFavorite: any;
     private lastOnRename: any;
     private lastOnDelete: any;
+    private lastOnDeleteVideoOnly: any;
     private lastRecordingsSizeGb: number = 0;
+    private currentLanguage: string = "ja";
     
     // DOM Cache to prevent image flickering
     private recordingElementMap = new Map<string, HTMLElement>();
@@ -634,7 +773,8 @@ export default class UI {
         onVideo: (videoId: string) => void,
         onFavorite: (videoId: string) => Promise<boolean | null>,
         onRename: (videoId: string) => void,
-        onDelete: (videoId: string) => void,
+        onDelete: (videoId: string, isFavorite: boolean) => void,
+        onDeleteVideoOnly?: (videoId: string, isFavorite: boolean) => void,
         forceUpdateIds: string[] = []
     ) => {
         // Cache data for local re-filtering
@@ -644,6 +784,7 @@ export default class UI {
         this.lastOnFavorite = onFavorite;
         this.lastOnRename = onRename;
         this.lastOnDelete = onDelete;
+        if (onDeleteVideoOnly) this.lastOnDeleteVideoOnly = onDeleteVideoOnly;
 
         // --- UPDATE STORAGE BAR ---
         // Calculate distribution
@@ -686,18 +827,41 @@ export default class UI {
         const normPct = (normGb / maxRef) * 100;
 
         // Update UI
-        if (this.segClip) this.segClip.style.width = `${clipPct}%`;
-        if (this.segStar) this.segStar.style.width = `${starPct}%`;
-        if (this.segNorm) this.segNorm.style.width = `${normPct}%`;
+        if (this.segClip) this.segClip.style.height = `${clipPct}%`;
+        if (this.segStar) this.segStar.style.height = `${starPct}%`;
+        if (this.segNorm) this.segNorm.style.height = `${normPct}%`;
         
-        if (this.sizeTotalText) this.sizeTotalText.textContent = recordingsSizeGb.toFixed(1);
+        let totalPct = clipPct + starPct + normPct;
+        if (totalPct > 100) totalPct = 100;
+        if (this.storagePctText) this.storagePctText.textContent = `${Math.round(totalPct)}%`;
+        
+        if (this.sizeTotalText) this.sizeTotalText.textContent = recordingsSizeGb.toFixed(0);
         if (this.sizeMaxText) this.sizeMaxText.textContent = this.maxStorageGb > 0 ? this.maxStorageGb.toString() : "∞";
 
+        // Prepare variables for calculating stats within this render cycle
+        let totalGames = 0;
+        let totalWins = 0;
+        let blueGames = 0;
+        let blueWins = 0;
+        let redGames = 0;
+        let redWins = 0;
+        let totalKills = 0;
+        let totalDeaths = 0;
+        let totalAssists = 0;
+        const recent20Wins: boolean[] = [];
+
+        // Loop through all recordings and apply all filters (search, server, type)
         const videoLiElements = recordings.map((recording, index) => {
-            // STRICT FILTERING: If metadata is missing or "Unknown Queue", do NOT display it.
-            // User requested: "If it can't be acquired, it's fine to display nothing."
             // STRICT FILTERING: Hide logic disabled per user request to show all videos.
             let shouldHide = false;
+            let isWin: boolean = false;
+            let isBlueSide: boolean = false;
+            let isRedSide: boolean = false;
+            let kills: number = 0;
+            let deaths: number = 0;
+            let assists: number = 0;
+            let isFinishedGame: boolean = false;
+            
             if (recording.metadata && "Metadata" in recording.metadata) {
                 const m = recording.metadata.Metadata;
                 // Broaden check: If queue is missing OR name contains "Unknown" (case insensitive), hide it ONLY IF STATS ARE MISSING.
@@ -706,12 +870,126 @@ export default class UI {
                 //    shouldHide = false;
                 // }
                 
-                // Search Filter
-                if (this.searchQuery && this.searchQuery !== "") {
-                    // Check champion name
-                    const champName = m.championName;
-                    if (champName && !champName.toLowerCase().includes(this.searchQuery)) {
-                        shouldHide = true;
+                // Search Filter (Self Champion)
+                if (!shouldHide && this.searchQuery && this.searchQuery !== "") {
+                    let matchedSelf = false;
+                    const champNameLoc = m.championName;
+                    if (champNameLoc && champNameLoc.toLowerCase().includes(this.searchQuery)) {
+                        matchedSelf = true;
+                    } else if (m.participantId !== undefined) {
+                        try {
+                            const myPar = m.participants?.find((p: any) => p.participantId === m.participantId);
+                            if (myPar && myPar.championId) {
+                                const enName = getChampionEnglishNameByIdSync(myPar.championId);
+                                const locName = getChampionLocalizedNameByIdSync(myPar.championId);
+                                if ((enName && enName.toLowerCase().includes(this.searchQuery)) || 
+                                    (locName && locName.toLowerCase().includes(this.searchQuery))) {
+                                    matchedSelf = true;
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                    if (!matchedSelf) shouldHide = true;
+                }
+
+                // Team/Enemy Search Filter
+                const myPar = m.participants?.find((p: any) => p.participantId === m.participantId);
+                const myTeamId = myPar ? myPar.teamId : undefined;
+
+                if (!shouldHide && this.searchAllyQuery && this.searchAllyQuery !== "") {
+                    const terms = this.searchAllyQuery.split(',').map(t => t.trim()).filter(t => t.length > 0);
+                    if (terms.length > 0) {
+                        for (const term of terms) {
+                            let matchedAlly = false;
+                            if (m.participants && Array.isArray(m.participants) && myTeamId !== undefined) {
+                                for (const p of m.participants) {
+                                    if (p.participantId === m.participantId) continue;
+                                    if (p.teamId === myTeamId && p.championId) {
+                                        const enName = getChampionEnglishNameByIdSync(p.championId);
+                                        const locName = getChampionLocalizedNameByIdSync(p.championId);
+                                        if ((enName && enName.toLowerCase().includes(term)) || 
+                                            (locName && locName.toLowerCase().includes(term))) {
+                                            matchedAlly = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if (!matchedAlly) {
+                                shouldHide = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!shouldHide && this.searchEnemyQuery && this.searchEnemyQuery !== "") {
+                    const terms = this.searchEnemyQuery.split(',').map(t => t.trim()).filter(t => t.length > 0);
+                    if (terms.length > 0) {
+                        for (const term of terms) {
+                            let matchedEnemy = false;
+                            if (m.participants && Array.isArray(m.participants) && myTeamId !== undefined) {
+                                for (const p of m.participants) {
+                                    if (p.participantId === m.participantId) continue;
+                                    if (p.teamId !== myTeamId && p.championId) {
+                                        const enName = getChampionEnglishNameByIdSync(p.championId);
+                                        const locName = getChampionLocalizedNameByIdSync(p.championId);
+                                        if ((enName && enName.toLowerCase().includes(term)) || 
+                                            (locName && locName.toLowerCase().includes(term))) {
+                                            matchedEnemy = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if (!matchedEnemy) {
+                                shouldHide = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // Search Filter (User Name)
+                if (!shouldHide && this.searchUserQuery && this.searchUserQuery !== "") {
+                    const terms = this.searchUserQuery.split(',').map(t => t.trim()).filter(t => t.length > 0);
+                    if (terms.length > 0) {
+                        for (const term of terms) {
+                            let matchedUser = false;
+                            if (m.participants && Array.isArray(m.participants)) {
+                                for (const p of m.participants) {
+                                    const pAny = p as any;
+                                    const riotId = pAny.riotIdGameName ? `${pAny.riotIdGameName}#${pAny.riotIdTagline}`.toLowerCase() : "";
+                                    const gameName = pAny.riotIdGameName ? pAny.riotIdGameName.toLowerCase() : "";
+                                    const summName = p.summonerName ? p.summonerName.toLowerCase() : "";
+                                    
+                                    if (riotId.includes(term) || gameName.includes(term) || summName.includes(term)) {
+                                        matchedUser = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!matchedUser) {
+                                shouldHide = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // Data Extraction for Stats
+                if (m.participants && m.participantId !== undefined) {
+                    const myParInner = m.participants.find((p: any) => p.participantId === m.participantId);
+                    if (myParInner) {
+                        isWin = myParInner.stats?.win === true;
+                        isBlueSide = myParInner.teamId === 100;
+                        isRedSide = myParInner.teamId === 200;
+                        if (myParInner.stats) {
+                            kills = myParInner.stats.kills || 0;
+                            deaths = myParInner.stats.deaths || 0;
+                            assists = myParInner.stats.assists || 0;
+                            isFinishedGame = true; // Only count if stats exist
+                        }
                     }
                 }
             }
@@ -747,7 +1025,7 @@ export default class UI {
             }
 
             if (!li) {
-                li = this.createRecordingItem(recording, onVideo, onFavorite, onRename, onDelete);
+                li = this.createRecordingItem(recording, onVideo, onFavorite, onRename, onDelete, onDeleteVideoOnly);
                 this.recordingElementMap.set(recording.videoId, li);
             }
 
@@ -779,26 +1057,86 @@ export default class UI {
                 }
             }
             
-            // 4. Server Nav Filter (ALL / LOL / TFT)
+            // 4. Server Nav Filter (ALL / LOL / TFT / SR / ARAM / OTHER)
             if (this.filterServer !== 'ALL') {
                 const isClipObj = recording.videoId.includes("_clip");
-                let isTft = false;
+                let queueFilterMode = 'UNKNOWN';
+                
                 if (recording.metadata && "Metadata" in recording.metadata) {
                     const m = recording.metadata.Metadata;
-                    if (m.queue && (m.queue.id === 1220 || (m.queue.name && m.queue.name.toLowerCase() === "teamfight tactics"))) {
-                        isTft = true;
+                    if (m.queue) {
+                        const qId = m.queue.id || 0;
+                        const qName = m.queue.name || "";
+                        queueFilterMode = getGameModeByQueueId(qId, qName);
+                        console.log(`[DEBUG Filter] ID: ${qId}, Name: ${qName}, queueFilterMode: ${queueFilterMode}, Server: ${this.filterServer}`);
                     }
                 }
                 
                 if (this.filterServer === 'TFT') {
-                    if (!isTft && !isClipObj) isVisible = false; // Hide non-TFT, but what about clips? We assume clips belong to the active mode or we just hide them if we want strict TFT. Let's hide non-TFT clips too if we can't tell, or just hide non-TFT. Let's be strict: if it's TFT mode, only show TFT.
-                    if (isClipObj && !isTft) {
-                        // We might not know if clip is TFT, but let's just make it visible if we don't know? Or hide? 
-                        // It's safer to hide if it's 'TFT' strictly, unless it's a clip from TFT. To keep it simple, if no metadata, assume LOL unless proven TFT. So clips are hidden in TFT mode usually.
+                    if (queueFilterMode !== 'TFT' && !isClipObj) isVisible = false; 
+                    if (isClipObj && queueFilterMode !== 'TFT') {
                         isVisible = false;
                     }
-                } else if (this.filterServer === 'LOL') {
-                    if (isTft) isVisible = false; // Hide TFT
+                } else if (this.filterServer === 'LOL' || this.filterServer === 'SR' || this.filterServer === 'ARAM' || this.filterServer === 'OTHER') {
+                    if (queueFilterMode === 'TFT') {
+                        isVisible = false; // Hide TFT from LOL views
+                    } else if (this.filterServer === 'SR' && queueFilterMode !== 'SR') {
+                        isVisible = false;
+                    } else if (this.filterServer === 'ARAM' && queueFilterMode !== 'ARAM') {
+                        isVisible = false;
+                    } else if (this.filterServer === 'OTHER' && queueFilterMode !== 'OTHER') {
+                        isVisible = false;
+                    }
+                }
+            }
+
+            // 5. Role Filter (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY)
+            if (this.filterRole && isVisible) {
+                if (recording.metadata && "Metadata" in recording.metadata) {
+                    const m = recording.metadata.Metadata;
+                    let matchesRole = false;
+                    
+                    if (m.participants && m.participantId !== undefined) {
+                        const myPar = m.participants.find((p: any) => p.participantId === m.participantId);
+                        if (myPar) {
+                            // Extract My Team
+                            const myTeamId = myPar.teamId;
+                            const myTeam = m.participants.filter((p: any) => p.teamId === myTeamId);
+                            
+                            // To match scoreboard, we need to sort the team.
+                            // We can use a simplified inline version of `sortParticipants` for the sidebar list.
+                            // Warning: without full `events` it might differ slightly in edge cases from full scoreboard,
+                            // but `teamPosition` is usually available in standard games.
+                            let derivedRole = (myPar as any).teamPosition || "";
+
+                            // If teamPosition is missing or "INVALID" (e.g. older matches or custom), try the fallback logic
+                            if (!derivedRole || derivedRole === "INVALID") {
+                                const hasSmite = myPar.spell1Id === 11 || myPar.spell2Id === 11;
+                                const supportItems = [3865, 3866, 3867, 3869, 3870, 3871, 3876, 3877];
+                                const hasSupportItem = [myPar.stats?.item0, myPar.stats?.item1, myPar.stats?.item2, myPar.stats?.item3, myPar.stats?.item4, myPar.stats?.item5].some(id => id && supportItems.includes(id));
+                                
+                                if (hasSmite) derivedRole = "JUNGLE";
+                                else if (hasSupportItem) derivedRole = "UTILITY";
+                                else {
+                                    // Fallback Native Slot logic
+                                    const nativeSlot = ((myPar.participantId - 1) % 5) + 1;
+                                    if (nativeSlot === 1) derivedRole = "TOP";
+                                    else if (nativeSlot === 3) derivedRole = "MIDDLE";
+                                    else if (nativeSlot === 4) derivedRole = "BOTTOM";
+                                    else derivedRole = "MIDDLE"; // blind guess for unexpected
+                                }
+                            }
+                            
+                            if (derivedRole.toUpperCase() === this.filterRole) {
+                                matchesRole = true;
+                            }
+                        }
+                    }
+                    if (!matchesRole) {
+                        isVisible = false;
+                    }
+                } else {
+                    isVisible = false; // No metadata, cannot match role
                 }
             }
 
@@ -806,6 +1144,28 @@ export default class UI {
             if (li) {
                 if (isVisible) {
                     li.style.display = "";
+                    
+                    // Accumulate stats for visible items
+                    if (isFinishedGame) {
+                        totalGames++;
+                        if (isWin) totalWins++;
+                        
+                        if (isBlueSide) {
+                            blueGames++;
+                            if (isWin) blueWins++;
+                        } else if (isRedSide) {
+                            redGames++;
+                            if (isWin) redWins++;
+                        }
+                        
+                        totalKills += kills;
+                        totalDeaths += deaths;
+                        totalAssists += assists;
+                        
+                        if (recent20Wins.length < 20) {
+                            recent20Wins.push(isWin);
+                        }
+                    }
                 } else {
                     li.style.display = "none";
                 }
@@ -825,7 +1185,49 @@ export default class UI {
         }
 
         this.vjs.dom.insertContent(this.sidebar, videoLiElements);
-        // this.vjs.dom.insertContent(this.recordingsSize, recordingsSizeGb.toFixed(2).toString()); // Removed
+        
+        // --- Calculate and Update Filtered Stats ---
+        const statsContainer = document.getElementById("filtered-stats-container");
+        if (statsContainer) {
+            // Always show it. Let's always show it, even for 0 games.
+            statsContainer.style.display = "flex";
+
+            // Update UI Elements
+            const setStat = (id: string, value: string) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = value;
+            };
+
+            if (totalGames > 0) {
+                const winRate = ((totalWins / totalGames) * 100).toFixed(1);
+                setStat("stat-winrate", `${winRate}% (${totalWins}W ${totalGames - totalWins}L)`);
+                
+                const recentWins = recent20Wins.filter(w => w).length;
+                const recentRate = ((recentWins / recent20Wins.length) * 100).toFixed(1);
+                setStat("stat-recent20", `${recentRate}% (${recentWins}W ${recent20Wins.length - recentWins}L)`);
+                
+                const blueRate = blueGames > 0 ? ((blueWins / blueGames) * 100).toFixed(1) + "%" : "-%";
+                setStat("stat-blue-winrate", blueRate);
+                
+                const redRate = redGames > 0 ? ((redWins / redGames) * 100).toFixed(1) + "%" : "-%";
+                setStat("stat-red-winrate", redRate);
+                
+                const avgK = (totalKills / totalGames).toFixed(1);
+                const avgD = (totalDeaths / totalGames).toFixed(1);
+                const avgA = (totalAssists / totalGames).toFixed(1);
+                setStat("stat-kda", `${avgK} / ${avgD} / ${avgA}`);
+                
+                const kdaRatio = totalDeaths > 0 ? ((totalKills + totalAssists) / totalDeaths).toFixed(2) : "Perfect";
+                setStat("stat-kda-ratio", `${kdaRatio}:1 KDA`);
+            } else {
+                setStat("stat-winrate", "0.0% (0W 0L)");
+                setStat("stat-recent20", "0.0% (0W 0L)");
+                setStat("stat-blue-winrate", "-%");
+                setStat("stat-red-winrate", "-%");
+                setStat("stat-kda", "0.0 / 0.0 / 0.0");
+                setStat("stat-kda-ratio", "0.00:1 KDA");
+            }
+        }
     };
 
     public createRecordingItem = (
@@ -833,13 +1235,18 @@ export default class UI {
         onVideo: (videoId: string) => void,
         onFavorite: (videoId: string) => Promise<boolean | null>,
         onRename: (videoId: string) => void,
-        onDelete: (videoId: string) => void,
+        onDelete: (videoId: string, isFavorite: boolean) => void,
+        onDeleteVideoOnly?: (videoId: string, isFavorite: boolean) => void,
     ) => {
         console.log("createRecordingItem:", recording.videoId, recording.metadata);
         const videoName = toVideoName(recording.videoId);
         let displayContent: HTMLElement[] = [this.vjs.dom.createEl("span", {}, { class: "video-name" }, videoName) as HTMLElement];
         let liClass = "recording-item";
         
+        if (!recording.videoExists) {
+            liClass += " video-deleted";
+        }
+
         // Layout Elements
         const mainContent = document.createElement("div");
         mainContent.className = "recording-content";
@@ -1268,6 +1675,18 @@ export default class UI {
                         if (fav !== null) {
                             favoriteBtn.innerHTML = fav ? "★" : "☆";
                             favoriteBtn.style.color = fav ? "gold" : "";
+                            
+                            // 更新情報を内部メタデータに即時反映する
+                            if (recording.metadata) {
+                                if ("Metadata" in recording.metadata) recording.metadata.Metadata.favorite = fav;
+                                else if ("Deferred" in recording.metadata) recording.metadata.Deferred.favorite = fav;
+                                else if ("NoData" in recording.metadata) recording.metadata.NoData.favorite = fav;
+                            }
+                            
+                            // もし「お気に入りのみ」フィルターがオンの場合、またはフィルタリングに関わらず即座にサイドバー一覧を更新したい場合は、再描画を走らせる
+                            if (this.filterStar && this.lastOnVideo && !fav) {
+                                this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
+                            }
                         }
                     });
                 },
@@ -1281,15 +1700,27 @@ export default class UI {
             }, { class: "rename" }, "✎",
         );
         const deleteBtn = this.vjs.dom.createEl("span", {
-                onclick: (e: MouseEvent) => { e.stopPropagation(); onDelete(recording.videoId); },
-            }, { class: "delete" }, "×",
+                onclick: (e: MouseEvent) => { e.stopPropagation(); onDelete(recording.videoId, isFavorite(recording.metadata)); },
+            }, { class: "delete", title: getText(this.currentLanguage as any, "delete" as any) || "Delete" }, "×",
+        );
+        const deleteVideoOnlyBtn = this.vjs.dom.createEl("span", {
+                onclick: (e: MouseEvent) => { e.stopPropagation(); if (onDeleteVideoOnly) onDeleteVideoOnly(recording.videoId, isFavorite(recording.metadata)); },
+            }, { class: "delete-video-only", title: getText(this.currentLanguage as any, "deleteVideoOnly" as any) || "Delete Video Only" }, "🗑",
         );
 
         // Wrap buttons
-        const actionsDiv = this.vjs.dom.createEl("div", {}, { class: "sidebar-actions" }, [favoriteBtn, renameBtn, deleteBtn]);
+        const actionsDiv = this.vjs.dom.createEl("div", {}, { class: "sidebar-actions" }, [favoriteBtn, renameBtn, deleteVideoOnlyBtn, deleteBtn]);
 
         // Append everything to LI
-        const li = this.vjs.dom.createEl("li", { onclick: () => onVideo(recording.videoId) }, { id: recording.videoId, class: liClass }) as HTMLElement;
+        const li = this.vjs.dom.createEl("li", { 
+            onclick: () => {
+                if (recording.videoExists) {
+                    onVideo(recording.videoId);
+                } else {
+                    console.log("Video file no longer exists for this recording.");
+                }
+            } 
+        }, { id: recording.videoId, class: liClass }) as HTMLElement;
         
         // Add Dataset for ID lookup
         li.dataset.videoId = recording.videoId;
@@ -1321,6 +1752,13 @@ export default class UI {
         }
         this.recordingElementMap.delete(videoId);
     };
+
+    public markRecordingAsVideoDeleted = (videoId: string) => {
+        const li = document.getElementById(videoId);
+        if (li) {
+            li.classList.add("video-deleted");
+        }
+    };
             
     public updateRecordingItem = (recording: Recording) => {
         const existingLi = document.getElementById(recording.videoId);
@@ -1350,7 +1788,8 @@ export default class UI {
                 this.lastOnVideo, 
                 this.lastOnFavorite, 
                 this.lastOnRename, 
-                this.lastOnDelete
+                this.lastOnDelete,
+                this.lastOnDeleteVideoOnly
             );
             
             existingLi.replaceWith(newLi);
@@ -1386,6 +1825,50 @@ export default class UI {
         ]);
     };
 
+    /**
+     * Shows a rich update modal with release notes and a direct update button.
+     */
+    public showUpdateModal = (update: any, lang: string) => {
+        const title = this.vjs.dom.createEl("h2", {}, { style: "color: #e8d154; margin-top: 0; margin-bottom: 15px;" }, `${getText(lang as any, "updateAvailable" as any)} (v${update.version})`);
+        
+        const contentBox = this.vjs.dom.createEl("div", {}, { 
+            style: "background: rgba(0,0,0,0.3); border: 1px solid #444; border-radius: 4px; padding: 15px; max-height: 400px; overflow-y: auto; text-align: left; font-size: 0.9em; white-space: pre-wrap; line-height: 1.5; color: #ddd; margin-bottom: 20px;" 
+        }, update.body || "No release notes provided.");
+
+        const statusMsg = this.vjs.dom.createEl("div", {}, { style: "color: #aaa; margin-bottom: 15px; min-height: 20px;" }, "") as HTMLElement;
+
+        const updateBtn = this.vjs.dom.createEl("button", {
+            onclick: async () => {
+                updateBtn.disabled = true;
+                laterBtn.disabled = true;
+                statusMsg.innerText = getText(lang as any, "updateDownloading" as any) || "Downloading update...";
+                statusMsg.style.color = "#00d2ff";
+                try {
+                    await update.downloadAndInstall();
+                    statusMsg.innerText = getText(lang as any, "updateRestart" as any) || "Restarting...";
+                    statusMsg.style.color = "#4CAF50";
+                    const { invoke } = await import("@tauri-apps/api/core");
+                    await invoke("plugin:updater|restart");
+                } catch (e) {
+                    console.error("Install update failed", e);
+                    statusMsg.innerText = getText(lang as any, "updateError" as any) || "Update failed.";
+                    statusMsg.style.color = "#ff5555";
+                    updateBtn.disabled = false;
+                    laterBtn.disabled = false;
+                }
+            }
+        }, { class: "btn-browse", style: "border: 1px solid #c8aa6e; margin-right: 15px; padding: 8px 16px; font-weight: bold; background: #222; color: #c8aa6e; cursor: pointer;" }, getText(lang as any, "updateRestart" as any) || "Update & Restart") as HTMLButtonElement;
+
+        const laterBtn = this.vjs.dom.createEl("button", {
+            onclick: this.hideModal
+        }, { class: "btn" }, "Later") as HTMLButtonElement;
+
+        const btnContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; justify-content: center; align-items: center;" }, [updateBtn, laterBtn]);
+
+        // Override default modal width for this specific modal to give more reading space
+        const wrapper = this.vjs.dom.createEl("div", {}, { style: "width: 100%; max-width: 600px; margin: 0 auto;" }, [title, contentBox, statusMsg, btnContainer]);
+        this.showModal([wrapper]);
+    };
     public showRenameModal = (
         videoId: string,
         videoIds: ReadonlyArray<string>,
@@ -1497,7 +1980,63 @@ export default class UI {
         }
     };
     
-    public showDeleteModal = (videoId: string, deleteVideo: (videoId: string) => void) => {
+    public showDeleteVideoOnlyModal = (videoId: string, deleteVideoOnly: (videoId: string) => void, isFavorite: boolean = false) => {
+        let confirmDelete = true;
+        const toggleDelete = () => {
+            confirmDelete = !confirmDelete;
+        };
+
+        let videoName: string;
+        if (videoId.includes("\\")) videoName = videoId.split("\\").pop()!;
+        else if (videoId.includes("/")) videoName = videoId.split("/").pop()!;
+        else videoName = videoId;
+
+        const warningTexts = isFavorite ? [
+            this.vjs.dom.createEl("br"),
+            this.vjs.dom.createEl("br"),
+            this.vjs.dom.createEl("strong", { style: "color: orange;" }, {}, "【警告】お気に入りに登録されている録画です！本当に動画を削除しますか？ / Warning: This is a favorite recording!"),
+        ] : [];
+
+        const prompt = this.vjs.dom.createEl("p", {}, {}, [
+            "Delete Video Only (Keep JSON): ",
+            this.vjs.dom.createEl("u", {}, {}, videoName),
+            "?",
+            ...warningTexts
+        ]);
+
+        const dontAskMeAgain = this.vjs.dom.createEl("p", {}, { style: "font-size: 18px" }, [
+            this.vjs.dom.createEl(
+                "input",
+                { onchange: toggleDelete },
+                { type: "checkbox", id: "dont-ask-again-vdo", style: "vertical-align: middle; margin: 0;" },
+                [],
+            ),
+            this.vjs.dom.createEl(
+                "label",
+                {},
+                { for: "dont-ask-again-vdo", style: "vertical-align: middle" },
+                "  don't ask again",
+            ),
+        ]);
+
+        const deleteFn = () => {
+            this.hideModal();
+            deleteVideoOnly(videoId);
+
+            if (!confirmDelete && !isFavorite) {
+                commands.disableConfirmDelete();
+            }
+        };
+
+        const buttons = this.vjs.dom.createEl("p", {}, {}, [
+            this.vjs.dom.createEl("button", { onclick: deleteFn }, { class: "btn" }, "Delete Video"),
+            this.vjs.dom.createEl("button", { onclick: this.hideModal }, { class: "btn" }, "Cancel"),
+        ]);
+
+        this.showModal([prompt, dontAskMeAgain, buttons]);
+    };
+
+    public showDeleteModal = (videoId: string, deleteVideo: (videoId: string) => void, isFavorite: boolean = false) => {
         const videoName = toVideoName(videoId);
 
         let confirmDelete = true;
@@ -1505,10 +2044,17 @@ export default class UI {
             confirmDelete = !confirmDelete;
         };
 
+        const warningTexts = isFavorite ? [
+            this.vjs.dom.createEl("br"),
+            this.vjs.dom.createEl("br"),
+            this.vjs.dom.createEl("strong", { style: "color: orange;" }, {}, "【警告】お気に入りに登録されている録画です！本当に削除しますか？ / Warning: This is a favorite recording!"),
+        ] : [];
+
         const prompt = this.vjs.dom.createEl("p", {}, {}, [
             "Delete recording: ",
             this.vjs.dom.createEl("u", {}, {}, videoName),
             "?",
+            ...warningTexts
         ]);
 
         const dontAskMeAgain = this.vjs.dom.createEl("p", {}, { style: "font-size: 18px" }, [
@@ -1530,7 +2076,7 @@ export default class UI {
             this.hideModal();
             deleteVideo(videoId);
 
-            if (!confirmDelete) {
+            if (!confirmDelete && !isFavorite) {
                 commands.disableConfirmDelete();
             }
         };
@@ -2430,8 +2976,22 @@ export default class UI {
 
                 const spells = this.vjs.dom.createEl("div", {}, { class: "spells" }, [ spell1El, spell2El ]) as HTMLElement;
                 
+                const runeUrlValue = runeUrl; // store for local context
+                const runeIconEl = this.vjs.dom.createEl("img", { src: runeUrlValue }, { class: "rune-icon" }) as HTMLImageElement;
+                
+                // Add Tooltip for Rune
+                runeIconEl.addEventListener("mouseenter", async () => {
+                    if (p.stats.perk0 && p.stats.perk0 !== 0) {
+                        const runeData = await getRuneData(p.stats.perk0, settings.language || "ja");
+                        if (runeData) {
+                            showGlobalTooltip(runeIconEl, buildRuneTooltipHtml(runeData));
+                        }
+                    }
+                });
+                runeIconEl.addEventListener("mouseleave", () => hideGlobalTooltip());
+
                 const runesDiv = this.vjs.dom.createEl("div", {}, { class: "runes" }, [
-                   this.vjs.dom.createEl("img", { src: runeUrl }, { class: "rune-icon" })
+                   runeIconEl
                 ]) as HTMLElement;
                 
                 // Separation of Stats
@@ -3937,7 +4497,7 @@ export default class UI {
         ]) as HTMLDivElement;
 
         // Game Modes
-        const allModeIds = ["RANKED", "NORMAL", "ARAM", "CHERRY", "PRACTICE_TOOL", "CUSTOM", "COOP_VS_AI", "TFT", "SWIFTPLAY", "OTHER"];
+        const allModeIds = ["RANKED", "NORMAL", "ARAM", "CHERRY", "URF", "PRACTICE_TOOL", "CUSTOM", "COOP_VS_AI", "TFT", "SWIFTPLAY", "OTHER"];
         const currentModes = settings.gameModes || allModeIds;
         const createModeSwitch = (label: string, modeId: string) => {
              const checked = currentModes.includes(modeId);
@@ -3956,6 +4516,7 @@ export default class UI {
         const gmNormal = createModeSwitch(getText(lang, "normal"), "NORMAL");
         const gmAram = createModeSwitch(getText(lang, "aram"), "ARAM");
         const gmArena = createModeSwitch(getText(lang, "arena"), "CHERRY");
+        const gmUrf = createModeSwitch(getText(lang, "urf"), "URF");
         const gmPractice = createModeSwitch(getText(lang, "practice"), "PRACTICE_TOOL");
         const gmCustom = createModeSwitch(getText(lang, "custom"), "CUSTOM");
         const gmCoop = createModeSwitch(getText(lang, "coop"), "COOP_VS_AI");
@@ -3973,7 +4534,7 @@ export default class UI {
             style: "grid-column: 1 / -1;"
         }, [
             this.vjs.dom.createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: repeat(2, 1fr); gap: 10px;" }, [
-                gmRanked.container, gmNormal.container, gmAram.container, gmArena.container,
+                gmRanked.container, gmNormal.container, gmAram.container, gmArena.container, gmUrf.container,
                 gmPractice.container, gmCustom.container, gmCoop.container, gmTft.container, gmSwiftplay.container,
                 gmOther.container
             ])
@@ -4001,6 +4562,7 @@ export default class UI {
         const confirmDel = createSwitch(getText(lang, "confirmDel"), settings.confirmDelete);
         const devMode = createSwitch(getText(lang, "devMode"), settings.developerMode);
         const playSounds = createSwitch(getText(lang, "playSounds"), settings.playRecordingSounds ?? false);
+        const keepVideoJsonOnAutoDelete = createSwitch(getText(lang, "keepVideoJsonOnAutoDelete"), settings.keepVideoJsonOnAutoDelete ?? false);
 
         const matchHistoryUrlInput = this.vjs.dom.createEl("input", {}, {
             class: "settings-input",
@@ -4019,14 +4581,15 @@ export default class UI {
             class: "settings-group-styled",
             style: "grid-column: 1 / -1;"
         }, [
-            this.vjs.dom.createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: repeat(2, 1fr); gap: 10px;" }, [
+            this.vjs.dom.createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: 1fr; gap: 10px;" }, [
                 autostart.container, 
                 autoplayVideo.container,
                 autoStopPlayback.container,
                 autoSelectRecording.container,
                 confirmDel.container, 
                 devMode.container,
-                playSounds.container
+                playSounds.container,
+                keepVideoJsonOnAutoDelete.container
             ])
         ]) as HTMLDivElement;
         
@@ -4125,8 +4688,6 @@ export default class UI {
         const updateStatusMsg = this.vjs.dom.createEl("div", {}, { style: "font-size: 0.9em; color: #aaa; margin: 10px 0; min-height: 20px;" }) as HTMLDivElement;
         const updateActionsContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; justify-content: center; gap: 10px;" }) as HTMLDivElement;
         
-        let foundUpdate: any = null;
-        
         const checkUpdateBtn = this.vjs.dom.createEl("button", {
             onclick: async () => {
                 checkUpdateBtn.disabled = true;
@@ -4135,47 +4696,24 @@ export default class UI {
                 try {
                     const update = await check();
                     if (update) {
-                        foundUpdate = update;
-                        updateStatusMsg.innerText = `${getText(lang, "updateAvailable" as any)} (v${update.version})`;
-                        updateStatusMsg.style.color = "#e8d154";
-                        checkUpdateBtn.style.display = "none";
-                        installUpdateBtn.style.display = "block";
+                        updateStatusMsg.innerText = "";
+                        checkUpdateBtn.disabled = false;
+                        this.showUpdateModal(update, lang);
                     } else {
-                        updateStatusMsg.innerText = getText(lang, "updateLatest" as any);
+                        updateStatusMsg.innerText = getText(lang as any, "updateLatest" as any) || "You are on the latest version.";
                         updateStatusMsg.style.color = "#4CAF50";
                         checkUpdateBtn.disabled = false;
                     }
                 } catch (e) {
                     console.error("Update check failed", e);
-                    updateStatusMsg.innerText = getText(lang, "updateError" as any);
+                    updateStatusMsg.innerText = getText(lang as any, "updateError" as any) || "Failed to check for updates.";
                     updateStatusMsg.style.color = "#ff5555";
                     checkUpdateBtn.disabled = false;
                 }
             }
-        }, { class: "btn-browse" }, getText(lang, "checkForUpdates" as any)) as HTMLButtonElement;
+        }, { class: "btn-browse" }, getText(lang as any, "checkForUpdates" as any) || "Check for updates") as HTMLButtonElement;
         
-        const installUpdateBtn = this.vjs.dom.createEl("button", {
-            onclick: async () => {
-                if (!foundUpdate) return;
-                installUpdateBtn.disabled = true;
-                updateStatusMsg.innerText = getText(lang, "updateDownloading" as any);
-                try {
-                    await foundUpdate.downloadAndInstall();
-                    updateStatusMsg.innerText = "Download complete. Restarting...";
-                    
-                    // Trigger Tauri app restart
-                    const { invoke } = await import("@tauri-apps/api/core");
-                    await invoke("plugin:updater|restart");
-                } catch (e) {
-                    console.error("Install update failed", e);
-                    updateStatusMsg.innerText = "Update installation failed.";
-                    updateStatusMsg.style.color = "#ff5555";
-                    installUpdateBtn.disabled = false;
-                }
-            }
-        }, { class: "btn-browse btn-danger", style: "display: none;" }, getText(lang, "updateRestart" as any)) as HTMLButtonElement;
-        
-        updateActionsContainer.append(checkUpdateBtn, installUpdateBtn);
+        updateActionsContainer.append(checkUpdateBtn);
         
         const updateOnStartupCheckbox = this.vjs.dom.createEl("input", {
             type: "checkbox",
@@ -4365,6 +4903,7 @@ export default class UI {
                         if (gmNormal.input.checked) modes.push(gmNormal.modeId);
                         if (gmAram.input.checked) modes.push(gmAram.modeId);
                         if (gmArena.input.checked) modes.push(gmArena.modeId);
+                        if (gmUrf.input.checked) modes.push(gmUrf.modeId);
                         if (gmPractice.input.checked) modes.push(gmPractice.modeId);
                         if (gmCustom.input.checked) modes.push(gmCustom.modeId);
                         if (gmCoop.input.checked) modes.push(gmCoop.modeId);
@@ -4380,7 +4919,8 @@ export default class UI {
                     autoSelectRecording: autoSelectRecording.input.checked,
                     confirmDelete: confirmDel.input.checked,
                     developerMode: devMode.input.checked,
-                    playRecordingSounds: playSounds.input.checked
+                    playRecordingSounds: playSounds.input.checked,
+                    keepVideoJsonOnAutoDelete: keepVideoJsonOnAutoDelete.input.checked
                 };
                 
                 // Save Keybinds & Mouse Config

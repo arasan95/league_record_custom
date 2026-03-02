@@ -2,6 +2,7 @@ import { BaseDirectory, exists, readFile, writeFile } from "@tauri-apps/plugin-f
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentPatchVersion } from "./version";
 import { APP_TEXT, getText, type Language } from "./i18n";
+import manualFallbackMappingsRaw from "../assets/fallback_mappings.json";
 
 let dynamicTooltipFallback: Record<string, Record<string, string>> = {};
 
@@ -38,7 +39,20 @@ export async function initTooltipFallback() {
         if (await exists(filePath, { baseDir: BaseDirectory.AppLocalData })) {
             const raw = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
             const str = new TextDecoder().decode(raw);
-            dynamicTooltipFallback = JSON.parse(str);
+            const generated = JSON.parse(str);
+            
+            dynamicTooltipFallback = { ...generated };
+            const manualFallbackMappings: Record<string, Record<string, string>> = manualFallbackMappingsRaw;
+            
+            for (const spellId of Object.keys(manualFallbackMappings)) {
+                if (!dynamicTooltipFallback[spellId]) {
+                    dynamicTooltipFallback[spellId] = {};
+                }
+                for (const k of Object.keys(manualFallbackMappings[spellId])) {
+                    dynamicTooltipFallback[spellId][k] = manualFallbackMappings[spellId][k];
+                }
+            }
+            
             console.log("Loaded dynamic tooltip fallbacks:", Object.keys(dynamicTooltipFallback).length, "spells");
         }
     } catch (e) {
@@ -62,7 +76,8 @@ export function showGlobalTooltip(target: HTMLElement, html: string) {
         globalTooltip.style.borderRadius = "4px";
         globalTooltip.style.border = "1px solid #c8aa6e";
         globalTooltip.style.zIndex = "999999";
-        globalTooltip.style.maxWidth = "800px";
+        globalTooltip.style.width = "max-content"; // 画面端での極端な幅縮小を防ぐ
+        globalTooltip.style.maxWidth = "min(800px, 90vw)"; // 画面幅に応じて可変
         globalTooltip.style.fontSize = "16px";
         globalTooltip.style.lineHeight = "1.4";
         globalTooltip.style.pointerEvents = "none";
@@ -127,14 +142,15 @@ export function showGlobalTooltip(target: HTMLElement, html: string) {
     if (globalTooltipMoveListener) {
         document.removeEventListener("mousemove", globalTooltipMoveListener);
     }
-    let lastMoveCheck = 0;
+    let lastMoveCheck = Date.now(); // 表示直後に即座に判定されるのを防ぐ
     globalTooltipMoveListener = (e: MouseEvent) => {
         const now = Date.now();
         if (now - lastMoveCheck < 100) return; 
         lastMoveCheck = now;
         if (!currentTooltipTarget) return;
         const r = currentTooltipTarget.getBoundingClientRect();
-        if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) {
+        // 判定に少しゆとり(Tolerance)を持たせ、意図せぬ非表示（チラつき）を防ぐ
+        if (e.clientX < r.left - 5 || e.clientX > r.right + 5 || e.clientY < r.top - 5 || e.clientY > r.bottom + 5) {
             hideGlobalTooltip();
         }
     };
@@ -174,6 +190,30 @@ export function buildTrinketTooltipHtml(itemData: any): string {
     <div style="font-size: 13px; color:#ddd; max-width: 250px;">${itemData.description}</div>`;
 }
 
+export function buildRuneTooltipHtml(runeData: any): string {
+    if (!runeData) return "";
+    
+    // Some runes use shortDesc, some use longDesc. longDesc is preferred if full detail needed.
+    let desc = runeData.longDesc || runeData.shortDesc || "";
+    
+    // Clean up Riot's specific tags
+    // e.g. <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_AdaptiveDmg'>Adaptive Damage</lol-uikit-tooltipped-keyword>
+    desc = desc.replace(/<lol-uikit-tooltipped-keyword[^>]*>/gi, '<span style="color:#00bcd4; font-weight:bold; border-bottom: 1px dotted #00bcd4;">');
+    desc = desc.replace(/<\/lol-uikit-tooltipped-keyword>/gi, '</span>');
+    
+    // Sometimes there are nested <font> tags or color attributes
+    desc = desc.replace(/<font color='([^']*)'>/gi, '<span style="color:$1;">');
+    desc = desc.replace(/<\/font>/gi, '</span>');
+
+    return `
+    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+        <img src="https://ddragon.leagueoflegends.com/cdn/img/${runeData.icon}" style="width: 32px; height: 32px; margin-right: 10px; border-radius: 50%;">
+        <b style="color:#c8aa6e; font-size: 15px;">${runeData.name}</b>
+    </div>
+    <div style="font-size: 13px; color:#ddd; max-width: 300px; line-height: 1.4;">${desc}</div>
+    `;
+}
+
 export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string {
     if (!data || !data.spells) return "";
     
@@ -202,18 +242,6 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
         const key = ["Q", "W", "E", "R"][i];
         const costText = spell.costBurn && spell.costBurn !== "0" ? `Cost: ${spell.costBurn}` : "No Cost";
 
-        html += `
-        <div style="margin-bottom: 8px;">
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                <div>
-                    <b style="color:#00d2ff; font-size: 13px;">[${key}]</b> 
-                    <span style="color:#eee; font-size: 13px; font-weight: bold;">${spell.name}</span>
-                </div>
-                <div style="color:#aaa; font-size: 11px; text-align: right;">
-                    <span style="color:#ffb74d;">${costText}</span> | CD: ${spell.cooldownBurn}s
-                </div>
-            </div>`;
-
         // --- CDragon Extended Detailed Stats ---
         let detailItems = [];
         const cleanStat = (val: any) => {
@@ -227,15 +255,31 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
         if (spell.cd_lineWidth) detailItems.push(`Width: ${cleanStat(spell.cd_lineWidth)}`);
         if (spell.cd_missileSpeed) detailItems.push(`Speed: ${cleanStat(spell.cd_missileSpeed)}`);
 
-        if (detailItems.length > 0) {
-            html += `<div style="display: flex; gap: 8px; font-size: 11px; color:#888; margin-top: 2px;">
-                        ${detailItems.map(d => `<span>${d}</span>`).join('')}
-                     </div>`;
-        }
+        const detailsHtml = detailItems.length > 0 
+            ? `<span style="margin-left: 10px; font-weight: normal; font-size: 11px; color:#888;">${detailItems.join('&nbsp; ')}</span>` 
+            : "";
+
+        html += `
+        <div style="margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                <div>
+                    <b style="color:#00d2ff; font-size: 13px;">[${key}]</b> 
+                    <span style="color:#eee; font-size: 13px; font-weight: bold;">${spell.name}</span>${detailsHtml}
+                </div>
+                <div style="color:#aaa; font-size: 11px; text-align: right;">
+                    <span style="color:#ffb74d;">${costText}</span> | CD: ${spell.cooldownBurn}s
+                </div>
+            </div>`;
 
 
 
         let descriptionHtml = spell.tooltip || spell.description;
+        
+        // Manual override for Gangplank Q to support multiple languages
+        if (spell.id === "GangplankQWrapper") {
+             descriptionHtml = (spell.description || "") + "<br><br><physicalDamage>{{ e1 }} (+100% AD)</physicalDamage> <gold>(+{{ e2 }} Gold)</gold>";
+        }
+
         const originalHasTemplate = /\{\{.*?\}\}/.test(descriptionHtml);
 
         // Helper function to resolve variables
@@ -361,6 +405,17 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
             return cleanedRanks.join("/");
         };
 
+        const fnv1a_32 = (s: string) => {
+            let h = 0x811c9dc5;
+            const lower = s.toLowerCase();
+            for (let i = 0; i < lower.length; i++) {
+                h ^= lower.charCodeAt(i);
+                h = Math.imul(h, 0x01000193);
+                h >>>= 0;
+            }
+            return "{" + h.toString(16).padStart(8, '0') + "}";
+        };
+
         // Interpolate {{ expression }} inside description
         descriptionHtml = descriptionHtml.replace(/\{\{\s*(.*?)\s*\}\}/gi, (match: string, p1: string, offset: number, fullStr: string) => {
             const expr = p1.trim().toLowerCase();
@@ -371,14 +426,93 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
             const fbMap = dynamicTooltipFallback[spell.id] || {};
             if (fbMap && Object.keys(fbMap).length > 0) {
                  const rawExpr = p1.trim();
-                 if (fbMap[rawExpr] !== undefined) return fbMap[rawExpr] ? fbMap[rawExpr] : "";
-                 if (fbMap[expr] !== undefined) return fbMap[expr] ? fbMap[expr] : "";
+                 let directVal = undefined;
+                 const fnvHash = fnv1a_32(expr);
                  
-                 const key = expr.split(/\s*[\*\/\+\-]\s*/)[0];
-                 if (fbMap[key] !== undefined) return fbMap[key] ? fbMap[key] : "";
+                 if (fbMap[rawExpr] !== undefined) directVal = fbMap[rawExpr];
+                 else if (fbMap[expr] !== undefined) directVal = fbMap[expr];
+                 else if (fbMap[fnvHash] !== undefined) directVal = fbMap[fnvHash];
+                 else {
+                     const key = expr.split(/\s*[\*\/\+\-]\s*/)[0];
+                     const keyHash = fnv1a_32(key);
+                     if (fbMap[key] !== undefined) directVal = fbMap[key];
+                     else if (fbMap[keyHash] !== undefined) directVal = fbMap[keyHash];
+                     else {
+                         const noSuffix = key.split('.')[0];
+                         const noSuffixHash = fnv1a_32(noSuffix);
+                         if (fbMap[noSuffix] !== undefined) directVal = fbMap[noSuffix];
+                         else if (fbMap[noSuffixHash] !== undefined) directVal = fbMap[noSuffixHash];
+                     }
+                 }
                  
-                 const noSuffix = key.split('.')[0];
-                 if (fbMap[noSuffix] !== undefined) return fbMap[noSuffix] ? fbMap[noSuffix] : "";
+                 if (directVal !== undefined) {
+                     let valStr = directVal ? String(directVal) : "";
+                     
+                     // ツールチップ内の変数参照に簡単な四則演算（例: * 100, *-100）が含まれている場合、要素ごとに適用する
+                     const matchMath = p1.match(/\s*([*\/])\s*(-?[\d.]+)|\s*([+-])\s*([\d.]+)/);
+                     if (matchMath) {
+                         const op = matchMath[1] || matchMath[3];
+                         const num = parseFloat(matchMath[2] || matchMath[4]);
+                         if (!isNaN(num)) {
+                             valStr = valStr.split('/').map(s => {
+                                 const v = parseFloat(s);
+                                 if (isNaN(v)) return s;
+                                 let res = v;
+                                 if (op === '*') res *= num;
+                                 else if (op === '/') res /= num;
+                                 else if (op === '+') res += num;
+                                 else if (op === '-') res -= num;
+                                 
+                                 // 元の文字列表現に残りの単位（例: s）がある場合はくっつける
+                                 const suffix = s.replace(/^[\-\d\.]+/, '');
+                                 return String(Math.round(res * 100) / 100) + suffix;
+                             }).join('/');
+                         }
+                     } else {
+                         // 数式がなく、値がすべて5.0未満の小数である場合は100倍する（例: 0.4 -> 40%表示）
+                         // (Often Riot's tooltips forget the % sign or are formatted weirdly)
+                         const nextCharStr = fullStr.substring(offset + match.length).trimStart();
+                         const hasPercentNext = nextCharStr.startsWith('%');
+                         const hasSecondsNext = /^秒/.test(nextCharStr);
+                         
+                         const parts = valStr.split('/');
+                         
+                         // Check if ALL parts are small decimals (e.g. 0.4, 0.45) AND not just plain 0 or integers that shouldn't be scaled unless there is a % sign.
+                         // But if they are small decimals (0 < x < 5) and have a fraction or there's a % sign, we scale them.
+                         const allSmallDecimals = parts.every(s => {
+                             const v = parseFloat(s);
+                             if (isNaN(v)) return false;
+                             if (v === 0) return true; // 0 is fine
+                             // If it's explicitly a decimal block (like 0.4) or we have a % sign
+                             return (Math.abs(v) < 5.0 && (s.includes('.') || hasPercentNext));
+                         });
+
+                         if (allSmallDecimals && parts.length > 0 && !hasSecondsNext) {
+                             valStr = parts.map(s => {
+                                 const v = parseFloat(s);
+                                 let res = v * 100.0;
+                                 const suffix = s.replace(/^[\-\d\.]+/, '');
+                                 return String(Math.round(res * 100) / 100) + suffix;
+                             }).join('/');
+                             
+                             // If we multiplied it but the text doesn't have a % afterwards, and doesn't already have one in the template
+                             if (!hasPercentNext && !valStr.includes('%')) {
+                                 valStr += '%';
+                             }
+                         }
+                     }
+
+                     const calcExpr = expr + "_calc";
+                     const calcHash = fnvHash + "_calc";
+                     let calcVal = fbMap[calcExpr] !== undefined ? fbMap[calcExpr] : fbMap[calcHash];
+
+                     if (valStr && calcVal) {
+                         valStr += ` (${calcVal})`;
+                     } else if (!valStr && calcVal) {
+                         valStr = calcVal;
+                     }
+                     return valStr;
+                 }
             }
             // -------------------------
 
@@ -396,9 +530,17 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
                          valStr += '%';
                     }
                 }
-                
-                if (spell.cd_calcMap && spell.cd_calcMap[expr]) {
-                    valStr += ` (${spell.cd_calcMap[expr]})`;
+                const calcExpr = expr + "_calc";
+                const calcHash = fnv1a_32(expr) + "_calc";
+                const fbMap = dynamicTooltipFallback[spell.id] || {};
+                const calcVal = fbMap[calcExpr] !== undefined ? fbMap[calcExpr] : fbMap[calcHash];
+
+                if (calcVal) {
+                    if (valStr === "?") {
+                        valStr = `(${calcVal})`;
+                    } else {
+                        valStr += ` (${calcVal})`;
+                    }
                 }
                 return valStr;
             }
@@ -450,11 +592,14 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
             
         });
 
+        // Removed hardcoded Tryndamere override here, replaced by general decimal scaling rule.
+        
         // Clean up broken template remnants (e.g., Aphelios R has incomplete {{ syntax)
         descriptionHtml = descriptionHtml
             .replace(/\?\s*\}\}/g, '')           // ?}} remnants
             .replace(/\{\{\s*[^}]*\?\s*[^}]*\}\}/g, '')  // {{ ... ? ... }} broken templates
-            .replace(/\{\{[^}]*$/gm, '');        // unclosed {{ at end of line
+            .replace(/\{\{[^}]*$/gm, '')        // unclosed {{ at end of line
+            .replace(/%i:[^%]*%/g, '');          // %i:OnHit% etc. icon references
 
         // Colorize Riot's XML tags
         descriptionHtml = descriptionHtml
@@ -462,6 +607,7 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
             .replace(new RegExp("</physicalDamage>", "gi"), '</span>')
             .replace(new RegExp("<magicDamage>", "gi"), '<span style="color:#00d2ff">')
             .replace(new RegExp("</magicDamage>", "gi"), '</span>')
+            .replace(/([\d./]+%?(?:秒間|秒)?[^<>]{0,30}?)<status>(.*?)<\/status>/gi, '<span style="color:#ff4d4d">$1$2</span>')
             .replace(new RegExp("<status>", "gi"), '<span style="color:#ff4d4d">')
             .replace(new RegExp("</status>", "gi"), '</span>')
             .replace(new RegExp("<keyword[^>]*>", "gi"), '<span style="color:#c8aa6e; font-weight:bold;">')
@@ -470,11 +616,11 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
             .replace(new RegExp("</rules>", "gi"), '</i>')
             .replace(new RegExp("<spellName>", "gi"), '<span style="color:#ffd700">')
             .replace(new RegExp("</spellName>", "gi"), '</span>')
-            .replace(new RegExp("<trueDamage>", "gi"), '<span style="color:#fff">')
+            .replace(new RegExp("<trueDamage>", "gi"), '<span style="color:#f9966b">')
             .replace(new RegExp("</trueDamage>", "gi"), '</span>')
             .replace(new RegExp("<healing>", "gi"), '<span style="color:#11ff11">')
             .replace(new RegExp("</healing>", "gi"), '</span>')
-            .replace(new RegExp("<shield>", "gi"), '<span style="color:#e8e8e8; font-weight:bold;">')
+            .replace(new RegExp("<shield>", "gi"), '<span style="color:#5bc0de; font-weight:bold;">')
             .replace(new RegExp("</shield>", "gi"), '</span>')
             .replace(new RegExp("<speed>", "gi"), '<span style="color:#f5f55a">')
             .replace(new RegExp("</speed>", "gi"), '</span>')

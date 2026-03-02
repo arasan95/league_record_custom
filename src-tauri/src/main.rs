@@ -57,6 +57,7 @@ fn main() {
             commands::get_recordings_list,
             commands::open_recordings_folder,
             commands::delete_video,
+            commands::delete_video_only,
             commands::rename_video,
             commands::get_metadata,
             commands::toggle_favorite,
