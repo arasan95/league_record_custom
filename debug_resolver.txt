@@ -1,5 +1,0 @@
-Gnar GnarQ - missing: ["spell.gnarq:minitotaldamage","spell.gnarq:slowduration","spell.gnarq:slowamount*100","spell.gnarq:minicdrefund*100"] - resolved: {} - candidates: []
-Gnar GnarW - missing: ["spell.gnarw:minitotaldamage","spell.gnarw:minipercenthpdamage*100","spell.gnarr:rhypermovementspeedpercent","spell.gnarw:minihasteduration"] - resolved: {} - candidates: []
-Gnar GnarE - missing: ["spell.gnare:miniasduration","spell.gnare:minibas*100","spell.gnare:minitotaldamage","spell.gnare:movespeedmod*-100"] - resolved: {} - candidates: []
-Sivir SivirW - missing: ["bouncedamage"] - resolved: {} - candidates: []
-Sivir SivirE - missing: ["totalheal"] - resolved: {"totalheal":"1.5"} - candidates: [["e2","55"],["e3","60"]]
