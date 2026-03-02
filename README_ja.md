@@ -1,4 +1,4 @@
-# LeagueRecord Custom
+﻿# LeagueRecord Custom
 
 [English](readme.md) | [日本語](README_ja.md)
 
@@ -26,7 +26,7 @@ FFmpegをインストールし、システムのPATHに追加するか、アプ�
 
 ## ダウンロード
 
-**[LeagueRecordをダウンロード（インストーラー版）](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_1.1.2_x64-setup.exe)**
+**[LeagueRecordをダウンロード（インストーラー版）](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_1.1.3_x64-setup.exe)**
 
 ポータブル版 (Zip):
 [LeagueRecord_x64.zip](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_x64.zip)
