@@ -465,9 +465,9 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
                         if (result === null) {
                             result = values;
                         } else {
-                            if (result.length === 1) result = values.map(v => Math.round(result![0] * v * 100) / 100);
-                            else if (values.length === 1) result = result.map(v => Math.round(v * values[0] * 100) / 100);
-                            else result = result.map((v, i) => Math.round(v * (values[i] ?? values[values.length-1]) * 100) / 100);
+                            if (result.length === 1) result = values.map(v => Math.round(result![0] * v * 10000) / 10000);
+                            else if (values.length === 1) result = result.map(v => Math.round(v * values[0] * 10000) / 10000);
+                            else result = result.map((v, i) => Math.round(v * (values[i] ?? values[values.length-1]) * 10000) / 10000);
                         }
                     }
                     return result || [];
