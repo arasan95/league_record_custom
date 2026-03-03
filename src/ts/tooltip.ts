@@ -421,6 +421,85 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
             const expr = p1.trim().toLowerCase();
             if (expr === 'spellmodifierdescriptionappend') return "";
             
+            // --- FORMULA EVALUATION HELPER ---
+            // Evaluates "=baseExpr|ratioExpr:StatName|ratioExpr:StatName" formulas
+            // using WAD data values from the same spell entry.
+            const evaluateFormulaFallback = (formula: string, wadMap: Record<string, string>, maxRank: number): string | null => {
+                if (!formula.startsWith('=')) return null;
+                const body = formula.substring(1);
+                const sections = body.split('|');
+                const baseSection = sections[0];
+                const scalingSections = sections.slice(1);
+
+                // Parse a WAD value string into a number array
+                const parseWadVal = (name: string): number[] => {
+                    name = name.trim().toLowerCase();
+                    const raw = wadMap[name];
+                    if (!raw) return [];
+                    const nums = raw.split('/').map(Number).filter(n => !isNaN(n));
+                    if (nums.length > maxRank + 1) return nums.slice(1, maxRank + 1);
+                    if (nums.length > maxRank && nums[0] === 0) return nums.slice(1, maxRank + 1);
+                    if (nums.length > maxRank) return nums.slice(0, maxRank);
+                    return nums;
+                };
+
+                // Evaluate a simple expression: supports var, var*var, var*(num+var)
+                const evalExpr = (exprStr: string): number[] => {
+                    const factors = exprStr.split('*').map(f => f.trim());
+                    let result: number[] | null = null;
+                    for (const factor of factors) {
+                        let values: number[];
+                        // (num+var) pattern e.g. (1+critdamagemultiplier)
+                        const stripped = factor.replace(/^\(/, '').replace(/\)$/, '');
+                        const addMatch = stripped.match(/^([\d.]+)\s*\+\s*(\w+)$/);
+                        if (addMatch) {
+                            const c = parseFloat(addMatch[1]);
+                            const vv = parseWadVal(addMatch[2]);
+                            values = vv.length ? vv.map(v => c + v) : [c];
+                        } else if (/^[\d.]+$/.test(factor)) {
+                            values = [parseFloat(factor)];
+                        } else {
+                            values = parseWadVal(factor);
+                        }
+                        if (values.length === 0) continue;
+                        if (result === null) {
+                            result = values;
+                        } else {
+                            if (result.length === 1) result = values.map(v => Math.round(result![0] * v * 100) / 100);
+                            else if (values.length === 1) result = result.map(v => Math.round(v * values[0] * 100) / 100);
+                            else result = result.map((v, i) => Math.round(v * (values[i] ?? values[values.length-1]) * 100) / 100);
+                        }
+                    }
+                    return result || [];
+                };
+
+                const formatArr = (arr: number[]) => {
+                    if (arr.length === 0) return '';
+                    const allSame = arr.every(v => v === arr[0]);
+                    return allSame ? String(arr[0]) : arr.join('/');
+                };
+
+                const baseVals = evalExpr(baseSection);
+                if (baseVals.length === 0) return null;
+                let out = formatArr(baseVals);
+
+                // Scaling parts
+                const scalings: string[] = [];
+                for (const sp of scalingSections) {
+                    const colonIdx = sp.lastIndexOf(':');
+                    if (colonIdx === -1) continue;
+                    const ratioExpr = sp.substring(0, colonIdx).trim();
+                    const statName = sp.substring(colonIdx + 1).trim();
+                    const ratioVals = evalExpr(ratioExpr);
+                    if (ratioVals.length === 0) continue;
+                    const pctVals = ratioVals.map(v => Math.round(v * 100 * 10) / 10);
+                    const pctStr = formatArr(pctVals);
+                    if (pctStr) scalings.push(`+${pctStr}% ${statName}`);
+                }
+                if (scalings.length > 0) out += ` (${scalings.join(' ')})`;
+                return out;
+            };
+
             // --- VARIABLE FALLBACK ---
             // If we have a language-agnostic mapped value for this variable, substitute it immediately!
             const fbMap = dynamicTooltipFallback[spell.id] || {};
@@ -447,9 +526,17 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
                  
                  if (directVal !== undefined) {
                      let valStr = directVal ? String(directVal) : "";
+
+                     // === Formula evaluation: values starting with '=' ===
+                     if (valStr.startsWith('=')) {
+                         const maxRank = spell.maxrank || 5;
+                         const computed = evaluateFormulaFallback(valStr, fbMap, maxRank);
+                         if (computed) return computed;
+                         return "?";
+                     }
                      
                      // ツールチップ内の変数参照に簡単な四則演算（例: * 100, *-100）が含まれている場合、要素ごとに適用する
-                     const matchMath = p1.match(/\s*([*\/])\s*(-?[\d.]+)|\s*([+-])\s*([\d.]+)/);
+                     const matchMath = p1.match(/\s*([*\/])\s*(-?[\d.]+)\s*|\s*([+-])\s*([\d.]+)/);
                      if (matchMath) {
                          const op = matchMath[1] || matchMath[3];
                          const num = parseFloat(matchMath[2] || matchMath[4]);
