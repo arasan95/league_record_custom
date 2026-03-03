@@ -26,7 +26,7 @@ FFmpegをインストールし、システムのPATHに追加するか、アプ�
 
 ## ダウンロード
 
-**[LeagueRecordをダウンロード（インストーラー版）](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_1.1.4_x64-setup.exe)**
+**[LeagueRecordをダウンロード（インストーラー版）](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_1.1.5_x64-setup.exe)**
 
 すべてのバージョンを見る: [GitHub Releases](https://github.com/arasan95/league_record_custom/releases)
 
