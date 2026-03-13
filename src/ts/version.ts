@@ -1,3 +1,4 @@
+import { commands } from "./bindings";
 
 const VERSION_KEY = "lol_patch_version";
 const FALLBACK_VERSION = "14.23.1"; // A recent safe fallback
@@ -5,7 +6,8 @@ const FALLBACK_VERSION = "14.23.1"; // A recent safe fallback
 export async function initPatchVersion(): Promise<string> {
     try {
         console.log("Checking for latest LoL patch version...");
-        const response = await fetch("https://ddragon.leagueoflegends.com/api/versions.json");
+        // Add cache: "no-store" to prevent the webview from returning a stale version string
+        const response = await fetch("https://ddragon.leagueoflegends.com/api/versions.json", { cache: "no-store" });
         if (!response.ok) throw new Error("Failed to fetch version list");
         
         const versions = await response.json();
@@ -14,15 +16,21 @@ export async function initPatchVersion(): Promise<string> {
             const current = localStorage.getItem(VERSION_KEY);
             
             if (current !== latest) {
-                console.log(`New patch version detected: ${latest} (was ${current})`);
+                console.log(`New patch version detected: ${latest} (was ${current}). Clearing cache...`);
                 localStorage.setItem(VERSION_KEY, latest);
+                // Clear old images/stats cache so the new patch applies functionally
+                await commands.clearCache().catch(e => console.error("Failed to clear cache:", e));
             } else {
                 console.log(`Patch version is up to date: ${latest}`);
             }
             return latest;
         }
-    } catch (e) {
+    } catch (e: any) {
         console.warn("Failed to fetch latest patch version, using stored or fallback:", e);
+        try {
+            const { writeFile, BaseDirectory } = await import("@tauri-apps/plugin-fs");
+            await writeFile("patch_debug.txt", new TextEncoder().encode(`Error: ${e?.toString()}`), { baseDir: BaseDirectory.AppLocalData });
+        } catch (_) {}
     }
     
     return localStorage.getItem(VERSION_KEY) || FALLBACK_VERSION;

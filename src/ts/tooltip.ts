@@ -500,6 +500,27 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
                 return out;
             };
 
+            const expandMacros = (str: any): any => {
+                if (typeof str !== "string" || !str.includes("{")) return str;
+                return str.replace(/\{([a-z0-9_]+)\}/gi, (m, vName) => {
+                    const resolved = resolveVar(vName);
+                    if (resolved) {
+                        // formatArrayObj logic for tooltip.ts:
+                        let actualRanks = resolved;
+                        if (actualRanks.length > 5) {
+                            const maxR = spell.maxrank || 5;
+                            actualRanks = actualRanks.slice(1, maxR + 1);
+                        }
+                        if (actualRanks.length === 0) return "?";
+                        const cleanNum = (n: any) => typeof n !== 'number' ? n : Math.round(n * 100) / 100;
+                        const cleanedRanks = actualRanks.map(cleanNum);
+                        const allSame = cleanedRanks.every((v: any) => v === cleanedRanks[0]);
+                        return allSame ? cleanedRanks[0].toString() : cleanedRanks.join("/");
+                    }
+                    return m;
+                });
+            };
+
             // --- VARIABLE FALLBACK ---
             // If we have a language-agnostic mapped value for this variable, substitute it immediately!
             const fbMap = dynamicTooltipFallback[spell.id] || {};
@@ -524,6 +545,8 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
                      }
                  }
                  
+                 directVal = expandMacros(directVal);
+
                  if (directVal !== undefined) {
                      let valStr = directVal ? String(directVal) : "";
 
@@ -592,6 +615,8 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
                      const calcExpr = expr + "_calc";
                      const calcHash = fnvHash + "_calc";
                      let calcVal = fbMap[calcExpr] !== undefined ? fbMap[calcExpr] : fbMap[calcHash];
+
+                     calcVal = expandMacros(calcVal);
 
                      if (valStr && calcVal) {
                          valStr += ` (${calcVal})`;

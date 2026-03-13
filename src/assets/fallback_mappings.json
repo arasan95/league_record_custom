@@ -408,6 +408,15 @@
   "MissFortuneViciousStrikes": {
     "lovetaprefund": "2"
   },
+  "TristanaE": {
+        "tooltipactivedamage": "=basedamage|activeadratio:BonusAD|activeapratio:AP",
+        "tooltipmaxdamage": "=basedamage*12.2|activeadratio*12.2:BonusAD|activeapratio*12.2:AP"
+    },
+    "VarusQ": {
+        "totaldamagemax": "=basedamagemax|tadratiomax:AD",
+        "totaldamagemintooltip": "=basedamagemax*chargemultiplierinverse|tadratiomax*chargemultiplierinverse:AD"
+    },
+    "VexR": {},
   "MissFortuneBulletTime": {
     "physicaldamageperwave": "=basedamage",
     "totalphysicaldamage": "=basedamage*basewaves|tadratio*basewaves:AD|apratio*basewaves:AP",
@@ -814,5 +823,9 @@
   },
   "ZyraR": {
     "totaldamage": "1"
+  },
+  "SettQ": {
+    "maxhealthdamagecalc": "1%",
+    "maxhealthdamagecalc_calc": "+{maxhealthtadratiotooltip}% AD"
   }
 }
