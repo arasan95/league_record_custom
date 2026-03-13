@@ -79,6 +79,7 @@ FFmpegをインストールし、システムのPATHに追加するか、アプ�
 
 問題、ご質問、ご提案がある場合は、お気軽にIssueを開くか、下記までご連絡ください。
 <arasan1115525@gmail.com>
+[Googleフォーム](https://docs.google.com/forms/d/e/1FAIpQLScM3I0di-DeqQACBhGfrewibuos2xl-pTNv4XoYhK3R0p3ziA/viewform)
 
 ---
 
