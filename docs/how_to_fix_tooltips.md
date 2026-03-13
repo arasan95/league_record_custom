@@ -221,3 +221,18 @@ bun run scripts/dump_all_tooltips.ts
 3. [src/assets/fallback_mappings.json](../src/assets/fallback_mappings.json) に手動で計算式を追記する。
 4. **`bun run scripts/dump_all_tooltips.ts`** を実行して、[scripts/all_tooltips_plain.txt](../scripts/all_tooltips_plain.txt) を確認し、正しく数値が入ったかテストする。
 
+---
+
+### 💡 補足：`fallback_mappings.json` の固定値をすべて `{変数名}` に置き換えるべきですか？
+
+**結論：すべてを置き換えることは推奨しません。**
+
+`fallback_mappings.json` に手動で固定値（例：`"alldamagehit": "6/7/8"`）を書いている最大の理由は、**「公式のCDragon側の抽出データ内に、その数値を指し示す変数がそもそも存在しない」**ためです。（Riot側が変数を設定し忘れてテキストに直書きしているケースが多く存在します）
+
+存在しない変数名を指定すると、ツールチップがパースできず「?」となってしまいます。
+
+#### 基本的な運用方針
+1. **既存の固定値はそのまま維持する:** 多くの固定値は「パッチで変わりにくい基本仕様」や「抽出データが存在しないもの」です。
+2. **パッチアップデートでズレが生じた時に対応する:** アプリの表示数値と実際のゲーム内数値がズレているのを見つけた際に、`bun run scripts/fetch_cd_tooltips.mjs [チャンプ名]` を実行します。
+3. **変数が存在すれば `{変数名}` に置き換える:** その際、もしCDragon側に新しく変数が追加されていたり、以前から存在していた変数（例：Sett Qの `MaxHealthTADRatioTOOLTIP` など）があれば、`{変数名}` の記述で自動追従させます。なければ、引き続き手動で固定値を更新します。
+

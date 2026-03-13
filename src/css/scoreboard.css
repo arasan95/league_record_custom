@@ -15,7 +15,7 @@
 .scoreboard-center {
     display: flex;
     flex-direction: column;
-    width: 60px; /* Fixed width for center column */
+    width: 50px; /* Fixed width for center column */
     align-items: center;
     background-color: rgba(0, 0, 0, 0.5); /* Slightly darker bg for center */
     border-radius: 4px;
@@ -107,6 +107,31 @@
     border: 0px solid #444;
 }
 
+.champ-icon-wrap {
+    position: relative;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+}
+
+.champ-level-overlay {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    min-width: 0;
+    height: auto;
+    padding: 0;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    text-shadow: 0 1px 1px #000;
+    pointer-events: none;
+    background: transparent;
+    border: 0;
+}
+
 .item-icon {
     width: 24px;
     height: 24px;
@@ -118,10 +143,10 @@
 /* --- New Stats Components --- */
 
 .cs-stat {
-    font-size: 0.9em;
+    font-size: 0.8em;
     color: #ffe53c;
-    width: 30px; /* Reduced to fit 3 digits tightly */
-    min-width: 30px;
+    width: 26px; /* Reduced to fit 3 digits tightly */
+    min-width: 26px;
     text-align: center;
     white-space: nowrap;
     opacity: 0.8;
@@ -129,11 +154,11 @@
 }
 
 .kda {
-    font-size: 1.1em;
+    font-size: 0.9em;
     font-weight: bold;
     color: #ddd;
-    width: 80px; /* Reduced safely for 99/99/99 */
-    min-width: 80px;
+    width: 70px; /* Reduced safely for 99/99/99 */
+    min-width: 70px;
     white-space: nowrap;
     text-align: center;
     /* margin: 0 2px;  */
@@ -474,7 +499,7 @@
 /* Center Gold Diff Column */
 /* Center Gold Diff Column */
 .scoreboard-center {
-    width: 60px;
+    width: 45px;
     background-color: transparent; 
     
     /* Match .team structure for vertical alignment */
@@ -492,7 +517,7 @@
     justify-content: center;
     height: 34px !important; /* MATCH PLAYER ROW HEIGHT */
     width: 100%;
-    font-size: 1.1em; /* Increased from 0.8em */
+    font-size: 0.9em; /* Increased from 0.8em */
     font-weight: bold;
     color: #ddd; /* Brightened from #888 */
     margin-bottom: 0 !important; /* MATCH PLAYER ROW MARGIN */
@@ -555,8 +580,8 @@
 .team-100 .trinket-container{ order: 4; margin-left: 5px; margin-right: 2px; } 
 .team-100 .items-grid       { order: 5; margin-right: 5px; } /* Gap to KDA */
 .team-100 .kda-stat         { order: 6; text-align: center; }
-.team-100 .cs-stat          { order: 7; margin-right: 5px; text-align: center; }
-.team-100 .champ-icon       { order: 8; margin-right: 5px; }
+.team-100 .cs-stat          { order: 7; margin-right: 0px; text-align: center; }
+.team-100 .champ-icon-wrap  { order: 8; margin-right: 5px; }
 
 /* 
    Red Team (200) - [Items] --(2px)-- [Trinket] --(5px)-- [Spells] 
@@ -566,7 +591,7 @@
     flex-direction: row; 
     justify-content: flex-start; /* Align content towards center (Left) */
 }
-.team-200 .champ-icon       { order: 1; margin-right: 5px; }
+.team-200 .champ-icon-wrap  { order: 1; margin-right: 0px; }
 .team-200 .cs-stat          { order: 2; margin-right: 0px; text-align: center; }
 .team-200 .kda-stat         { order: 3; margin-right: 5px; text-align: center; }
 .team-200 .items-grid       { order: 4; margin-right: 12px; } 

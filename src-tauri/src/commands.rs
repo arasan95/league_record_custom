@@ -227,7 +227,32 @@ pub async fn create_clip(
     state: State<'_, SettingsWrapper>,
 ) -> Result<String, String> {
     let recordings_path = state.get_clips_path();
-    let video_path = state.get_recordings_path().join(&video_id);
+    let input_id = video_id.trim().trim_end_matches('.');
+
+    // video_id can be absolute or relative, with or without extension.
+    let mut video_path = PathBuf::from(input_id);
+    if video_path.is_relative() {
+        video_path = state.get_recordings_path().join(&video_path);
+    }
+    if video_path.extension().is_none() {
+        video_path.set_extension("mp4");
+    }
+
+    // Fallback: if not found in recordings path, also try clips path for relative IDs.
+    if !video_path.exists() {
+        let mut alt_path = PathBuf::from(input_id);
+        if alt_path.is_relative() {
+            alt_path = state.get_clips_path().join(&alt_path);
+        }
+        if alt_path.extension().is_none() {
+            alt_path.set_extension("mp4");
+        }
+        if alt_path.exists() {
+            video_path = alt_path;
+        } else {
+            return Err(format!("Input video not found: {}", video_path.display()));
+        }
+    }
 
     // Ensure clips directory exists
     if !recordings_path.exists() {
@@ -236,7 +261,12 @@ pub async fn create_clip(
 
     // Output filename
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-    let output_filename = format!("{}_clip_{}.mp4", video_id.replace(".mp4", ""), timestamp);
+    let stem = video_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("clip");
+    let output_filename = format!("{}_clip_{}.mp4", stem, timestamp);
     let output_path = recordings_path.join(&output_filename);
 
     let duration = end - start;
@@ -252,7 +282,7 @@ pub async fn create_clip(
     #[cfg(target_os = "windows")]
     command.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
-    let status = command
+    let output = command
         .arg("-ss")
         .arg(format!("{:.3}", start))
         .arg("-i")
@@ -262,11 +292,18 @@ pub async fn create_clip(
         .arg("-c")
         .arg("copy")
         .arg(&output_path)
-        .status();
+        .output();
 
-    match status {
-        Ok(s) if s.success() => Ok(output_filename),
-        Ok(_) => Err("FFmpeg exited with non-zero code.".into()),
+    match output {
+        Ok(o) if o.status.success() => Ok(output_filename),
+        Ok(o) => {
+            let stderr = String::from_utf8_lossy(&o.stderr);
+            if stderr.trim().is_empty() {
+                Err("FFmpeg exited with non-zero code.".into())
+            } else {
+                Err(format!("FFmpeg exited with non-zero code: {}", stderr.trim()))
+            }
+        }
         Err(e) => Err(format!("Failed to execute ffmpeg: {}. Is FFmpeg installed?", e)),
     }
 }
@@ -403,5 +440,56 @@ pub async fn update_champion_data(app_handle: AppHandle) -> Result<String, Strin
     match result {
         Ok(path) => Ok(path.to_string_lossy().into_owned()),
         Err(e) => Err(format!("Extraction error: {}", e)),
+    }
+}
+
+fn ensure_tooltip_db_installed(app_handle: &AppHandle) -> Result<PathBuf, String> {
+    use tauri::Manager;
+
+    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db_dir = app_data_dir.join("tooltip_db");
+    if !db_dir.exists() {
+        std::fs::create_dir_all(&db_dir).map_err(|e| e.to_string())?;
+    }
+    let target_db = db_dir.join("tooltip_data.db");
+    if target_db.exists() {
+        return Ok(target_db);
+    }
+
+    let resource_dir = app_handle.path().resource_dir().map_err(|e| e.to_string())?;
+    let source_candidates = [
+        resource_dir.join("tooltip_data.db"),
+        resource_dir.join("resources").join("tooltip_data.db"),
+    ];
+
+    let source_db = source_candidates
+        .iter()
+        .find(|p| p.exists())
+        .ok_or_else(|| "Bundled tooltip_data.db not found in resources".to_string())?;
+
+    std::fs::copy(source_db, &target_db)
+        .map_err(|e| format!("Failed to copy tooltip DB from resources: {}", e))?;
+    Ok(target_db)
+}
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub async fn load_tooltip_locale_db(locale: String, app_handle: AppHandle) -> Result<Option<String>, String> {
+    let db_path = ensure_tooltip_db_installed(&app_handle)?;
+    let conn = rusqlite::Connection::open(&db_path)
+        .map_err(|e| format!("Failed to open tooltip DB ({}): {}", db_path.display(), e))?;
+    let mut stmt = conn
+        .prepare("SELECT data_json FROM champion_tooltips WHERE locale = ?1 LIMIT 1")
+        .map_err(|e| format!("Failed to prepare tooltip DB query: {}", e))?;
+
+    let mut rows = stmt
+        .query([locale])
+        .map_err(|e| format!("Failed to execute tooltip DB query: {}", e))?;
+
+    if let Some(row) = rows.next().map_err(|e| format!("Failed to read tooltip DB row: {}", e))? {
+        let data_json: String = row.get(0).map_err(|e| format!("Failed to decode tooltip DB row: {}", e))?;
+        Ok(Some(data_json))
+    } else {
+        Ok(None)
     }
 }

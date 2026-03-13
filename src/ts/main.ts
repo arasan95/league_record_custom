@@ -47,6 +47,60 @@ type HighlightEvents = {
 
 let currentEvents: RecordingEvents | null = null;
 let highlightEvents: HighlightEvents | null = null;
+const metadataRetryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+
+function normalizeVideoId(videoId: string): string {
+    return videoId
+        .replace(/\.(mp4|webm|json)$/i, "")
+        .replace(/\\/g, "/")
+        .toLowerCase();
+}
+
+function getVideoBaseName(videoId: string): string {
+    const normalized = normalizeVideoId(videoId);
+    const parts = normalized.split("/");
+    return parts[parts.length - 1] ?? normalized;
+}
+
+function videoIdsMatch(a: string, b: string): boolean {
+    const na = normalizeVideoId(a);
+    const nb = normalizeVideoId(b);
+    return na === nb || getVideoBaseName(na) === getVideoBaseName(nb);
+}
+
+function clearMetadataRetry(videoId: string) {
+    const key = normalizeVideoId(videoId);
+    const timeout = metadataRetryTimeouts.get(key);
+    if (timeout) {
+        clearTimeout(timeout);
+        metadataRetryTimeouts.delete(key);
+    }
+}
+
+function scheduleMetadataRetry(videoId: string, attemptsLeft: number = 4, delayMs: number = 700) {
+    const key = normalizeVideoId(videoId);
+    clearMetadataRetry(key);
+    if (attemptsLeft <= 0) {
+        return;
+    }
+
+    const timeout = setTimeout(async () => {
+        metadataRetryTimeouts.delete(key);
+
+        // Only retry for the currently selected recording.
+        const activeVideoId = ui.getActiveVideoId();
+        if (!activeVideoId || !videoIdsMatch(activeVideoId, key)) {
+            return;
+        }
+
+        const completed = await setMetadata(activeVideoId);
+        if (!completed) {
+            scheduleMetadataRetry(activeVideoId, attemptsLeft - 1, delayMs);
+        }
+    }, delayMs);
+
+    metadataRetryTimeouts.set(key, timeout);
+}
 
 const VIDEO_JS_OPTIONS = {
     // fluid: true, // - Removed
@@ -510,10 +564,10 @@ async function main() {
         // 2. Active Video Update (Refresh Detail View)
         // Backend sends filename (e.g. "video.mp4"), Frontend activeVideoId is Full Path.
         // We check if the active ID *contains* one of the payload IDs.
-        if (activeVideoId !== null && payload.some(id => activeVideoId.includes(id))) {
+        if (activeVideoId !== null && payload.some(id => videoIdsMatch(activeVideoId, id))) {
             console.log("MetadataChanged event received for active video. Reloading.");
             // update metadata for currently selected recording
-            setMetadata(activeVideoId);
+            void setMetadata(activeVideoId);
         }
     });
     
@@ -565,9 +619,12 @@ async function main() {
                      // Standard delay to ensure file handle release
                      setTimeout(async () => {
                          // Force metadata update if already active (e.g. user clicked early)
-                         if (activeId === fullPath) {
+                         if (activeId && videoIdsMatch(activeId, fullPath)) {
                              console.log("Recording finished for active video. Forcing initial metadata reload.");
-                             await setMetadata(activeId);
+                             const completed = await setMetadata(activeId);
+                             if (!completed) {
+                                 scheduleMetadataRetry(activeId);
+                             }
                          }
                          // setVideo might return early if ID matches, but that's fine if we called setMetadata above.
                          // Crucially, rely on MetadataChanged event for the FINAL update.
@@ -582,9 +639,12 @@ async function main() {
                             fullPath = await join(settingsVals.recordingsFolder, videoId);
                          } catch (e) {}
                      }
-                     if (activeId === fullPath) {
+                     if (activeId && videoIdsMatch(activeId, fullPath)) {
                           console.log("Recording finished for active video (Auto-select OFF). Forcing metadata reload.");
-                          await setMetadata(activeId);
+                          const completed = await setMetadata(activeId);
+                          if (!completed) {
+                              scheduleMetadataRetry(activeId);
+                          }
                      }
                  }
 
@@ -599,9 +659,9 @@ async function main() {
              const activeId = ui.getActiveVideoId();
              if (activeId && videoId) {
                  // Check match (simple includes check for safety if paths differ)
-                 if (activeId.includes(videoId)) {
+                 if (videoIdsMatch(activeId, videoId)) {
                       console.log("Manual stop for active video. Forcing metadata reload.");
-                      setMetadata(activeId);
+                      void setMetadata(activeId);
                  }
              }
         }
@@ -828,7 +888,11 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
 
         // VideoId is now an absolute path (base path without extension), so we use it directly
         ui.setActiveVideoId(cleanVideoId);
-        setMetadata(cleanVideoId);
+        clearMetadataRetry(cleanVideoId);
+        const completed = await setMetadata(cleanVideoId);
+        if (!completed) {
+            scheduleMetadataRetry(cleanVideoId);
+        }
         player.src({ type: "video/mp4", src: convertFileSrc(cleanVideoId + ".mp4") });
         if (settings.autoplayVideo && allowAutoplay) {
             void player.play()?.catch(() => {});
@@ -836,9 +900,10 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
     }
 }
 
-async function setMetadata(videoId: string) {
+async function setMetadata(videoId: string): Promise<boolean> {
     const data = await commands.getMetadata(videoId);
     if (data && "Metadata" in data) {
+        clearMetadataRetry(videoId);
         ui.showMarkerFlags(true);
         ui.setVideoDescriptionMetadata(data.Metadata);
         // Ensure UI offset is set (redundant but safe)
@@ -853,6 +918,8 @@ async function setMetadata(videoId: string) {
             recordingOffset: data.Metadata.ingameTimeRecStartOffset,
             events: data.Metadata.highlights ?? [],
         };
+        changeMarkers();
+        return true;
     } else if (data && "Deferred" in data) {
         const def = data.Deferred;
         // Explicitly set offset for UI
@@ -910,15 +977,17 @@ async function setMetadata(videoId: string) {
             recordingOffset: def.ingameTimeRecStartOffset,
             events: def.highlights ?? [],
         };
+        changeMarkers();
+        return false;
     } else {
         ui.clearVideoMetadata();
         ui.showMarkerFlags(false);
         ui.setRecordingOffset(0);
         currentEvents = null;
         highlightEvents = null;
+        changeMarkers();
+        return false;
     }
-
-    changeMarkers();
 }
 
 function changeMarkers() {

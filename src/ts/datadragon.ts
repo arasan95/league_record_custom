@@ -1,4 +1,5 @@
 import { exists, mkdir, readFile, writeFile, BaseDirectory } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
 import { getCachedAssetUrl } from "./assets";
 import { STATIC_ARAM_QUEUES, STATIC_SR_QUEUES, STATIC_TFT_QUEUES, STATIC_OTHER_QUEUES } from "./queues";
 import { getCurrentPatchVersion } from "./version";
@@ -120,7 +121,7 @@ export function getDDragonLocale(lang: string): string {
     switch (lang) {
         case "ko": return "ko_KR";
         case "zh": return "zh_CN";
-        case "vi": return "vn_VN";
+        case "vi": return "vi_VN";
         case "pt": return "pt_BR";
         case "es": return "es_ES";
         case "fr": return "fr_FR";
@@ -399,6 +400,51 @@ export async function getChampionData(championIdOrName: string | number): Promis
 
 const detailedChampionCache: Record<string, any> = {};
 
+let allChampionsLocalTooltipCache: Record<string, any> | null = null;
+let allChampionsLocalTooltipLocale: string = "";
+
+export async function getLocalChampionTooltips(championId: number, langStr: string = "ja"): Promise<any> {
+    const champName = await getChampionNameById(championId);
+    if (!champName) return null;
+    
+    const locale = getDDragonLocale(langStr);
+    
+    if (allChampionsLocalTooltipCache && allChampionsLocalTooltipLocale !== locale) {
+        allChampionsLocalTooltipCache = null;
+    }
+
+    if (!allChampionsLocalTooltipCache) {
+        try {
+            // Preferred source: bundled SQLite DB copied to AppData (survives AppLocalData cache cleanup).
+            const dbJson = await invoke<string | null>("load_tooltip_locale_db", { locale });
+            if (dbJson) {
+                allChampionsLocalTooltipCache = JSON.parse(dbJson);
+                allChampionsLocalTooltipLocale = locale;
+            } else {
+                // Backward-compatible fallback: old JSON cache file in AppLocalData.
+                const filePath = `tooltip_cache/all_champions_${locale}.json`;
+                if (await exists(filePath, { baseDir: BaseDirectory.AppLocalData })) {
+                    const data = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
+                    const jsonStr = new TextDecoder().decode(data);
+                    allChampionsLocalTooltipCache = JSON.parse(jsonStr);
+                    allChampionsLocalTooltipLocale = locale;
+                } else {
+                    return null;
+                }
+            }
+        } catch(e) {
+            console.error(`Failed to load all local tooltips for (${locale}):`, e);
+            return null;
+        }
+    }
+
+    if (allChampionsLocalTooltipCache && allChampionsLocalTooltipCache[champName]) {
+        return allChampionsLocalTooltipCache[champName];
+    }
+    
+    return null;
+}
+
 export async function getDetailedChampionData(championId: number, version: string, langStr: string = "ja"): Promise<any> {
     const champName = await getChampionNameById(championId);
     if (!champName) return null;
@@ -486,6 +532,103 @@ async function mergeCDragonData(champName: string, champData: any, cdragonFilePa
         }
 
         if (cdragonData) {
+            if (champName === "Elise" && champData.spells.length === 4) {
+                champData.spells.push({
+                    id: "EliseSpiderQCast",
+                    spellKey: "Spider Q",
+                    name: "毒牙 (Venomous Bite)",
+                    description: "対象の敵ユニットに飛びかかって噛み付き、<magicDamage>{{ 03da00f9 }} (+対象の減少体力の {{ 10e877f6 }}%)の魔法ダメージ</magicDamage>を与える。",
+                    tooltip: "",
+                    cooldownBurn: "6",
+                    costBurn: "0",
+                    maxrank: 5
+                });
+                champData.spells.push({
+                    id: "EliseSpiderW",
+                    spellKey: "Spider W",
+                    name: "猛食 (Skittering Frenzy)",
+                    description: "発動効果: {{ d955a324 }}秒間、自身と子蜘蛛の攻撃速度が <attackDamage>{{ fe0b1c92 }}</attackDamage> 増加する。",
+                    tooltip: "",
+                    cooldownBurn: "10",
+                    costBurn: "0",
+                    maxrank: 5
+                });
+                champData.spells.push({
+                    id: "EliseSpiderEInitial",
+                    spellKey: "Spider E",
+                    name: "蜘蛛の糸 (Rappel)",
+                    description: "敵または中立モンスターに使用した時: 糸を引いて空中へと飛び上がり、対象の上に落下する。<br><br>地面に使用した時: 糸を引いて空中へと飛び上がる。周囲の対象を指定することで、そこに落下できる。<br><br>着地後は{{ d955a324 }}秒間、蜘蛛形態の通常攻撃による追加ダメージと回復量が <magicDamage>{{ 80d12992 }}%</magicDamage> 増加する。",
+                    tooltip: "",
+                    cooldownBurn: "22/21/20/19/18",
+                    costBurn: "0",
+                    maxrank: 5
+                });
+            }
+            if (champName === "Nidalee" && champData.spells.length === 4) {
+                champData.spells.push({
+                    id: "Takedown", // Nidalee's internal Q
+                    spellKey: "Cougar Q",
+                    name: "テイクダウン (Takedown)",
+                    description: "次の通常攻撃時に大量の追加ダメージを与える。",
+                    tooltip: "",
+                    cooldownBurn: "6",
+                    costBurn: "0",
+                    maxrank: 5
+                });
+                champData.spells.push({
+                    id: "Pounce", // Nidalee's internal W
+                    spellKey: "Cougar W",
+                    name: "ジャンプ (Pounce)",
+                    description: "指定方向にジャンプし、着地点周辺の範囲内にいる敵ユニットにダメージを与える。",
+                    tooltip: "",
+                    cooldownBurn: "6",
+                    costBurn: "0",
+                    maxrank: 5
+                });
+                champData.spells.push({
+                    id: "Swipe", // Nidalee's internal E
+                    spellKey: "Cougar E",
+                    name: "クロウ (Swipe)",
+                    description: "かぎ爪で攻撃し、自身の前方範囲内の敵ユニットにダメージを与える。",
+                    tooltip: "",
+                    cooldownBurn: "6",
+                    costBurn: "0",
+                    maxrank: 5
+                });
+            }
+            if (champName === "Jayce" && champData.spells.length === 4) {
+                champData.spells.push({
+                    id: "JayceToTheSkies", // Jayce's internal Melee Q
+                    spellKey: "Hammer Q",
+                    name: "スカイバスター (To the Skies!)",
+                    description: "敵に飛びかかって物理ダメージとスロウ効果を与える。",
+                    tooltip: "",
+                    cooldownBurn: "16/14/12/10/8/6",
+                    costBurn: "40",
+                    maxrank: 6
+                });
+                champData.spells.push({
+                    id: "JayceStaticField", // Jayce's internal Melee W  
+                    spellKey: "Hammer W",
+                    name: "ライトニングフィールド (Lightning Field)",
+                    description: "雷のフィールドを発生させ、周囲の敵に数秒間ダメージを与える。",
+                    tooltip: "",
+                    cooldownBurn: "10",
+                    costBurn: "40",
+                    maxrank: 6
+                });
+                champData.spells.push({
+                    id: "JayceThunderingBlow", // Jayce's internal Melee E
+                    spellKey: "Hammer E",
+                    name: "サンダーブロー (Thundering Blow)",
+                    description: "敵に魔法ダメージを与え、わずかに突き飛ばす。",
+                    tooltip: "",
+                    cooldownBurn: "20/18/16/14/12/10",
+                    costBurn: "40",
+                    maxrank: 6
+                });
+            }
+
             for (let i = 0; i < champData.spells.length; i++) {
                 const spell = champData.spells[i];
                 const slot = ["Q", "W", "E", "R"][i];

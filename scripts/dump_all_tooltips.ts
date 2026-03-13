@@ -892,7 +892,7 @@ async function main() {
     const champIds: string[] = Object.keys(champList.data).sort();
     console.log(`Champions: ${champIds.length}`);
 
-    const results: { cid: string; plainText: string }[] = [];
+    const results: { cid: string; html: string; plainText: string }[] = [];
     const CONCURRENCY = 20;
 
     for (let i = 0; i < champIds.length; i += CONCURRENCY) {
@@ -913,7 +913,7 @@ async function main() {
                 const html      = buildChampionTooltipHtml(champ);
                 const plainText = htmlToPlain(html);
                 
-                results.push({ cid, plainText });
+                results.push({ cid, html, plainText });
             } catch (e) {
                 console.error(`\nError fetching ${cid}:`, e);
             }
@@ -924,13 +924,22 @@ async function main() {
 
     const allLines: string[]         = [];
     const unresolvedLines: string[]  = [];
+    const jsonRows: { championId: string; containsQuestionMark: boolean; html: string; plainText: string }[] = [];
 
-    for (const { cid, plainText } of results) {
+    for (const { cid, html, plainText } of results) {
         allLines.push(`=== ${cid} ===`);
         allLines.push(plainText);
         allLines.push("");
 
-        if (plainText.includes("?")) {
+        const containsQuestionMark = plainText.includes("?") || html.includes("?");
+        jsonRows.push({
+            championId: cid,
+            containsQuestionMark,
+            html,
+            plainText,
+        });
+
+        if (containsQuestionMark) {
             unresolvedLines.push(`=== ${cid} ===`);
             unresolvedLines.push(plainText);
             unresolvedLines.push("");
@@ -941,6 +950,7 @@ async function main() {
 
     const outAll = `${PROJECT_ROOT}/.vscode/all_tooltips_plain.txt`;
     const outBad = `${PROJECT_ROOT}/.vscode/unresolved_tooltips_bun.txt`;
+    const outJson = `${PROJECT_ROOT}/tmp/fallback_tooltips_display.json`;
 
     await Bun.write(outAll, allLines.join("\n"));
     console.log(`All tooltips → ${outAll}`);
@@ -948,6 +958,10 @@ async function main() {
     const badCount = unresolvedLines.filter(l => l.startsWith("===")).length;
     await Bun.write(outBad, `Unresolved champions: ${badCount}\n\n` + unresolvedLines.join("\n"));
     console.log(`Unresolved (${badCount}) → ${outBad}`);
+
+    // UTF-8 BOM to keep Japanese text readable in Windows editors.
+    await Bun.write(outJson, "\uFEFF" + JSON.stringify(jsonRows, null, 2));
+    console.log(`Fallback tooltip JSON → ${outJson}`);
 }
 
 main();

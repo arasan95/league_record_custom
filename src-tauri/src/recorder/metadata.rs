@@ -200,6 +200,7 @@ pub async fn process_data(
                     participant_id: *pid,
                     total_gold: pf.total_gold,
                     minions: (pf.minions_killed + pf.jungle_minions_killed) as i64,
+                    level: Some(pf.level),
                 })
                 .collect();
 
@@ -453,6 +454,7 @@ pub async fn process_data_with_retry(
                     participant_id: *pid,
                     total_gold: pf.total_gold,
                     minions: (pf.minions_killed + pf.jungle_minions_killed) as i64,
+                    level: Some(pf.level),
                 })
                 .collect();
 
