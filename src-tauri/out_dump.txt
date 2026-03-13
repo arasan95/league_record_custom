@@ -1,0 +1,63 @@
+   Compiling LeagueRecord v1.1.4 (C:\Users\fjnce\Downloads\league_record-master - 1\LeagueRecord_custom\src-tauri)
+warning: unused imports: `PathBuf` and `Path`
+ --> src\bin\test_calc_dump.rs:2:17
+  |
+2 | use std::path::{Path, PathBuf};
+  |                 ^^^^  ^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `resolve_stat_name` is never used
+ --> src\bin\..\wad\extractor.rs:4:8
+  |
+4 | pub fn resolve_stat_name(
+  |        ^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `format_ranks` is never used
+   --> src\bin\..\wad\extractor.rs:121:8
+    |
+121 | pub fn format_ranks(ranks: &[f32]) -> String {
+    |        ^^^^^^^^^^^^
+
+warning: function `extract_spell_vars` is never used
+   --> src\bin\..\wad\extractor.rs:139:8
+    |
+139 | pub fn extract_spell_vars(spell_obj: &HashMap<String, BinValue>) -> Option<(String, HashMap<String, String>)> {
+    |        ^^^^^^^^^^^^^^^^^^
+
+warning: function `get_champion_wads` is never used
+  --> src\bin\..\wad\updater.rs:28:8
+   |
+28 | pub fn get_champion_wads(install_dir: &Path) -> Vec<PathBuf> {
+   |        ^^^^^^^^^^^^^^^^^
+
+warning: function `load_hash_db` is never used
+  --> src\bin\..\wad\updater.rs:50:4
+   |
+50 | fn load_hash_db() -> HashMap<u32, String> {
+   |    ^^^^^^^^^^^^
+
+warning: function `extract_all_champions_to_json` is never used
+   --> src\bin\..\wad\updater.rs:112:8
+    |
+112 | pub fn extract_all_champions_to_json(install_dir: &Path, output_path: &Path) -> Result<(), anyhow::Error> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `LeagueRecord` (bin "test_calc_dump") generated 7 warnings (run `cargo fix --bin "test_calc_dump" -p LeagueRecord` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized] target(s) in 1.98s
+     Running `target\debug\test_calc_dump.exe`
+--- Testing calculation formulas for: Mel ---
+Calc: AllDamageHit
+  formula: InitialDamage + 60%AP + (ExplosionDamage + 5%AP × (ExplosionCount + -1))
+  substitutedFormula: 60/90/120/150/180 + 60%AP + (5/7/9/11/13 + 5%AP × (6/7/8/9/10 + -1))
+  resolvedValue: 85/132/183/238/297 + (85/90/95/100/105%AP)
+Calc: TotalExplosionDamage
+  formula: ExplosionDamage + 5%AP
+  substitutedFormula: 5/7/9/11/13 + 5%AP
+  resolvedValue: 5/7/9/11/13 + (5%AP)
+Calc: {c6579b07}
+  formula: InitialDamage + 60%AP
+  substitutedFormula: 60/90/120/150/180 + 60%AP
+  resolvedValue: 60/90/120/150/180 + (60%AP)
