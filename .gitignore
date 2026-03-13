@@ -2,6 +2,8 @@
 logs
 .log/
 *.log
+src-tauri/out.txt
+src-tauri/out_dump.txt
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
