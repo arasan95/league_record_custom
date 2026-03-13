@@ -149,6 +149,8 @@ pub struct ParticipantGold {
     pub total_gold: i64,
     #[serde(default)]
     pub minions: i64,
+    #[serde(default)]
+    pub level: Option<i64>,
 }
 
 #[cfg_attr(test, derive(specta::Type))]

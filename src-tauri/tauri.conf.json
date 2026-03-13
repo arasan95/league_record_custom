@@ -33,7 +33,8 @@
     "resources": {
       "target/libobs": "libobs",
       "../licenses/*": "licenses/",
-      "../LICENSE.txt": "LICENSE.txt"
+      "../LICENSE.txt": "LICENSE.txt",
+      "resources/tooltip_data.db": "tooltip_data.db"
     },
     "shortDescription": "Record and review LoL games",
     "longDescription": "Record and review League of Legends games",

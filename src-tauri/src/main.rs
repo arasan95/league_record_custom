@@ -74,7 +74,8 @@ fn main() {
             commands::download_image,
             commands::save_scoreboard_cache,
             commands::load_scoreboard_cache,
-            commands::update_champion_data
+            commands::update_champion_data,
+            commands::load_tooltip_locale_db
         ])
         .setup(|app| app.app_handle().setup().map_err(anyhow::Error::into))
         .build(tauri::generate_context!());

@@ -46,3 +46,6 @@ ranked_stats_dump.json
 raw_input_example.py
 *.bak
 .mypy_cache
+scripts
+tmp
+docs

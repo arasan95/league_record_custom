@@ -6,7 +6,7 @@ import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import * as clipboard from "@tauri-apps/plugin-clipboard-manager";
 import { commands, type GameMetadata, type GoldFrame, type ParticipantGold, type MarkerFlags, type Recording, type Settings, type MatchTeam, type Participant, type GameEvent } from "./bindings";
-import { getChampionIconUrl, getChampionIconUrlById, getTftUnitIconUrl, getTftTraitIconUrl, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, ensureTftDataLoaded, getItemPrice, getChampionNameById, getChampionEnglishNameByIdSync, getChampionLocalizedNameByIdSync, getDetailedChampionData, getSummonerSpellData, getItemData, getRuneData, getTftItemIconUrl, getGameModeByQueueId } from "./datadragon";
+import { getChampionIconUrl, getChampionIconUrlById, getTftUnitIconUrl, getTftTraitIconUrl, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, ensureTftDataLoaded, getItemPrice, getChampionNameById, getChampionEnglishNameByIdSync, getChampionLocalizedNameByIdSync, getDetailedChampionData, getLocalChampionTooltips, getSummonerSpellData, getItemData, getRuneData, getTftItemIconUrl, getGameModeByQueueId } from "./datadragon";
 import { getCurrentPatchVersion, getSpawnTimers } from "./version";
 import { InventoryTimeline } from "./timeline";
 import { getObjectiveConfig } from "./objectives";
@@ -17,7 +17,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 import { open } from "@tauri-apps/plugin-shell";
 import { toVideoId, toVideoName, isFavorite } from "./util";
-import { showGlobalTooltip, hideGlobalTooltip, buildChampionTooltipHtml, buildSummonerSpellTooltipHtml, buildItemTooltipHtml, buildTrinketTooltipHtml, buildRuneTooltipHtml } from "./tooltip";
+import { showGlobalTooltip, hideGlobalTooltip, buildChampionTooltipHtml, buildLocalChampionTooltipHtml, buildSummonerSpellTooltipHtml, buildItemTooltipHtml, buildTrinketTooltipHtml, buildRuneTooltipHtml } from "./tooltip";
 import { getText, type Language } from "./i18n";
 import monoTower from "../assets/match-history-icons/mono-tower.png";
 import monoVoidgrub from "../assets/match-history-icons/mono-voidgrub.png";
@@ -64,6 +64,7 @@ export default class UI {
     private readonly sizeTotalText;
     private readonly sizeMaxText;
     private readonly storagePctText;
+    private readonly storageInfoEl;
 
     private maxStorageGb: number = 0; // Loaded from settings
 
@@ -176,6 +177,7 @@ export default class UI {
     public checkWindowSize() {
         const w = window.innerWidth;
         const h = window.innerHeight;
+        this.updateStorageInfoVisibility();
         
         // Sidebar Responsive
         if (w < 800) {
@@ -211,8 +213,19 @@ export default class UI {
         }
     }
 
+    private updateStorageInfoVisibility() {
+        if (!this.storageInfoEl) return;
+
+        const currentHeight = window.outerHeight || window.innerHeight;
+        const maxHeight = window.screen?.availHeight || window.innerHeight;
+        const hideThreshold = maxHeight * 0.7;
+        const shouldHide = currentHeight <= hideThreshold;
+
+        this.storageInfoEl.style.display = shouldHide ? "none" : "";
+    }
+
     private timeline: InventoryTimeline | null = null;
-    private scoreboardRefs: Map<number, { items: HTMLImageElement[], trinket: HTMLImageElement, goldText: HTMLElement, participantId: number }> = new Map();
+    private scoreboardRefs: Map<number, { items: HTMLImageElement[], trinket: HTMLImageElement, goldText: HTMLElement, champLevelText: HTMLElement, participantId: number }> = new Map();
     private goldTimeline: GoldFrame[] = [];
     private goldDiffRefs: HTMLElement[] = [];
     private participants: Participant[] = [];
@@ -301,6 +314,7 @@ export default class UI {
         this.sizeTotalText = document.querySelector<HTMLSpanElement>("#size-total")!;
         this.sizeMaxText = document.querySelector<HTMLSpanElement>("#size-max")!;
         this.storagePctText = document.querySelector<HTMLDivElement>("#storage-pct")!;
+        this.storageInfoEl = document.querySelector<HTMLDivElement>(".storage-info")!;
         
         // Resize Handler for Physical Pixel Layout
         this.handleResize(); // Initial check
@@ -621,6 +635,15 @@ export default class UI {
                 const el = this.player.el();
                 if (el) {
                     el.addEventListener("wheel", (e: WheelEvent) => {
+                        const tooltipEl = document.querySelector(".league-tooltip") as HTMLElement | null;
+                        if (tooltipEl && tooltipEl.style.display !== "none") {
+                            const r = tooltipEl.getBoundingClientRect();
+                            if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+                                // Let tooltip consume wheel for scrolling.
+                                return;
+                            }
+                        }
+
                         let isModifierPressed = false;
                         if (this.scrollFrameStepModifier === "Shift") isModifierPressed = e.shiftKey;
                         else if (this.scrollFrameStepModifier === "Ctrl") isModifierPressed = e.ctrlKey;
@@ -1820,25 +1843,6 @@ export default class UI {
         const existingLi = document.getElementById(recording.videoId);
         
         if (existingLi && this.lastOnVideo) {
-            // "Only reload ... the ones that haven't been loaded"
-            // If it already has metadata class, it's loaded.
-            if (existingLi.classList.contains("has-metadata")) {
-               // Skip update if requested by logic (optional, but requested by user to be efficient/minimal)
-               // However, maybe metadata CHANGED? Let's check user intent.
-               // "Sidebar delay... filename only... process to retry... Only reload ones not loaded"
-               // So if it IS loaded (has-metadata), we can skip.
-               // BUT if we just renamed it? Rename calls full updateSidebar usually.
-               // Here we are reacting to MetadataChanged.
-               // If MetadataChanged fires for an already loaded item, it might be a fix or improvement.
-               // But respecting "Only reload ... not loaded":
-               // Let's check if recording has metadata NOW.
-               if (recording.metadata && "Metadata" in recording.metadata) {
-                   // New data is full. Old data was full.
-                   console.log(`Skipping UI update for ${recording.videoId} as it already has metadata.`);
-                   return;
-               }
-            }
-            
             const newLi = this.createRecordingItem(
                 recording, 
                 this.lastOnVideo, 
@@ -2961,6 +2965,13 @@ export default class UI {
                 const row = this.vjs.dom.createEl("div", {}, { class: "player-row" }) as HTMLElement;
                 const isMe = p.participantId === data.participantId;
                 const img = this.vjs.dom.createEl("img", { src: cachedChampIcon }, { class: "champ-icon" }) as HTMLImageElement;
+                const initialChampLevel = (typeof p.champLevel === "number" && p.champLevel > 0) ? p.champLevel : 1;
+                const champLevelEl = this.vjs.dom.createEl("div", {}, { class: "champ-level-overlay" }, `${initialChampLevel}`) as HTMLElement;
+                const champIconWrap = this.vjs.dom.createEl("div", {}, { class: "champ-icon-wrap" }, [img, champLevelEl]) as HTMLElement;
+                const scheduleHideTooltip = () => {
+                    // Visibility should strictly follow whether the cursor is on the icon element.
+                    setTimeout(() => hideGlobalTooltip(), 30);
+                };
                 img.onerror = () => {
                     if (img.src !== cDragonUrl) {
                         console.warn(`Local cache failed for champion ${p.championId}, retrying remote: ${cDragonUrl}`);
@@ -2972,19 +2983,29 @@ export default class UI {
                 let isHovered = false;
                 img.addEventListener("mouseenter", async () => {
                     isHovered = true;
-                    // console.log("Fetching data for champion:", p.championId);
-                    const data = await getDetailedChampionData(p.championId, getCurrentPatchVersion(), settings.language);
-                    if (!isHovered) return; // Prevent old fetch from stealing focus
-
-                    // console.log("Champ data:", data);
-                    if (data && data.spells) {
-                        const html = buildChampionTooltipHtml(data, settings.language || "ja");
+                    // Try local JSON first
+                    const tooltips = await getLocalChampionTooltips(p.championId, settings.language || "ja");
+                    if (!isHovered) return;
+                    
+                    if (tooltips) {
+                        const fallbackData = await getDetailedChampionData(p.championId, getCurrentPatchVersion(), settings.language);
+                        if (!isHovered) return;
+                        const html = buildLocalChampionTooltipHtml(tooltips, settings.language || "ja", fallbackData || null);
                         if (html) showGlobalTooltip(img, html);
+                    } else {
+                        // Fallback to DDragon
+                        const data = await getDetailedChampionData(p.championId, getCurrentPatchVersion(), settings.language);
+                        if (!isHovered) return; // Prevent old fetch from stealing focus
+
+                        if (data && data.spells) {
+                            const html = buildChampionTooltipHtml(data, settings.language || "ja");
+                            if (html) showGlobalTooltip(img, html);
+                        }
                     }
                 });
                 img.addEventListener("mouseleave", () => {
                     isHovered = false;
-                    hideGlobalTooltip();
+                    scheduleHideTooltip();
                 });
 
                 // Champion Wiki Link
@@ -3037,7 +3058,7 @@ export default class UI {
                             showGlobalTooltip(el, buildSummonerSpellTooltipHtml(spellData));
                         }
                     });
-                    el.addEventListener("mouseleave", () => hideGlobalTooltip());
+                    el.addEventListener("mouseleave", () => scheduleHideTooltip());
                 });
 
                 const spells = this.vjs.dom.createEl("div", {}, { class: "spells" }, [ spell1El, spell2El ]) as HTMLElement;
@@ -3054,7 +3075,7 @@ export default class UI {
                         }
                     }
                 });
-                runeIconEl.addEventListener("mouseleave", () => hideGlobalTooltip());
+                runeIconEl.addEventListener("mouseleave", () => scheduleHideTooltip());
 
                 const runesDiv = this.vjs.dom.createEl("div", {}, { class: "runes" }, [
                    runeIconEl
@@ -3137,7 +3158,7 @@ export default class UI {
                             showGlobalTooltip(target, buildItemTooltipHtml(itemData));
                         }
                     });
-                    i.addEventListener("mouseleave", () => hideGlobalTooltip());
+                    i.addEventListener("mouseleave", () => scheduleHideTooltip());
                     
                     slotDiv.append(i);
                     itemsGrid.append(slotDiv);
@@ -3162,7 +3183,7 @@ export default class UI {
                         showGlobalTooltip(target, buildTrinketTooltipHtml(itemData));
                     }
                 });
-                trinketImg.addEventListener("mouseleave", () => hideGlobalTooltip());
+                trinketImg.addEventListener("mouseleave", () => scheduleHideTooltip());
                 
                 trinketImg.onerror = () => {
                      trinketImg.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -3274,7 +3295,7 @@ export default class UI {
                 if (teamId === 200) {
                     // Red Team (Right Side)
                     // Desired: ... [Gold] [Meta] [Name]
-                    img.style.order = "1";
+                    champIconWrap.style.order = "1";
                     csDiv.style.order = "2";
                     kdaDiv.style.order = "3";
                     itemsGrid.style.order = "4";
@@ -3303,7 +3324,7 @@ export default class UI {
                     itemsGrid.style.order = "7";
                     kdaDiv.style.order = "8";
                     csDiv.style.order = "9";
-                    img.style.order = "10";
+                    champIconWrap.style.order = "10";
                     metaDiv.style.textAlign = "center"; 
                     metaDiv.style.marginLeft = "0px";
                     metaDiv.style.marginRight = "0px";
@@ -3313,7 +3334,7 @@ export default class UI {
                 }
                 
                 // Append all to row
-                row.append(metaDiv, img, csDiv, kdaDiv, itemsGrid, trinketDiv, spells, runesDiv, goldDiv, name);
+                row.append(metaDiv, champIconWrap, csDiv, kdaDiv, itemsGrid, trinketDiv, spells, runesDiv, goldDiv, name);
                 
                 return {
                     row,
@@ -3322,6 +3343,7 @@ export default class UI {
                     itemImgs,
                     trinketImg,
                     goldDiv,
+                    champLevelEl,
                     participantId: p.participantId,
                     p,
                     assets: assetsToSave
@@ -3341,6 +3363,7 @@ export default class UI {
                     items: res.itemImgs,
                     trinket: res.trinketImg,
                     goldText: res.goldDiv,
+                    champLevelText: res.champLevelEl,
                     participantId: res.participantId 
                 });
             }
@@ -3583,6 +3606,11 @@ export default class UI {
                          const data = frameDataMap.get(p.participantId);
                          const cs = data?.minions || 0;
                          ref.textContent = `${cs}`;
+                         const level = data?.level ?? null;
+                         const champLevelText = this.scoreboardRefs.get(p.participantId)?.champLevelText;
+                         if (champLevelText && level !== null && level > 0) {
+                             champLevelText.textContent = `${level}`;
+                         }
                      }
 
                      const g = itemGoldMap.get(p.participantId) || 0;
