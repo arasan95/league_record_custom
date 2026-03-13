@@ -72,6 +72,7 @@ If the UI does not reflect changes as expected, press F5 to refresh the view.
 
 In case you have any problems, questions or suggestions feel free to open an issue or contact me.
 <arasan1115525@gmail.com>
+[Google Form](https://docs.google.com/forms/d/e/1FAIpQLScM3I0di-DeqQACBhGfrewibuos2xl-pTNv4XoYhK3R0p3ziA/viewform)
 
 ---
 
