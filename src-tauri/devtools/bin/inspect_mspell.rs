@@ -1,11 +1,16 @@
-use league_record::wad::bin::{parse_prop, BinValue};
-use league_record::wad::hash::fnv1a_32;
-use league_record::wad::parser::{extract_file_from_wad, parse_wad_entries};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+#[path = "../wad/mod.rs"]
+mod wad;
+
+use wad::bin::{parse_prop, BinValue};
+use wad::hash::{build_basic_hash_db, fnv1a_32};
+use wad::known_hashes::get_known_hashes;
+use wad::parser::{extract_file_from_wad, parse_wad_entries};
+
 pub fn load_hash_db() -> HashMap<u32, String> {
-    let mut db = league_record::wad::hash::build_basic_hash_db();
+    let mut db = build_basic_hash_db();
     let common_words = vec![
         "SpellObject", "mSpell", "mScriptName", "ObjectName", "DataValues",
         "mName", "mValues", "mSpellCalculations", "CharacterRecord", "spellNames",
@@ -17,7 +22,7 @@ pub fn load_hash_db() -> HashMap<u32, String> {
     for w in common_words {
         db.insert(fnv1a_32(w), w.to_string());
     }
-    for w in league_record::wad::known_hashes::get_known_hashes() {
+    for w in get_known_hashes() {
         db.insert(fnv1a_32(w), w.to_string());
     }
     db
