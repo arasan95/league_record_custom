@@ -52,6 +52,10 @@ default-run = "LeagueRecord"
 name = "LeagueRecord"
 path = "src/main.rs"
 
+[[bin]]
+name = "find_wad_object"
+path = "src/bin/find_wad_object.rs"
+
 
 [dependencies]
 tauri = { version = "2.10", features = ["protocol-asset", "tray-icon"] }
