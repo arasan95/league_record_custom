@@ -549,7 +549,7 @@
    Blue Team (100) - [Spells] --(5px)-- [Trinket] --(2px)-- [Items] 
    Symmetry Goal: Spells-Trinket (5px), Trinket-Items (2px)
 */
-.team-100 .player-name      { order: 1; text-align: right; margin-right: 15px; } 
+.team-100 .player-name      { order: 1; text-align: right; font-size: 11px } 
 .team-100 .runes            { order: 2; margin-right: 0px; }
 .team-100 .spells           { order: 3; margin-right: 0px; } 
 .team-100 .trinket-container{ order: 4; margin-left: 5px; margin-right: 2px; } 
@@ -573,7 +573,7 @@
 .team-200 .trinket-container{ order: 5; margin-left: 0px; margin-right: 5px; } 
 .team-200 .spells           { order: 6; margin-right: 0px; }
 .team-200 .runes            { order: 7; margin-right: 0px; }
-.team-200 .player-name      { order: 8; text-align: left; }
+.team-200 .player-name      { order: 8; text-align: left; font-size: 11px;}
 
 /* Remove old order rules */
 

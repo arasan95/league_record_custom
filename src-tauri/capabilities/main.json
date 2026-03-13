@@ -74,6 +74,7 @@
         }
       ]
     },
-    "core:app:default"
+    "core:app:default",
+    "process:default"
   ]
 }

@@ -1906,8 +1906,8 @@ export default class UI {
                     await update.downloadAndInstall();
                     statusMsg.innerText = getText(lang as any, "updateRestart" as any) || "Restarting...";
                     statusMsg.style.color = "#4CAF50";
-                    const { invoke } = await import("@tauri-apps/api/core");
-                    await invoke("plugin:updater|restart");
+                    const { relaunch } = await import("@tauri-apps/plugin-process");
+                    await relaunch();
                 } catch (e) {
                     console.error("Install update failed", e);
                     statusMsg.innerText = getText(lang as any, "updateError" as any) || "Update failed.";
@@ -3001,14 +3001,18 @@ export default class UI {
                             return;
                         }
 
-                        // Replace {Q} -> Capitalized, {q} -> lowercase
-                        let url = "";
-                        if (settings.championWikiBaseUrl.includes("{Q}") || settings.championWikiBaseUrl.includes("{q}")) {
-                             url = settings.championWikiBaseUrl
-                                 .replace("{Q}", champName)
-                                 .replace("{q}", champName.toLowerCase());
+                        const champEng = getChampionEnglishNameByIdSync(p.championId) || champName;
+                        let url = settings.championWikiBaseUrl;
+                        if (url.includes("{")) {
+                            url = url
+                                .replace(/{id}/g, champName)
+                                .replace(/{name}/g, champEng)
+                                .replace(/{name_}/g, champEng.replace(/\s+/g, "_"))
+                                .replace(/{nameEsc}/g, encodeURIComponent(champEng))
+                                .replace(/{Q}/g, champName)
+                                .replace(/{q}/g, champName.toLowerCase());
                         } else {
-                             url = `${settings.championWikiBaseUrl}${champName}`;
+                            url = `${url}${champName}`;
                         }
                         
                         try {
@@ -3081,14 +3085,18 @@ export default class UI {
                              return;
                          }
 
-                         // Replace {Q} -> Capitalized, {q} -> lowercase
-                         let url = "";
-                         if (settings.championBuildUrl.includes("{Q}") || settings.championBuildUrl.includes("{q}")) {
-                              url = settings.championBuildUrl
-                                  .replace("{Q}", champName)
-                                  .replace("{q}", champName.toLowerCase());
+                         const champEng = getChampionEnglishNameByIdSync(p.championId) || champName;
+                         let url = settings.championBuildUrl;
+                         if (url.includes("{")) {
+                             url = url
+                                .replace(/{id}/g, champName)
+                                .replace(/{name}/g, champEng)
+                                .replace(/{name_}/g, champEng.replace(/\s+/g, "_"))
+                                .replace(/{nameEsc}/g, encodeURIComponent(champEng))
+                                .replace(/{Q}/g, champName)
+                                .replace(/{q}/g, champName.toLowerCase());
                          } else {
-                              url = `${settings.championBuildUrl}${champName}`;
+                             url = `${url}${champName}`;
                          }
                          
                          try {
@@ -3409,14 +3417,23 @@ export default class UI {
                         return;
                     }
 
+                    const myEng = getChampionEnglishNameByIdSync(myP.championId) || myChampName;
+                    const oppEng = getChampionEnglishNameByIdSync(oppP.championId) || targetChampName;
+
                     // Replace placeholders
-                    // {My} -> Capitalized, {my} -> lowercase
-                    // {Opponent} -> Capitalized, {opponent} -> lowercase
                     const url = settings.championMatchupUrl
-                        .replace("{My}", myChampName)
-                        .replace("{my}", myChampName.toLowerCase())
-                        .replace("{Opponent}", targetChampName)
-                        .replace("{opponent}", targetChampName.toLowerCase()); 
+                        .replace(/{My_id}/g, myChampName)
+                        .replace(/{My_name}/g, myEng)
+                        .replace(/{My_name_}/g, myEng.replace(/\s+/g, "_"))
+                        .replace(/{My_nameEsc}/g, encodeURIComponent(myEng))
+                        .replace(/{My}/g, myChampName)
+                        .replace(/{my}/g, myChampName.toLowerCase())
+                        .replace(/{Opp_id}/g, targetChampName)
+                        .replace(/{Opp_name}/g, oppEng)
+                        .replace(/{Opp_name_}/g, oppEng.replace(/\s+/g, "_"))
+                        .replace(/{Opp_nameEsc}/g, encodeURIComponent(oppEng))
+                        .replace(/{Opponent}/g, targetChampName)
+                        .replace(/{opponent}/g, targetChampName.toLowerCase());
                     try {
                         await open(url);
                     } catch (err) {
@@ -4660,6 +4677,11 @@ export default class UI {
             class: "settings-section-title"
         }, getText(lang, "scoreboardLinks"));
 
+        const scoreboardLinksHint = this.vjs.dom.createEl("div", {}, { 
+            class: "settings-group-styled",
+            style: "grid-column: 1 / -1; font-size: 0.85em; color: #aaa; margin-bottom: 15px; padding: 10px; background: rgba(50,50,50,0.5); border: 1px dashed #666;"
+        }, getText(lang, "scoreboardLinksHint" as any) || "Tags: {id}=LeeSin, {name}=Lee Sin, {name_}=Lee_Sin, {nameEsc}=Lee%20Sin");
+
         const trackingUrlContainer = this.vjs.dom.createEl("div", {}, { class: "settings-group full-width", style: "border: none; padding: 0; background: none;" }, [
             this.vjs.dom.createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "trackingUrl")),
             this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, getText(lang, "trackingUrlExample")),
@@ -4671,8 +4693,8 @@ export default class UI {
         const championWikiUrlInput = this.vjs.dom.createEl("input", {}, {
             class: "settings-input",
             type: "text",
-            placeholder: "e.g. https://wiki.leagueoflegends.com/en-us/{q}",
-            value: settings.championWikiBaseUrl || "",
+            placeholder: "e.g. https://wiki.leagueoflegends.com/en-us/{name_}",
+            value: settings.championWikiBaseUrl || "https://wiki.leagueoflegends.com/en-us/{name_}",
             style: "flex: 1;"
         }) as HTMLInputElement;
 
@@ -4717,6 +4739,7 @@ export default class UI {
             class: "settings-group-styled",
             style: "grid-column: 1 / -1;"
         }, [
+            scoreboardLinksHint,
             this.vjs.dom.createEl("div", {}, { style: "display: flex; flex-direction: column; gap: 5px;" }, [
                 trackingUrlContainer,
                 championWikiUrlContainer,
