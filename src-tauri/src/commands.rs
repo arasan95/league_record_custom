@@ -291,7 +291,7 @@ pub async fn clear_cache(app_handle: AppHandle) -> Result<(), String> {
     // In Tauri v2, we use app_handle.path().app_local_data_dir()
     let app_dir = app_handle.path().app_local_data_dir().map_err(|e| e.to_string())?;
 
-    let cache_dirs = ["img_cache", "items_cache"];
+    let cache_dirs = ["img_cache", "items_cache", "tooltip_cache"];
 
     for dir in cache_dirs {
         let path = app_dir.join(dir);
