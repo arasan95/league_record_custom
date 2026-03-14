@@ -711,7 +711,7 @@ async function mergeCDragonData(champName: string, champData: any, cdragonFilePa
 
                                     if (statMatch.includes("AttackDamage") || statId === "2" || formId === "2") statMatch = "AD";
                                     else if (statMatch.includes("AbilityPower") || statId === "1" || formId === "1") statMatch = "AP";
-                                    else if (statMatch.includes("Health") || statId === "11") statMatch = "HP";
+                                    else if (statMatch.includes("Health") || statId === "11" || statId === "12") statMatch = "HP";
                                     else if (statMatch.includes("Armor") || statId === "5") statMatch = "Armor";
                                     else if (statMatch.includes("SpellBlock") || statMatch.includes("MagicResist") || statId === "6") statMatch = "MR";
                                     

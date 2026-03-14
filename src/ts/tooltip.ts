@@ -978,7 +978,6 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
 
 export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: string = "ja", fallbackChampionData: any = null): string {
     if (!champTooltipJson) return "";
-    
 
     const fnv1a_32 = (s: string) => {
         let h = 0x811c9dc5;
@@ -1095,6 +1094,27 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             return undefined;
         };
 
+        const resolveFromAlias = (alias: string, nameLower: string): string | undefined => {
+            const slotData = allCalcFormulas[alias];
+            if (!slotData || typeof slotData !== "object") return undefined;
+            const vm = slotData.variableMapping || {};
+            const dv = slotData.dataValues || {};
+
+            const dotTrimmed = nameLower.replace(/\.\d+$/, "");
+            const candidates = dotTrimmed !== nameLower ? [nameLower, dotTrimmed] : [nameLower];
+            for (const cand of candidates) {
+                const vmKey = Object.keys(vm).find((k) => k.toLowerCase() === cand);
+                if (vmKey && vm[vmKey]?.resolvedValue !== undefined && vm[vmKey]?.resolvedValue !== null) {
+                    return String(vm[vmKey].resolvedValue);
+                }
+                const dvKey = Object.keys(dv).find((k) => k.toLowerCase() === cand);
+                if (dvKey && dv[dvKey] !== undefined && dv[dvKey] !== null) {
+                    return String(dv[dvKey]);
+                }
+            }
+            return undefined;
+        };
+
         const resolveLocalVar = (nameRaw: string, targetFbMap: Record<string, any> = fbMap): string | undefined => {
             const name = nameRaw.toLowerCase();
             const dotTrimmed = name.replace(/\.\d+$/, "");
@@ -1113,6 +1133,34 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                 if (targetFbMap[cand] !== undefined) return String(targetFbMap[cand]);
                 const candHash = fnv1a_32(cand);
                 if (targetFbMap[candHash] !== undefined) return String(targetFbMap[candHash]);
+            }
+
+            // Common pattern in WAD tooltips: "@FooCalc@" while variable mapping stores "foo".
+            if (targetFbMap === fbMap && name.endsWith("calc")) {
+                const stem = name.replace(/calc$/, "");
+                const stemCandidates = [stem, stem.replace(/_$/, "")].filter(Boolean);
+                for (const stemKey of stemCandidates) {
+                    if (varMapping2[stemKey]?.resolvedValue !== undefined) {
+                        return String(varMapping2[stemKey].resolvedValue);
+                    }
+                    const dataKey = Object.keys(dataValues2).find((k) => k.toLowerCase() === stemKey);
+                    if (dataKey && dataValues2[dataKey] !== undefined) {
+                        return String(dataValues2[dataKey]);
+                    }
+                    if (targetFbMap[stemKey] !== undefined) return String(targetFbMap[stemKey]);
+                    const stemHash = fnv1a_32(stemKey);
+                    if (targetFbMap[stemHash] !== undefined) return String(targetFbMap[stemHash]);
+                }
+            }
+
+            // Some champions store passive tooltip text that references the W spell's variables.
+            // Example: Vayne passive text reuses Silver Bolts (% max HP true damage) placeholders.
+            if (targetFbMap === fbMap && slot === "Passive") {
+                const wAlias = champTooltipJson.spell_map?.["W"];
+                if (wAlias && typeof wAlias === "string" && wAlias !== spellMapAlias) {
+                    const v = resolveFromAlias(wAlias, name);
+                    if (v !== undefined) return v;
+                }
             }
 
             // Last resort (same champion, other slots): use exact var name only when value is unique.
@@ -1355,14 +1403,14 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             let resolvedVal: string | number | undefined = undefined;
 
             // first check if pre-resolved in all_calc_formulas (only if not a cross-spell ref)
-            if (targetFbMap === fbMap && varMapping2[varName] && varMapping2[varName].resolvedValue) {
+            if (targetFbMap === fbMap && varMapping2[varName] && varMapping2[varName].resolvedValue !== undefined && varMapping2[varName].resolvedValue !== null) {
                 resolvedVal = varMapping2[varName].resolvedValue;
             } else {
                 // then check datavalues (only if not a cross-spell ref)
                 if (targetFbMap === fbMap) {
                     const exactCases = Object.keys(dataValues2);
                     const keyMatch = exactCases.find(k => k.toLowerCase() === varName);
-                    if (keyMatch && dataValues2[keyMatch]) {
+                    if (keyMatch && dataValues2[keyMatch] !== undefined && dataValues2[keyMatch] !== null) {
                         resolvedVal = dataValues2[keyMatch];
                     }
                 }
@@ -1411,14 +1459,14 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                         
                         if (affix) return ""; // Hide unmapped prefixes/postfixes to prevent clutter
                         
-                        let baseVal = undefined;
-                        if (targetFbMap === fbMap && varMapping2[baseKey] && varMapping2[baseKey].resolvedValue) {
+                        let baseVal: string | number | undefined = resolveLocalVar(baseKey, targetFbMap);
+                        if (targetFbMap === fbMap && varMapping2[baseKey] && varMapping2[baseKey].resolvedValue !== undefined && varMapping2[baseKey].resolvedValue !== null) {
                             baseVal = varMapping2[baseKey].resolvedValue;
                         } else {
                             if (targetFbMap === fbMap) {
                                 const exactCases = Object.keys(dataValues2);
                                 const keyMatch = exactCases.find(k => k.toLowerCase() === baseKey);
-                                if (keyMatch && dataValues2[keyMatch]) {
+                                if (keyMatch && dataValues2[keyMatch] !== undefined && dataValues2[keyMatch] !== null) {
                                     baseVal = dataValues2[keyMatch];
                                 }
                             }

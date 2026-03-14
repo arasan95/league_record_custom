@@ -1115,9 +1115,6 @@ export default class UI {
             if (this.filterClip) {
                 // If filter is ON, show ONLY clips
                 if (!isClip) isVisible = false;
-            } else {
-                // If filter is OFF, show ONLY normal recordings (hide clips)
-                if (isClip) isVisible = false;
             }
             // 3. Ranked Filter
             if (this.filterRanked) {
@@ -1319,8 +1316,34 @@ export default class UI {
     ) => {
         console.log("createRecordingItem:", recording.videoId, recording.metadata);
         const videoName = toVideoName(recording.videoId);
+        const isClipRecording = recording.videoId.includes("_clip");
+        const formatSidebarDate = (name: string): string => {
+            // Normal recording: YYYY-MM-DD_HH-MM(-SS)
+            let m = name.match(/(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})(?:-\d{2})?$/);
+            if (m) {
+                return `${m[1]}/${parseInt(m[2], 10)}/${parseInt(m[3], 10)} ${m[4]}:${m[5]}`;
+            }
+            // Clip suffix: *_clip_YYYYMMDD_HHMMSS
+            m = name.match(/_clip_(\d{8})_(\d{6})$/);
+            if (!m) {
+                // Generic fallback: *YYYYMMDD_HHMMSS
+                m = name.match(/(\d{8})_(\d{6})$/);
+            }
+            if (m) {
+                const d = m[1];
+                const t = m[2];
+                const y = d.slice(0, 4);
+                const mo = parseInt(d.slice(4, 6), 10);
+                const da = parseInt(d.slice(6, 8), 10);
+                return `${y}/${mo}/${da} ${t.slice(0, 2)}:${t.slice(2, 4)}`;
+            }
+            return name;
+        };
         let displayContent: HTMLElement[] = [this.vjs.dom.createEl("span", {}, { class: "video-name" }, videoName) as HTMLElement];
         let liClass = "recording-item";
+        if (isClipRecording) {
+            liClass += " recording-clip";
+        }
         
         if (!recording.videoExists) {
             liClass += " video-deleted";
@@ -1333,18 +1356,7 @@ export default class UI {
         if (recording.metadata && "Metadata" in recording.metadata) {
             liClass += " has-metadata";
             const meta = recording.metadata.Metadata;
-            const parts = videoName.split("_");
-            
-            // Date Formatting
-            let dateStr = videoName;
-            if (parts.length === 2) {
-                const dParts = parts[0].split("-"); // YYYY-MM-DD
-                const tParts = parts[1].split("-"); // HH-MM-SS
-                if (dParts.length === 3 && tParts.length >= 2) {
-                        // YYYY/MM/DD HH:MM
-                        dateStr = `${dParts[0]}/${parseInt(dParts[1])}/${parseInt(dParts[2])} ${tParts[0]}:${tParts[1]}`;
-                }
-            }
+            const dateStr = formatSidebarDate(videoName);
 
             const champion = meta.championName;
             const kda = `${meta.stats.kills}/${meta.stats.deaths}/${meta.stats.assists}`;
@@ -1477,6 +1489,10 @@ export default class UI {
             }
             const modeSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-mode" }, displayMode);
             headerRow.append(timeSpan, modeSpan);
+            if (isClipRecording) {
+                const clipBadge = this.vjs.dom.createEl("span", {}, { class: "sidebar-clip-badge", title: "Clip" }, "CLIP");
+                headerRow.append(clipBadge);
+            }
 
             const bodyRow = this.vjs.dom.createEl("div", {}, { class: "sidebar-body-row" });
             const mainIconImg = this.vjs.dom.createEl("img", {}, { class: "main-champ-img" }) as HTMLImageElement;
@@ -1741,7 +1757,11 @@ export default class UI {
             displayContent = [mainContent];
 
         } else {
-             // do nothing, just show filename
+            if (isClipRecording) {
+                displayContent = [
+                    this.vjs.dom.createEl("span", {}, { class: "video-name" }, `[CLIP] ${videoName}`) as HTMLElement
+                ];
+            }
         }
         
         // Buttons (reuse logic)
@@ -4869,36 +4889,6 @@ export default class UI {
             value: settings.maxRecordingsSizeGb === null ? "" : settings.maxRecordingsSizeGb.toString()
         }) as HTMLInputElement;
 
-        // FFmpeg Path
-        const ffmpegPathInput = this.vjs.dom.createEl("input", {}, {
-            class: "settings-input",
-            type: "text",
-            placeholder: "Default (ffmpeg in PATH)",
-            value: settings.ffmpegPath || "",
-            style: "flex: 1;"
-        }) as HTMLInputElement;
-        
-        ffmpegPathInput.addEventListener("change", () => {
-             const val = ffmpegPathInput.value.trim();
-             settings.ffmpegPath = val === "" ? null : val;
-        });
-
-        const ffmpegBtn = this.vjs.dom.createEl("button", {
-             onclick: () => {
-                 commands.pickFfmpegPath().then(path => {
-                     if (path) {
-                         ffmpegPathInput.value = path;
-                         settings.ffmpegPath = path;
-                     }
-                 });
-             }
-        }, { class: "btn-browse" }, getText(lang, "browse")) as HTMLButtonElement;
-
-        const ffmpegContainer = this.vjs.dom.createEl("div", {}, { style: "display: flex; align-items: center; width: 100%;" }, [
-             ffmpegPathInput,
-             ffmpegBtn
-        ]);
-
         // Troubleshooting Section
         const clearCacheBtn = this.vjs.dom.createEl("button", {
              onclick: async () => {
@@ -4927,8 +4917,7 @@ export default class UI {
             createGroup(getText(lang, "framerate"), frSelect),
             createGroup(getText(lang, "recordAudio"), audioSelect),
             createGroup(getText(lang, "maxAge"), maxAgeInput),
-            createGroup(getText(lang, "maxSize"), maxSizeInput),
-            createGroup(getText(lang, "ffmpegPath"), ffmpegContainer as HTMLElement, true)
+            createGroup(getText(lang, "maxSize"), maxSizeInput)
         );
 
         generalGrid.append(

@@ -31,6 +31,28 @@ jobs:
           $path = "src-tauri/Cargo.toml"
           (Get-Content $path) -replace '^version = ".*"', "version = `"$version`"" | Set-Content $path
 
+      - name: Bundle FFmpeg for build
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg -y --no-progress
+          }
+          $ff = (Get-Command ffmpeg -ErrorAction Stop).Source
+          if (-not (Test-Path $ff)) {
+            Write-Error "ffmpeg.exe not found"
+            exit 1
+          }
+          $versionLine = (& $ff -version | Select-Object -First 1)
+          $version = "unknown"
+          if ($versionLine -match '^ffmpeg version\s+([^\s]+)') {
+            $version = $Matches[1]
+          }
+          ./src-tauri/resources/tools/ffmpeg/update_ffmpeg_bundle.ps1 `
+            -FfmpegExePath $ff `
+            -Version $version `
+            -SourceName "Chocolatey ffmpeg package" `
+            -SourceUrl "https://community.chocolatey.org/packages/ffmpeg"
+
       - run: bun install --linker=isolated && bun run --bun tauri build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

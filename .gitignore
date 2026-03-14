@@ -53,3 +53,6 @@ scripts
 tmp
 docs
 .markdownlint.json
+
+# Bundled binaries are prepared in CI, not tracked in git.
+src-tauri/resources/tools/ffmpeg/ffmpeg.exe

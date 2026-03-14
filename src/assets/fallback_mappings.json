@@ -8,7 +8,28 @@
     "EkkoW": {
     "e0": "{effect10}"
   },
-    "EliseHumanW": {
+  "EliseHumanW": {
     "spell.elisehumanw:totaldamage": "{totaldamage}"
+  },
+  "ZaahenPassive": {
+    "revivepercentcalc": "0.3/0.45/0.6/0.75"
+  },
+  "VaynePassive": {
+    "totaldamage": "6/7/8/9/10%",
+    "maxhealthratio1": "0.06",
+    "maxhealthratio2": "0.07",
+    "maxhealthratio3": "0.08",
+    "maxhealthratio4": "0.09",
+    "maxhealthratio5": "0.1",
+    "damagefloor1": "50",
+    "damagefloor2": "65",
+    "damagefloor3": "80",
+    "damagefloor4": "95",
+    "damagefloor5": "110",
+    "damagevsmonsters1": "140",
+    "damagevsmonsters2": "155",
+    "damagevsmonsters3": "170",
+    "damagevsmonsters4": "185",
+    "damagevsmonsters5": "200"
   }
 }

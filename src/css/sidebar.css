@@ -452,6 +452,22 @@
     font-weight: 600;
 }
 
+.sidebar-clip-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68em;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    color: #0f2230;
+    background: #2ad0ff;
+    border: 1px solid #7be4ff;
+    border-radius: 4px;
+    padding: 1px 5px;
+    line-height: 1.1;
+    margin-left: 2px;
+}
+
 /* Body Row: Icon [Stats] */
 .sidebar-body-row {
     display: flex;
@@ -501,6 +517,7 @@
     color: #999; /* Dimmed */
     margin-bottom: 2px;
     margin-right: 8px; /* Was translateX(-8px) */
+    white-space: nowrap;
 }
 
 /* Clean up removed classes */
