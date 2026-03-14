@@ -269,8 +269,10 @@ pub fn extract_spell_vars(
             8 => "CDR".to_string(),
             9 => "CritDmg".to_string(),
             10 => "MS".to_string(),
-            11 => "HP".to_string(),
-            12 => "Mana".to_string(),
+            // CommunityDragon's current spell data uses stat id 12 for health-based scaling
+            // in many champion tooltips (e.g. Vi passive shield).
+            11 => "Mana".to_string(),
+            12 => "HP".to_string(),
             14 => "OmniVamp".to_string(),
             15 => "PhysVamp".to_string(),
             20 => "Range".to_string(),
@@ -291,6 +293,86 @@ pub fn extract_spell_vars(
             arr.truncate(max_rank);
         }
         arr
+    }
+
+    fn extract_num(v: Option<&BinValue>) -> f32 {
+        match v {
+            Some(BinValue::Float(f)) => *f,
+            Some(BinValue::I32(i)) => *i as f32,
+            Some(BinValue::U32(u)) => *u as f32,
+            Some(BinValue::U8(u)) => *u as f32,
+            Some(BinValue::I8(i)) => *i as f32,
+            Some(BinValue::U16(u)) => *u as f32,
+            Some(BinValue::I16(i)) => *i as f32,
+            _ => 0.0,
+        }
+    }
+
+    fn get_prop<'a>(
+        map: &'a std::collections::HashMap<String, BinValue>,
+        key: &str,
+    ) -> Option<&'a BinValue> {
+        if let Some(v) = map.get(key) {
+            return Some(v);
+        }
+        let h = format!("{{{:08x}}}", crate::wad::hash::fnv1a_32(key));
+        map.get(&h)
+    }
+
+    fn expand_char_level_breakpoints(
+        part: &std::collections::HashMap<String, BinValue>,
+    ) -> Vec<f32> {
+        let mut values = Vec::with_capacity(18);
+        let mut per_level = extract_num(get_prop(part, "mInitialBonusPerLevel"));
+        let mut current = extract_num(get_prop(part, "mLevel1Value"));
+        let mut add_at_level: HashMap<usize, f32> = HashMap::new();
+        let mut per_level_at_level: HashMap<usize, f32> = HashMap::new();
+
+        if let Some(BinValue::List(bps)) = get_prop(part, "mBreakpoints") {
+            for bp in bps {
+                if let BinValue::Struct(m) | BinValue::Embedded(m) = bp {
+                    let lvl = extract_num(get_prop(m, "mLevel")) as i32;
+                    if !(1..=18).contains(&lvl) {
+                        continue;
+                    }
+                    let lvl_usize = lvl as usize;
+                    let add = extract_num(get_prop(m, "mAdditionalBonusAtThisLevel"));
+                    if add.abs() > f32::EPSILON {
+                        *add_at_level.entry(lvl_usize).or_insert(0.0) += add;
+                    }
+                    let new_per_level = extract_num(get_prop(m, "mBonusPerLevelAtAndAfter"));
+                    if new_per_level.abs() > f32::EPSILON
+                        || get_prop(m, "mBonusPerLevelAtAndAfter").is_some()
+                    {
+                        per_level_at_level.insert(lvl_usize, new_per_level);
+                    }
+                }
+            }
+        }
+
+        for lvl in 1..=18 {
+            if lvl > 1 {
+                if let Some(new_per_level) = per_level_at_level.get(&lvl) {
+                    per_level = *new_per_level;
+                }
+                current += per_level;
+            }
+            if let Some(add) = add_at_level.get(&lvl) {
+                current += *add;
+            }
+            values.push(current);
+        }
+
+        values
+    }
+
+    fn bin_bool_true(v: Option<&BinValue>) -> bool {
+        match v {
+            Some(BinValue::U8(1)) => true,
+            Some(BinValue::Bool(true)) => true,
+            Some(BinValue::I32(i)) if *i == 1 => true,
+            _ => false,
+        }
     }
 
     fn dv_to_str(vals: &[f32], max_rank: usize) -> String {
@@ -454,12 +536,8 @@ pub fn extract_spell_vars(
             }
 
             if ptype == "ByCharLevelBreakpointsCalculationPart" || ptype == "{09d8aa04}" {
-                let lv1 = match part.get("mLevel1Value") {
-                    Some(BinValue::Float(f)) => *f,
-                    Some(BinValue::I32(i)) => *i as f32,
-                    _ => 0.0,
-                };
-                return format!("LevelBreakpoints({})", lv1);
+                let vals = expand_char_level_breakpoints(part);
+                return format!("LevelBreakpoints({})", dv_to_str(&vals, 18));
             }
 
             if ptype == "SumOfSubPartsCalculationPart" || ptype == "{d607e492}" {
@@ -810,15 +888,9 @@ pub fn extract_spell_vars(
             }
 
             if ptype == "ByCharLevelBreakpointsCalculationPart" || ptype == "{09d8aa04}" {
-                let lv1 = match part.get("mLevel1Value") {
-                    Some(BinValue::Float(f)) => *f,
-                    Some(BinValue::I32(i)) => *i as f32,
-                    _ => 0.0,
-                };
-                return Some(CalcArray {
-                    base: vec![lv1; max_rank],
-                    ap: vec![0.0; max_rank],
-                });
+                // Character-level values need a 1..18 expansion and do not fit rank-locked
+                // arrays used in this fast numeric path, so we fallback to string resolver.
+                return None;
             }
 
             if ptype == "StatByCoefficientCalculationPart" || ptype == "{5815b0a9}" {
@@ -839,7 +911,10 @@ pub fn extract_spell_vars(
                         ap: vec![coeff; max_rank],
                     });
                 }
-                return Some(CalcArray { base: vec![], ap: vec![] });
+                // Non-AP stat scalings (AD/HP/Armor/...) cannot be numerically resolved without
+                // runtime champion stats. Returning None forces the string-based fallback path
+                // instead of emitting incorrect "0" resolved values.
+                return None;
             }
 
             if ptype == "SumOfSubPartsCalculationPart" || ptype == "{d607e492}" {
@@ -1099,10 +1174,7 @@ pub fn extract_spell_vars(
                     let mut base_arr = d.base;
                     let mut ap_arr = d.ap;
 
-                    let is_pct = match calc.get("mDisplayAsPercent") {
-                        Some(BinValue::U8(1)) => true,
-                        _ => false,
-                    };
+                    let is_pct = bin_bool_true(calc.get("mDisplayAsPercent"));
 
                     if is_pct {
                         for v in &mut base_arr {
@@ -1149,10 +1221,7 @@ pub fn extract_spell_vars(
                     return Some(result);
                 }
 
-                let is_pct = match calc.get("mDisplayAsPercent") {
-                    Some(BinValue::U8(1)) => true,
-                    _ => false,
-                };
+                let is_pct = bin_bool_true(calc.get("mDisplayAsPercent"));
                 let mut base_values: Vec<Vec<String>> = Vec::new();
                 let mut scalings: Vec<String> = Vec::new();
 
@@ -1274,6 +1343,20 @@ pub fn extract_spell_vars(
                                     (e * 100.0).round() / 100.0
                                 };
                                 base_values.push(vec![format!("{}~{}", sv, ev)]);
+                            } else if pt == "ByCharLevelBreakpointsCalculationPart" || pt == "{09d8aa04}" {
+                                let vals = expand_char_level_breakpoints(part);
+                                let mapped: Vec<String> = vals
+                                    .iter()
+                                    .map(|v| {
+                                        let x = if is_pct {
+                                            (v * 100.0 * 100.0).round() / 100.0
+                                        } else {
+                                            (v * 100.0).round() / 100.0
+                                        };
+                                        x.to_string()
+                                    })
+                                    .collect();
+                                base_values.push(mapped);
                             } else if pt == "StatByCoefficientCalculationPart" || pt == "{5815b0a9}" {
                                 let coeff = match part.get("mCoefficient") {
                                     Some(BinValue::Float(f)) => *f,
@@ -1389,9 +1472,15 @@ pub fn extract_spell_vars(
                         let parts: Vec<String> = base_values.into_iter().map(|mut arr| arr.remove(0)).collect();
                         base_str = parts.join(" + ");
                     } else {
-                        let mut summed = vec![0.0; max_rank];
+                        let mut width = max_rank;
+                        for arr in &base_values {
+                            if arr.len() > width {
+                                width = arr.len();
+                            }
+                        }
+                        let mut summed = vec![0.0; width];
                         for arr in base_values {
-                            for i in 0..max_rank {
+                            for i in 0..width {
                                 let default_zero = "0".to_string();
                                 let s = arr.get(i).unwrap_or(arr.last().unwrap_or(&default_zero));
                                 if let Ok(v) = s.parse::<f32>() {

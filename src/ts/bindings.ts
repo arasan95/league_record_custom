@@ -69,6 +69,9 @@ async createClip(videoId: string, start: number, end: number) : Promise<Result<s
 async pickFfmpegPath() : Promise<string | null> {
     return await TAURI_INVOKE("pick_ffmpeg_path");
 },
+async getFfmpegRuntimeInfo() : Promise<FfmpegRuntimeInfo> {
+    return await TAURI_INVOKE("get_ffmpeg_runtime_info");
+},
 async clearCache() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("clear_cache") };
@@ -140,6 +143,8 @@ export type Ban = { championId: number; pickTurn: number }
 export type BuildingType = { buildingType: "INHIBITOR_BUILDING"; lane_type: LaneType } | { buildingType: "TOWER_BUILDING"; lane_type: LaneType; tower_type: TowerType }
 export type Deferred = { favorite: boolean; matchId: MatchId; ingameTimeRecStartOffset: number; highlights?: number[]; events?: GameEvent[]; participants?: Participant[] }
 export type DragonType = "FIRE_DRAGON" | "EARTH_DRAGON" | "WATER_DRAGON" | "AIR_DRAGON" | "HEXTECH_DRAGON" | "CHEMTECH_DRAGON" | "ELDER_DRAGON"
+export type FfmpegProvenance = { sourceName: string; sourceUrl: string; version: string; license: string; sha256: string; fetchedAt: string; notes: string | null }
+export type FfmpegRuntimeInfo = { mode: string; selectedPath: string; selectedExists: boolean; versionLine: string | null; provenance: FfmpegProvenance | null }
 export type Framerate = [number, number]
 export type GameEvent = ({ ChampionKill: { victim_id: number; killer_id: number; assisting_participant_ids: number[]; position: Position } } | { BuildingKill: { team_id: Team; killer_id: number; building_type: BuildingType; assisting_participant_ids: number[] } } | { EliteMonsterKill: { killer_id: number; monster_type: MonsterType; assisting_participant_ids: number[] } } | { ItemPurchased: { participant_id: number; item_id: number; slot?: number | null } } | { ItemSold: { participant_id: number; item_id: number; slot?: number | null } } | { ItemUndo: { participant_id: number; before_id: number; after_id: number; gold_gain: number } }) & { timestamp: number }
 export type GameMetadata = { favorite: boolean; matchId: MatchId; ingameTimeRecStartOffset: number; highlights?: number[]; queue: Queue; player: Player; championName: string; stats: Stats; participantId: number; participants: Participant[]; teams: MatchTeam[]; events: GameEvent[]; goldTimeline?: GoldFrame[]; gameVersion?: string; gameDuration?: number; lpDiff?: number | null }

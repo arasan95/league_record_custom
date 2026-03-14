@@ -24,6 +24,7 @@ fn generate_bindings() -> anyhow::Result<()> {
             commands::pick_recordings_folder,
             commands::create_clip,
             commands::pick_ffmpeg_path,
+            commands::get_ffmpeg_runtime_info,
             commands::clear_cache,
             commands::download_image,
             commands::save_scoreboard_cache,

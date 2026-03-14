@@ -70,6 +70,7 @@ fn main() {
             commands::create_clip,
             commands::pick_clips_folder,
             commands::pick_ffmpeg_path,
+            commands::get_ffmpeg_runtime_info,
             commands::clear_cache,
             commands::download_image,
             commands::save_scoreboard_cache,
