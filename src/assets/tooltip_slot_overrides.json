@@ -1,0 +1,20 @@
+{
+  "Vayne": {
+    "Passive": {
+      "html_by_locale": {
+        "ja_JP": "<titleLeft>[@Hotkey@]&nbsp;ナイトハンター</titleLeft><titleRight></titleRight><subtitleLeft>@SpellTags@</subtitleLeft><subtitleRight><spellPassive>固有スキル</spellPassive></subtitleRight><mainText><spellPassive>自動効果</spellPassive>: 敵チャンピオンに向かって移動中、<speed>移動速度が@MovementSpeed@</speed>増加する。</mainText>",
+        "en_US": "<titleLeft>[@Hotkey@]&nbsp;Night Hunter</titleLeft><titleRight></titleRight><subtitleLeft>@SpellTags@</subtitleLeft><subtitleRight><spellPassive>Passive</spellPassive></subtitleRight><mainText><spellPassive>Passive</spellPassive>: Gains <speed>@MovementSpeed@ movement speed</speed> while moving toward enemy champions.</mainText>"
+      },
+      "html_default": "<titleLeft>[@Hotkey@]&nbsp;Night Hunter</titleLeft><titleRight></titleRight><subtitleLeft>@SpellTags@</subtitleLeft><subtitleRight><spellPassive>Passive</spellPassive></subtitleRight><mainText><spellPassive>Passive</spellPassive>: Gains <speed>@MovementSpeed@ movement speed</speed> while moving toward enemy champions.</mainText>"
+    }
+  },
+  "Briar": {
+    "Passive": {
+      "html_by_locale": {
+        "ja_JP": "<titleLeft>[@Hotkey@]&nbsp;真紅の呪い</titleLeft><titleRight></titleRight><subtitleLeft>@SpellTags@</subtitleLeft><subtitleRight><spellPassive>固有スキル</spellPassive></subtitleRight><mainText><spellPassive>自動効果</spellPassive>: 通常攻撃とスキルが敵に出血を付与し、最大@MaxBleedStacks@スタックまで重複する。出血は@BleedDuration@秒間持続し、@BleedTickRate@秒ごとにダメージを与える。<br><br>与えた出血ダメージの<healing>@HealPercent@を回復</healing>する。敵をキルすると、残っている出血ダメージの<healing>@PercentOfBleedHealedOnKill@を回復</healing>する。</mainText>",
+        "en_US": "<titleLeft>[@Hotkey@]&nbsp;Crimson Curse</titleLeft><titleRight></titleRight><subtitleLeft>@SpellTags@</subtitleLeft><subtitleRight><spellPassive>Passive</spellPassive></subtitleRight><mainText><spellPassive>Passive</spellPassive>: Basic attacks and abilities apply Bleed, stacking up to @MaxBleedStacks@. Bleed lasts @BleedDuration@s and deals damage every @BleedTickRate@s.<br><br>Heals for <healing>@HealPercent@</healing> of Bleed damage dealt. On takedown, heals for <healing>@PercentOfBleedHealedOnKill@</healing> of remaining Bleed damage.</mainText>"
+      },
+      "html_default": "<titleLeft>[@Hotkey@]&nbsp;Crimson Curse</titleLeft><titleRight></titleRight><subtitleLeft>@SpellTags@</subtitleLeft><subtitleRight><spellPassive>Passive</spellPassive></subtitleRight><mainText><spellPassive>Passive</spellPassive>: Basic attacks and abilities apply Bleed, stacking up to @MaxBleedStacks@. Bleed lasts @BleedDuration@s and deals damage every @BleedTickRate@s.<br><br>Heals for <healing>@HealPercent@</healing> of Bleed damage dealt. On takedown, heals for <healing>@PercentOfBleedHealedOnKill@</healing> of remaining Bleed damage.</mainText>"
+    }
+  }
+}

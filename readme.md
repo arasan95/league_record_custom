@@ -15,13 +15,37 @@ The following changes have been implemented in this version:
 - Status Visibility: Taskbar icon changes to reflect the current recording status.
 - Game Mode Filtering: Option to record only specific modes (Ranked, ARAM, Arena, etc.).
 - Playback Control: Automatically Play, Stop, or Select recordings based on game status.
-- Video Tools: A-B Loop repeat and clip creation (requires FFmpeg).
+- Video Tools: A-B Loop repeat and clip creation (works out-of-the-box with bundled FFmpeg).
 - Configuration: Expanded hotkey and general settings.
 
 ## Requirements
 
 **FFmpeg** is required to use the **Clip** feature.
-Please install FFmpeg and add it to your system's PATH, or specify the executable path in the application settings.
+The app now supports a **bundled FFmpeg** binary. Runtime priority is:
+1. Bundled `ffmpeg.exe` (if present)
+2. `ffmpegPath` in settings.json (legacy/manual override)
+3. `ffmpeg` from system PATH
+
+### FFmpeg Safety / Trust Signals
+
+To make bundled FFmpeg transparent and verifiable:
+
+- We store source metadata in `src-tauri/resources/tools/ffmpeg/ffmpeg-provenance.json`.
+- Settings UI shows FFmpeg mode/path/version/source/SHA-256.
+- Releases should include:
+  - app code-signing (Windows Authenticode),
+  - FFmpeg source URL,
+  - FFmpeg SHA-256 checksum.
+
+For maintainers, use:
+
+```powershell
+./src-tauri/resources/tools/ffmpeg/update_ffmpeg_bundle.ps1 `
+  -FfmpegExePath "C:\path\to\ffmpeg.exe" `
+  -Version "7.1.1-full_build-www.gyan.dev" `
+  -SourceName "gyan.dev" `
+  -SourceUrl "https://www.gyan.dev/ffmpeg/builds/"
+```
 
 ## Download
 
