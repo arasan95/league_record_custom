@@ -1,3 +1,3 @@
-{
-  "notes": "- Updated the tooltip database schema.\n- Fixed bugs related to event markers and item updates.\n- Added level display to the scoreboard.\n- Fixed a bug that prevented clip creation.\n- Changed how champion names are specified for stats websites."
+﻿{
+  "notes": "- Improved champion tooltip accuracy across many abilities and passives.\n- Fixed several cases where tooltip values were missing, shown as 0, or mapped to the wrong scaling.\n- Corrected multiple level-based and max-health-based tooltip values so they now display proper progression.\n- Fixed passive tooltip mismatches where some champions showed another slot's text.\n- Improved tooltip fallback handling to reduce unresolved or partially rendered values.\n- Better patch-to-patch reliability for tooltip data updates across locales."
 }
