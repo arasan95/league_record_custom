@@ -57,7 +57,10 @@ impl RecordingManager for AppHandle {
     fn cleanup_recordings_by_size(&self) {
         use std::cmp::Ordering;
 
-        let Some(max_gb) = self.state::<SettingsWrapper>().max_recordings_size() else { return };
+        let settings = self.state::<SettingsWrapper>();
+        let auto_delete_clips = settings.auto_delete_clips();
+        let clips_path = settings.get_clips_path();
+        let Some(max_gb) = settings.max_recordings_size() else { return };
         let max_size = max_gb * 1_000_000_000; // convert to bytes
 
         let mut recordings = self.get_recordings();
@@ -77,7 +80,11 @@ impl RecordingManager for AppHandle {
 
         // split recordings into 'favorites' and 'others' by json metadata 'favorite' value
         // in case reading the metadata fails put the recording into favorites so it doesn't get deleted
-        let (favorites, others): (Vec<_>, Vec<_>) = recordings.into_iter().partition(|recording| {
+        let (protected, others): (Vec<_>, Vec<_>) = recordings.into_iter().partition(|recording| {
+            if !auto_delete_clips && is_clip_recording(recording, &clips_path) {
+                return true;
+            }
+
             let mut with_ext = recording.clone();
             with_ext.set_extension("mp4");
             action::get_recording_metadata(&with_ext, false)
@@ -85,13 +92,13 @@ impl RecordingManager for AppHandle {
                 .unwrap_or(true)
         });
 
-        // get sum of sizes of recordings marked as favorites
-        for mut recording in favorites {
+        // get sum of sizes of recordings marked as favorites or clips
+        for mut recording in protected {
             recording.set_extension("mp4");
             match recording.metadata() {
                 Ok(metadata) => total_size += metadata.len(),
                 Err(e) => log::warn!(
-                    "failed to get size of recording (favorite) {}: {e}",
+                    "failed to get size of recording (protected) {}: {e}",
                     recording.display(),
                 ),
             }
@@ -130,11 +137,17 @@ impl RecordingManager for AppHandle {
             action::get_recording_metadata(file, false).map(|metadata_file| metadata_file.is_favorite())
         }
 
-        let Some(max_days) = self.state::<SettingsWrapper>().max_recording_age() else { return };
+        let settings = self.state::<SettingsWrapper>();
+        let auto_delete_clips = settings.auto_delete_clips();
+        let clips_path = settings.get_clips_path();
+        let Some(max_days) = settings.max_recording_age() else { return };
         let max_age = Duration::from_secs(max_days * 24 * 60 * 60);
         let now = SystemTime::now();
         for mut recording in self.get_recordings() {
             recording.set_extension("mp4");
+            if !auto_delete_clips && is_clip_recording(&recording, &clips_path) {
+                continue;
+            }
             // in case checking 'too_old(...)' or 'is_favorite(...)' fails default to not deleting the file
             if too_old(&recording, max_age, now).unwrap_or(false) && !is_favorite(&recording).unwrap_or(true) {
                 let keep_json = self.state::<SettingsWrapper>().keep_video_json_on_auto_delete();
@@ -150,6 +163,22 @@ impl RecordingManager for AppHandle {
             }
         }
     }
+}
+
+fn is_clip_recording(recording_base_path: &Path, clips_path: &Path) -> bool {
+    let in_clips_folder = recording_base_path
+        .parent()
+        .map(|p| p.starts_with(clips_path))
+        .unwrap_or(false);
+    if in_clips_folder {
+        return true;
+    }
+
+    recording_base_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.contains("_clip_"))
+        .unwrap_or(false)
 }
 
 pub mod action {
