@@ -19,44 +19,23 @@
 - **ビデオツール**: A-Bループ再生およびクリップ動画の作成（同梱FFmpegでそのまま利用可能）。
 - **設定周り**: ホットキーや一般設定項目の拡張。
 
-## Tooltip運用ドキュメント（引き継ぎ）
-
-Tooltip修正の運用手順、参照ファイル、生成方法、検出方法は以下を参照してください。  
-`TOOLTIP_HANDOVER_JA.md`
-
-## 必須要件
-
-**クリップ機能**を使用するには **FFmpeg** が必要です。  
-このアプリは **FFmpeg同梱** に対応しており、実行時の優先順位は次の通りです。
-
-1. 同梱 `ffmpeg.exe`
-2. `settings.json` の `ffmpegPath`（旧方式の手動上書き）
-3. システムPATH上の `ffmpeg`
-
-### FFmpegの安全性を確認しやすくする仕組み
-
-- 出典情報を `src-tauri/resources/tools/ffmpeg/ffmpeg-provenance.json` に保持
-- 設定画面で FFmpeg の利用モード/パス/バージョン/出典/SHA-256 を表示
-- リリース時に以下を公開推奨
-  - アプリのコード署名（Windows Authenticode）
-  - FFmpeg の配布元URL
-  - FFmpeg の SHA-256
-
-メンテナー向け更新スクリプト:
-
-```powershell
-./src-tauri/resources/tools/ffmpeg/update_ffmpeg_bundle.ps1 `
-  -FfmpegExePath "C:\path\to\ffmpeg.exe" `
-  -Version "7.1.1-full_build-www.gyan.dev" `
-  -SourceName "gyan.dev" `
-  -SourceUrl "https://www.gyan.dev/ffmpeg/builds/"
-```
-
 ## ダウンロード
 
 **[LeagueRecordをダウンロード（インストーラー版）](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_x64-setup.exe)**
 
 すべてのバージョンを見る: [GitHub Releases](https://github.com/arasan95/league_record_custom/releases)
+
+インストーラー版にはFFmpegが同梱されるため、通常は追加インストールなしでクリップ機能を利用できます。
+
+## Tooltip運用ドキュメント（引き継ぎ）
+
+Tooltip修正の運用手順、参照ファイル、生成方法、検出方法は以下を参照してください。  
+`TOOLTIP_HANDOVER_JA.md`
+
+## FFmpegについて
+
+通常利用では、インストーラー版に同梱されたFFmpegが自動で使われます。  
+開発者向けに手動で差し替える場合のみ、`src-tauri/resources/tools/ffmpeg/` 配下の更新を行ってください。
 
 ## 使い方
 
