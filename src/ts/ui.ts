@@ -1,4 +1,4 @@
-import type videojs from "video.js";
+﻿import type videojs from "video.js";
 import { exists, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { SR_QUEUES } from "./queues";
 import type { ContentDescriptor } from "video.js/dist/types/utils/dom";
@@ -30,6 +30,57 @@ try {
     appWindow = getCurrentWebviewWindow();
 } catch (error) {
     console.warn("Failed to get current window (likely running in browser):", error);
+}
+
+function getShortQueueLabel(queueId?: number, queueName: string = ""): string {
+    const id = queueId ?? 0;
+    const staticMap: Record<number, string> = {
+        0: "Custom",
+        400: "Draft",
+        420: "Solo",
+        430: "Blind",
+        440: "Flex",
+        450: "ARAM",
+        480: "Swift",
+        490: "Swift",
+        700: "Clash",
+        830: "AI",
+        840: "AI",
+        850: "AI",
+        890: "AI",
+        1090: "TFT",
+        1100: "TFT",
+        1130: "TFT",
+        1160: "TFT",
+        1220: "TFT",
+        1700: "Arena",
+        3140: "Practice",
+    };
+    if (staticMap[id]) return staticMap[id];
+
+    const lower = queueName.toLowerCase();
+    if (lower.includes("rank")) return "Ranked";
+    if (lower.includes("normal")) return "Normal";
+    if (lower.includes("practice")) return "Practice";
+    if (lower.includes("custom")) return "Custom";
+    if (lower.includes("bot") || lower.includes("ai") || lower.includes("co-op") || lower.includes("intro") || lower.includes("intermediate")) return "AI";
+    if (lower.includes("aram")) return "ARAM";
+    if (lower.includes("arena")) return "Arena";
+    if (lower.includes("swift")) return "Swift";
+    if (lower.includes("clash")) return "Clash";
+    if (lower.includes("draft")) return "Draft";
+    if (lower.includes("blind")) return "Blind";
+    if (lower.includes("solo")) return "Solo";
+    if (lower.includes("flex")) return "Flex";
+    if (lower.includes("quick")) return "Quick";
+    if (lower.includes("urf")) return "URF";
+    if (lower.includes("tft") || lower.includes("teamfight")) return "TFT";
+
+    const modeGroup = getGameModeByQueueId(id, queueName);
+    if (modeGroup === "TFT") return "TFT";
+    if (modeGroup === "ARAM") return "ARAM";
+    if (modeGroup === "SR") return "SR";
+    return "Match";
 }
 
 
@@ -1009,26 +1060,7 @@ export default class UI {
                             // 2. Check against sidebar display names (the short English labels shown in UI)
                             if (!matchedQueue && m.queue) {
                                 const qId = m.queue.id || 0;
-                                const rawName = (m.queue.name || "").toLowerCase();
-                                
-                                // Derive the display name (same logic as sidebar item rendering)
-                                let displayName = rawName;
-                                if (rawName.includes("practice") || rawName.includes("プラクティス")) displayName = "practice";
-                                else if (rawName.includes("custom") || rawName.includes("カスタム")) displayName = "custom";
-                                else if (rawName.includes("bot") || rawName.includes("co-op") || rawName.includes("intro") || rawName.includes("intermediate") || rawName.includes("入門") || rawName.includes("初級") || rawName.includes("中級")) displayName = "ai";
-                                else if (rawName.includes("aram")) displayName = "aram";
-                                else if (rawName.includes("flex")) displayName = "flex";
-                                else if (rawName.includes("solo") || rawName.includes("solo/duo")) displayName = "solo";
-                                else if (rawName.includes("arena")) displayName = "arena";
-                                else if (rawName.includes("swift") || rawName.includes("swiftplay") || qId === 480 || qId === 490) displayName = "swift";
-                                else if (rawName.includes("urf")) displayName = "urf";
-                                else if (rawName.includes("draft")) displayName = "draft";
-                                else if (rawName.includes("blind")) displayName = "blind";
-                                else if (rawName.includes("quick")) displayName = "quick";
-                                else if (rawName.includes("clash")) displayName = "clash";
-                                else if (rawName.includes("ranked") || rawName.includes("rank")) displayName = "ranked";
-                                else if (rawName.includes("normal")) displayName = "normal";
-                                else if (rawName.includes("tft") || rawName.includes("teamfight")) displayName = "tft";
+                                const displayName = getShortQueueLabel(qId, m.queue.name || "").toLowerCase();
                                 
                                 // Check if the user's search term matches the display name (partial)
                                 if (displayName.includes(term) || term.includes(displayName)) {
@@ -1218,7 +1250,8 @@ export default class UI {
                     li.style.display = "";
                     
                     // Accumulate stats for visible items
-                    if (isFinishedGame) {
+                    const isClipRecording = recording.videoId.includes("_clip");
+                    if (isFinishedGame && !isClipRecording) {
                         totalGames++;
                         if (isWin) totalWins++;
                         
@@ -1317,6 +1350,34 @@ export default class UI {
         console.log("createRecordingItem:", recording.videoId, recording.metadata);
         const videoName = toVideoName(recording.videoId);
         const isClipRecording = recording.videoId.includes("_clip");
+        const favorite = isFavorite(recording.metadata);
+        const createClipIconEl = (): SVGSVGElement => {
+            const ns = "http://www.w3.org/2000/svg";
+            const svg = document.createElementNS(ns, "svg");
+            svg.setAttribute("viewBox", "0 0 24 24");
+            svg.setAttribute("width", "14");
+            svg.setAttribute("height", "14");
+            svg.setAttribute("class", "sidebar-clip-icon");
+            svg.setAttribute("fill", "none");
+            svg.setAttribute("stroke", "currentColor");
+            svg.setAttribute("stroke-width", "2");
+            const make = (tag: string, attrs: Record<string, string>) => {
+                const el = document.createElementNS(ns, tag);
+                for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+                return el;
+            };
+            svg.append(
+                make("rect", { x: "2", y: "2", width: "20", height: "20", rx: "2.18", ry: "2.18" }),
+                make("line", { x1: "7", y1: "2", x2: "7", y2: "22" }),
+                make("line", { x1: "17", y1: "2", x2: "17", y2: "22" }),
+                make("line", { x1: "2", y1: "12", x2: "22", y2: "12" }),
+                make("line", { x1: "2", y1: "7", x2: "7", y2: "7" }),
+                make("line", { x1: "2", y1: "17", x2: "7", y2: "17" }),
+                make("line", { x1: "17", y1: "17", x2: "22", y2: "17" }),
+                make("line", { x1: "17", y1: "7", x2: "22", y2: "7" }),
+            );
+            return svg;
+        };
         const formatSidebarDate = (name: string): string => {
             // Normal recording: YYYY-MM-DD_HH-MM(-SS)
             let m = name.match(/(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})(?:-\d{2})?$/);
@@ -1368,53 +1429,7 @@ export default class UI {
                 ? "remake-text" 
                 : meta.stats.win ? "win-text" : "loss-text";
             
-            let queueName = meta.queue?.name ?? "Custom";
-            // Shorten Names
-            const qLower = queueName.toLowerCase();
-            if (qLower.includes("practice") || qLower.includes("プラクティス")) {
-                queueName = "Practice";
-            } else if (qLower.includes("custom") || qLower.includes("カスタム")) {
-                queueName = "Custom";
-            } else if (qLower.includes("bot") || qLower.includes("ai") || qLower.includes("intro") || qLower.includes("intermediate") || qLower.includes("入門") || qLower.includes("初級") || qLower.includes("中級")) {
-                queueName = "vs AI";
-            } else if (qLower.includes("aram")) {
-                queueName = "ARAM";
-            } else if (qLower.includes("flex")) {
-                queueName = "Flex";
-            } else if (qLower.includes("solo")) {
-                queueName = "Solo/Duo";
-            } else if (qLower.includes("arena")) {
-                queueName = "Arena";
-            } else if (qLower.includes("draft")) {
-                queueName = "Draft";
-            } else if (qLower.includes("blind")) {
-                queueName = "Blind";
-            } else if (qLower.includes("quick")) {
-                queueName = "Quick";
-            } else if (qLower.includes("clash")) {
-                queueName = "Clash";
-            } else if (qLower.includes("ranked") || qLower.includes("rank")) {
-                queueName = "Ranked";
-            } else if (qLower.includes("normal") || qLower.includes("draft") || qLower.includes("blind")) {
-                queueName = "Normal";
-            } else if (qLower.includes("tft") || qLower.includes("teamfight") || [1090, 1100, 1130, 1160, 1220].includes(meta.queue?.id ?? 0)) {
-                queueName = "TFT";
-            }
-
-            if (queueName === "Unknown Queue" || queueName === "Unknown") {
-                // Heuristic: If we have stats, it's a valid game.
-                // Call it "Normal" or "Custom" depending on other hints? Or just "Match".
-                // If it's Swiftplay (ID 480/490), it might show up as Unknown if not mapped.
-                // Let's just show "Match" or pass through "Unknown" but ensure liClass has-metadata is kept.
-                
-                // If ID is 480 or 490 (Swiftplay), force it.
-                if (meta.queue?.id === 480 || meta.queue?.id === 490) {
-                     queueName = "Swiftplay";
-                } else if (meta.stats) {
-                    // Safe Fallback
-                    queueName = "Match";
-                }
-            }
+            const queueName = getShortQueueLabel(meta.queue?.id, meta.queue?.name ?? "Custom");
 
             // Determine Side for Border Color and Sidebar Indicator
             let isRedSide = false;
@@ -1480,19 +1495,9 @@ export default class UI {
             const headerRow = this.vjs.dom.createEl("div", {}, { class: "sidebar-header-row" });
             const timeSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-time" }, timeStr);
             
-            // Rename Swiftplay -> Swift based on ID 480
-            let displayMode = queueName;
-            const queueId = meta.queue?.id;
-            
-            if (displayMode.toLowerCase() === "swiftplay" || queueId === 480) {
-                displayMode = "Swift";
-            }
+            const displayMode = queueName;
             const modeSpan = this.vjs.dom.createEl("span", {}, { class: "sidebar-mode" }, displayMode);
             headerRow.append(timeSpan, modeSpan);
-            if (isClipRecording) {
-                const clipBadge = this.vjs.dom.createEl("span", {}, { class: "sidebar-clip-badge", title: "Clip" }, "CLIP");
-                headerRow.append(clipBadge);
-            }
 
             const bodyRow = this.vjs.dom.createEl("div", {}, { class: "sidebar-body-row" });
             const mainIconImg = this.vjs.dom.createEl("img", {}, { class: "main-champ-img" }) as HTMLImageElement;
@@ -1582,7 +1587,7 @@ export default class UI {
                         
                         if (unit.tier > 1) {
                             const starClass = unit.tier === 3 ? "star-gold" : "star-silver";
-                            const starSpan = this.vjs.dom.createEl("span", {}, { class: `tft-unit-stars ${starClass}` }, "★".repeat(unit.tier));
+                            const starSpan = this.vjs.dom.createEl("span", {}, { class: `tft-unit-stars ${starClass}` }, "\u2605".repeat(unit.tier));
                             unitContainer.append(starSpan);
                         }
 
@@ -1627,12 +1632,23 @@ export default class UI {
 
             // Main Column (Header + Body)
             mainCol.append(headerRow, bodyRow);
+            const sidebarBadges = this.vjs.dom.createEl("div", {}, { class: "sidebar-badges" });
+            if (isClipRecording) {
+                const clipBadge = this.vjs.dom.createEl("span", {}, { class: "sidebar-clip-badge", title: "Clip" });
+                clipBadge.append(createClipIconEl());
+                sidebarBadges.append(clipBadge);
+            }
+            if (favorite) {
+                const favoriteBadge = this.vjs.dom.createEl("span", {}, { class: "sidebar-favorite-badge", title: "Favorite" }, "\u2605");
+                sidebarBadges.append(favoriteBadge);
+            }
 
             if (queueName === "TFT") {
+                mainCol.append(sidebarBadges);
                 mainContent.append(mainCol);
             } else {
                 participantsContainer.append(team1Row, team2Row);
-                rightCol.append(dateSpan, participantsContainer);
+                rightCol.append(dateSpan, participantsContainer, sidebarBadges);
                 mainContent.append(mainCol, rightCol);
             }
 
@@ -1758,14 +1774,15 @@ export default class UI {
 
         } else {
             if (isClipRecording) {
+                const clipName = this.vjs.dom.createEl("span", {}, { class: "video-name" }) as HTMLSpanElement;
+                clipName.append(createClipIconEl(), document.createTextNode(` ${videoName}`));
                 displayContent = [
-                    this.vjs.dom.createEl("span", {}, { class: "video-name" }, `[CLIP] ${videoName}`) as HTMLElement
+                    clipName
                 ];
             }
         }
         
         // Buttons (reuse logic)
-        const favorite = isFavorite(recording.metadata);
         const favoriteBtn = this.vjs.dom.createEl("span", {
                 onclick: (e: MouseEvent) => {
                     e.stopPropagation();
@@ -1775,14 +1792,22 @@ export default class UI {
                             favoriteBtn.innerHTML = fav ? "★" : "☆";
                             favoriteBtn.style.color = fav ? "gold" : "";
                             
-                            // 更新情報を内部メタデータに即時反映する
+                            // 譖ｴ譁ｰ諠・ｱ繧貞・驛ｨ繝｡繧ｿ繝・・繧ｿ縺ｫ蜊ｳ譎ょ渚譏縺吶ｋ
                             if (recording.metadata) {
                                 if ("Metadata" in recording.metadata) recording.metadata.Metadata.favorite = fav;
                                 else if ("Deferred" in recording.metadata) recording.metadata.Deferred.favorite = fav;
                                 else if ("NoData" in recording.metadata) recording.metadata.NoData.favorite = fav;
                             }
-                            
-                            // もし「お気に入りのみ」フィルターがオンの場合、またはフィルタリングに関わらず即座にサイドバー一覧を更新したい場合は、再描画を走らせる
+                            const badgeContainer = li.querySelector(".sidebar-badges");
+                            if (badgeContainer) {
+                                const existingFavoriteBadge = badgeContainer.querySelector(".sidebar-favorite-badge");
+                                if (fav && !existingFavoriteBadge) {
+                                    const favoriteBadge = this.vjs.dom.createEl("span", {}, { class: "sidebar-favorite-badge", title: "Favorite" }, "\u2605");
+                                    badgeContainer.append(favoriteBadge);
+                                } else if (!fav && existingFavoriteBadge) {
+                                    existingFavoriteBadge.remove();
+                                }
+                            }
                             if (this.filterStar && this.lastOnVideo && !fav) {
                                 this.updateSideBar(this.lastRecordingsSizeGb, this.lastRecordings, this.lastOnVideo, this.lastOnFavorite, this.lastOnRename, this.lastOnDelete);
                             }
@@ -1800,7 +1825,7 @@ export default class UI {
         );
         const deleteBtn = this.vjs.dom.createEl("span", {
                 onclick: (e: MouseEvent) => { e.stopPropagation(); onDelete(recording.videoId, isFavorite(recording.metadata)); },
-            }, { class: "delete", title: getText(this.currentLanguage as any, "delete" as any) || "Delete" }, "×",
+            }, { class: "delete", title: getText(this.currentLanguage as any, "delete" as any) || "Delete" }, "✖",
         );
         const deleteVideoOnlyBtn = this.vjs.dom.createEl("span", {
                 onclick: (e: MouseEvent) => { e.stopPropagation(); if (onDeleteVideoOnly) onDeleteVideoOnly(recording.videoId, isFavorite(recording.metadata)); },
@@ -2080,7 +2105,7 @@ export default class UI {
         const warningTexts = isFavorite ? [
             this.vjs.dom.createEl("br"),
             this.vjs.dom.createEl("br"),
-            this.vjs.dom.createEl("strong", { style: "color: orange;" }, {}, "【警告】お気に入りに登録されている録画です！本当に動画を削除しますか？ / Warning: This is a favorite recording!"),
+            this.vjs.dom.createEl("strong", { style: "color: orange;" }, {}, "縲占ｭｦ蜻翫代♀豌励↓蜈･繧翫↓逋ｻ骭ｲ縺輔ｌ縺ｦ縺・ｋ骭ｲ逕ｻ縺ｧ縺呻ｼ∵悽蠖薙↓蜍慕判繧貞炎髯､縺励∪縺吶°・・/ Warning: This is a favorite recording!"),
         ] : [];
 
         const prompt = this.vjs.dom.createEl("p", {}, {}, [
@@ -2133,7 +2158,7 @@ export default class UI {
         const warningTexts = isFavorite ? [
             this.vjs.dom.createEl("br"),
             this.vjs.dom.createEl("br"),
-            this.vjs.dom.createEl("strong", { style: "color: orange;" }, {}, "【警告】お気に入りに登録されている録画です！本当に削除しますか？ / Warning: This is a favorite recording!"),
+            this.vjs.dom.createEl("strong", { style: "color: orange;" }, {}, "縲占ｭｦ蜻翫代♀豌励↓蜈･繧翫↓逋ｻ骭ｲ縺輔ｌ縺ｦ縺・ｋ骭ｲ逕ｻ縺ｧ縺呻ｼ∵悽蠖薙↓蜑企勁縺励∪縺吶°・・/ Warning: This is a favorite recording!"),
         ] : [];
 
         const prompt = this.vjs.dom.createEl("p", {}, {}, [
@@ -2296,7 +2321,7 @@ export default class UI {
 
         this.currentGameVersion = data.gameVersion || (await getCurrentPatchVersion());
         await ensureItemDataLoaded(this.currentGameVersion);
-        if (data.queue?.name === "Teamfight Tactics" || data.queue?.id === 1220) {
+        if (getGameModeByQueueId(data.queue?.id ?? 0, data.queue?.name ?? "") === "TFT") {
             await ensureTftDataLoaded();
         }
         
@@ -2855,7 +2880,7 @@ export default class UI {
         
         spectatorHeader.append(dTimer.container);
 
-        const isTFT = data.queue?.id === 1220;
+        const isTFT = getGameModeByQueueId(data.queue?.id ?? 0, data.queue?.name ?? "") === "TFT";
         if (isTFT) {
             blueHeader.style.display = "none";
             redHeader.style.display = "none";
@@ -3390,7 +3415,7 @@ export default class UI {
             return teamDiv;
         };
 
-        if (data.queue?.id === 1220) {
+        if (getGameModeByQueueId(data.queue?.id ?? 0, data.queue?.name ?? "") === "TFT") {
             if (this.scoreboardEl) {
                 this.scoreboardEl.style.display = "none";
             }
@@ -3423,10 +3448,10 @@ export default class UI {
             if (diff > 0) {
                 diffRow.classList.add("blue-win");
                 // Arrow is absolute anchored to the value
-                diffRow.innerHTML = `<span class="diff-val"><span class="arrow arrow-left">◀</span>${diffStr}</span>`;
+                diffRow.innerHTML = `<span class="diff-val"><span class="arrow arrow-left">\u25C0</span>${diffStr}</span>`;
             } else if (diff < 0) {
                 diffRow.classList.add("red-win");
-                diffRow.innerHTML = `<span class="diff-val">${diffStr}<span class="arrow arrow-right">▶</span></span>`;
+                diffRow.innerHTML = `<span class="diff-val">${diffStr}<span class="arrow arrow-right">\u25B6</span></span>`;
             } else {
                 diffRow.innerHTML = `<span class="diff-val">-</span>`;
             }
@@ -3657,10 +3682,10 @@ export default class UI {
                          
                          if (diff > 0) {
                              if (!row.classList.contains("blue-win")) row.className = "center-diff-row blue-win";
-                             row.innerHTML = `<span class="diff-val"><span class="arrow arrow-left">◀</span>${diffStr}</span>`;
+                             row.innerHTML = `<span class="diff-val"><span class="arrow arrow-left">\u25C0</span>${diffStr}</span>`;
                          } else if (diff < 0) {
                              if (!row.classList.contains("red-win")) row.className = "center-diff-row red-win";
-                             row.innerHTML = `<span class="diff-val">${diffStr}<span class="arrow arrow-right">▶</span></span>`;
+                             row.innerHTML = `<span class="diff-val">${diffStr}<span class="arrow arrow-right">\u25B6</span></span>`;
                          } else {
                              row.className = "center-diff-row";
                              row.innerHTML = `<span class="diff-val">-</span>`;
@@ -4106,16 +4131,16 @@ export default class UI {
         const langSelect = this.vjs.dom.createEl("select", {}, { class: "settings-select" }) as HTMLSelectElement;
         const languages = [
             { value: "en", label: "English" },
-            { value: "ja", label: "日本語" },
-            { value: "zh", label: "简体中文" },
-            { value: "ko", label: "한국어" },
-            { value: "vi", label: "Tiếng Việt" },
-            { value: "pt", label: "Português" },
-            { value: "es", label: "Español" },
-            { value: "fr", label: "Français" },
+            { value: "ja", label: "Japanese" },
+            { value: "zh", label: "Chinese" },
+            { value: "ko", label: "Korean" },
+            { value: "vi", label: "Vietnamese" },
+            { value: "pt", label: "Portuguese" },
+            { value: "es", label: "Spanish" },
+            { value: "fr", label: "French" },
             { value: "de", label: "Deutsch" },
-            { value: "ru", label: "Русский" },
-            { value: "tr", label: "Türkçe" },
+            { value: "ru", label: "Russian" },
+            { value: "tr", label: "Turkish" },
             { value: "pl", label: "Polski" },
             { value: "it", label: "Italiano" }
         ];
@@ -4690,6 +4715,7 @@ export default class UI {
         const devMode = createSwitch(getText(lang, "devMode"), settings.developerMode);
         const playSounds = createSwitch(getText(lang, "playSounds"), settings.playRecordingSounds ?? false);
         const keepVideoJsonOnAutoDelete = createSwitch(getText(lang, "keepVideoJsonOnAutoDelete"), settings.keepVideoJsonOnAutoDelete ?? false);
+        const autoDeleteClips = createSwitch(getText(lang, "autoDeleteClips" as any), (settings as any).autoDeleteClips ?? false);
 
         const matchHistoryUrlInput = this.vjs.dom.createEl("input", {}, {
             class: "settings-input",
@@ -4716,7 +4742,8 @@ export default class UI {
                 confirmDel.container, 
                 devMode.container,
                 playSounds.container,
-                keepVideoJsonOnAutoDelete.container
+                keepVideoJsonOnAutoDelete.container,
+                autoDeleteClips.container
             ])
         ]) as HTMLDivElement;
         
@@ -5028,7 +5055,8 @@ export default class UI {
                     confirmDelete: confirmDel.input.checked,
                     developerMode: devMode.input.checked,
                     playRecordingSounds: playSounds.input.checked,
-                    keepVideoJsonOnAutoDelete: keepVideoJsonOnAutoDelete.input.checked
+                    keepVideoJsonOnAutoDelete: keepVideoJsonOnAutoDelete.input.checked,
+                    autoDeleteClips: autoDeleteClips.input.checked
                 };
                 
                 // Save Keybinds & Mouse Config
