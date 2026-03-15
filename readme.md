@@ -1,6 +1,8 @@
 ﻿# LeagueRecord Custom
 
-[English](readme.md) | [日本語](README_ja.md)**Note**: This project is a customized version based on [LeagueRecord](https://github.com/FFFFFFFXXXXXXX/league_record).
+[English](readme.md) | [日本語](README_ja.md)
+
+**Note**: This project is a customized version based on [LeagueRecord](https://github.com/FFFFFFFXXXXXXX/league_record).
 This project is a customized clone of LeagueRecord, based on [v2.1.1](https://github.com/FFFFFFFXXXXXXX/league_record/releases/tag/v2.1.1).
 All modifications and new features have been built upon this version.
 
@@ -18,40 +20,18 @@ The following changes have been implemented in this version:
 - Video Tools: A-B Loop repeat and clip creation (works out-of-the-box with bundled FFmpeg).
 - Configuration: Expanded hotkey and general settings.
 
-## Requirements
-
-**FFmpeg** is required to use the **Clip** feature.
-The app now supports a **bundled FFmpeg** binary. Runtime priority is:
-1. Bundled `ffmpeg.exe` (if present)
-2. `ffmpegPath` in settings.json (legacy/manual override)
-3. `ffmpeg` from system PATH
-
-### FFmpeg Safety / Trust Signals
-
-To make bundled FFmpeg transparent and verifiable:
-
-- We store source metadata in `src-tauri/resources/tools/ffmpeg/ffmpeg-provenance.json`.
-- Settings UI shows FFmpeg mode/path/version/source/SHA-256.
-- Releases should include:
-  - app code-signing (Windows Authenticode),
-  - FFmpeg source URL,
-  - FFmpeg SHA-256 checksum.
-
-For maintainers, use:
-
-```powershell
-./src-tauri/resources/tools/ffmpeg/update_ffmpeg_bundle.ps1 `
-  -FfmpegExePath "C:\path\to\ffmpeg.exe" `
-  -Version "7.1.1-full_build-www.gyan.dev" `
-  -SourceName "gyan.dev" `
-  -SourceUrl "https://www.gyan.dev/ffmpeg/builds/"
-```
-
 ## Download
 
 **[Download LeagueRecord Setup (latest)](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_x64-setup.exe)**
 
 or browse all versions: [GitHub Releases](https://github.com/arasan95/league_record_custom/releases)
+
+The installer includes FFmpeg, so Clip works out-of-the-box for normal users.
+
+## FFmpeg Notes
+
+For regular use, the bundled FFmpeg is selected automatically.  
+Manual FFmpeg replacement is only needed for maintainers working in `src-tauri/resources/tools/ffmpeg/`.
 
 ## How to Use
 
