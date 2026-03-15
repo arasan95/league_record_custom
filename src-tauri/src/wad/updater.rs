@@ -328,9 +328,7 @@ mod tests {
     #[test]
     fn test_extract_all() {
         if let Some(install_dir) = get_league_install_dir() {
-            let output_path = PathBuf::from(
-                "C:/Users/fjnce/AppData/Local/com.leaguerecord.custom/tooltip_cache/tooltip_variable_fallback.json",
-            );
+            let output_path = std::env::temp_dir().join("tooltip_variable_fallback.json");
             let _ = extract_all_champions_to_json(&install_dir, &output_path);
         }
     }
