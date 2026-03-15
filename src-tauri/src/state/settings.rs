@@ -227,6 +227,10 @@ impl SettingsWrapper {
         self.0.read().unwrap().keep_video_json_on_auto_delete
     }
 
+    pub fn auto_delete_clips(&self) -> bool {
+        self.0.read().unwrap().auto_delete_clips
+    }
+
     pub fn hightlight_hotkey(&self) -> Option<String> {
         self.0.read().unwrap().hightlight_hotkey.clone()
     }
@@ -323,6 +327,7 @@ pub struct Settings {
     pub champion_build_url: Option<String>,
     pub check_updates_on_startup: bool,
     pub keep_video_json_on_auto_delete: bool,
+    pub auto_delete_clips: bool,
 }
 
 const DEFAULT_DEBUG_LOG: bool = false;
@@ -344,6 +349,7 @@ const DEFAULT_CHAMPION_MATCHUP_URL: &str = "https://dpm.lol/champions/{My}/match
 const DEFAULT_CHAMPION_BUILD_URL: &str = "https://dpm.lol/champions/{q}/build";
 const DEFAULT_CHECK_UPDATES_ON_STARTUP: bool = true;
 const DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE: bool = false;
+const DEFAULT_AUTO_DELETE_CLIPS: bool = false;
 
 #[inline]
 fn default_recordings_folder() -> PathBuf {
@@ -402,6 +408,7 @@ impl Default for Settings {
             champion_build_url: Some(DEFAULT_CHAMPION_BUILD_URL.to_string()),
             check_updates_on_startup: DEFAULT_CHECK_UPDATES_ON_STARTUP,
             keep_video_json_on_auto_delete: DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE,
+            auto_delete_clips: DEFAULT_AUTO_DELETE_CLIPS,
         }
     }
 }
@@ -530,6 +537,9 @@ impl<'de> Deserialize<'de> for Settings {
                         "keepVideoJsonOnAutoDelete" => {
                             settings.keep_video_json_on_auto_delete =
                                 map.next_value().unwrap_or(DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE);
+                        }
+                        "autoDeleteClips" => {
+                            settings.auto_delete_clips = map.next_value().unwrap_or(DEFAULT_AUTO_DELETE_CLIPS);
                         }
                         _ => { /* ignored */ }
                     }

@@ -456,16 +456,40 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.68em;
-    font-weight: 800;
-    letter-spacing: 0.4px;
-    color: #0f2230;
-    background: #2ad0ff;
-    border: 1px solid #7be4ff;
-    border-radius: 4px;
-    padding: 1px 5px;
-    line-height: 1.1;
-    margin-left: 2px;
+    color: #00d2ff;
+    line-height: 1;
+}
+
+.sidebar-clip-icon {
+    display: block;
+    width: 14px;
+    height: 14px;
+    color: inherit;
+}
+
+.sidebar-badges {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    width: 100%;
+    margin-top: 2px;
+    padding-right: 8px;
+}
+
+.sidebar-favorite-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9em;
+    font-weight: 700;
+    color: #ffd700;
+    text-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+}
+
+.tft-match .sidebar-badges {
+    align-self: flex-end;
+    margin-top: 6px;
+    padding-right: 0;
 }
 
 /* Body Row: Icon [Stats] */
