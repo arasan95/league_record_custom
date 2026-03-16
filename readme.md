@@ -6,7 +6,7 @@
 This project is a customized clone of LeagueRecord, based on [v2.1.1](https://github.com/FFFFFFFXXXXXXX/league_record/releases/tag/v2.1.1).
 All modifications and new features have been built upon this version.
 
-I am a beginner and still getting familiar with GitHub etiquette. I'm doing my best to learn as I go. Huge thanks to the original creator for the inspiration and the codebase. Please also note that this project is being developed with the help of AI.
+Tooltip data is extracted from local WAD files, so tooltips stay compatible with the latest patch.
 
 ## Modified & Added Features
 
