@@ -6,7 +6,6 @@
 This project is a customized clone of LeagueRecord, based on [v2.1.1](https://github.com/FFFFFFFXXXXXXX/league_record/releases/tag/v2.1.1).
 All modifications and new features have been built upon this version.
 
-Tooltip data is extracted from local WAD files, so tooltips stay compatible with the latest patch.
 
 ## Modified & Added Features
 
@@ -19,6 +18,7 @@ The following changes have been implemented in this version:
 - Playback Control: Automatically Play, Stop, or Select recordings based on game status.
 - Video Tools: A-B Loop repeat and clip creation (works out-of-the-box with bundled FFmpeg).
 - Configuration: Expanded hotkey and general settings.
+- Tooltip: Tooltip data is extracted from local WAD files, so tooltips stay compatible with the latest patch.
 
 ## Download
 
