@@ -2105,7 +2105,7 @@ export default class UI {
         const warningTexts = isFavorite ? [
             this.vjs.dom.createEl("br"),
             this.vjs.dom.createEl("br"),
-            this.vjs.dom.createEl("strong", { style: "color: orange;" }, {}, "縲占ｭｦ蜻翫代♀豌励↓蜈･繧翫↓逋ｻ骭ｲ縺輔ｌ縺ｦ縺・ｋ骭ｲ逕ｻ縺ｧ縺呻ｼ∵悽蠖薙↓蜍慕判繧貞炎髯､縺励∪縺吶°・・/ Warning: This is a favorite recording!"),
+            this.vjs.dom.createEl("strong", { style: "color: orange;" }, {}, "Warning: This is a favorite recording!"),
         ] : [];
 
         const prompt = this.vjs.dom.createEl("p", {}, {}, [
@@ -2158,7 +2158,7 @@ export default class UI {
         const warningTexts = isFavorite ? [
             this.vjs.dom.createEl("br"),
             this.vjs.dom.createEl("br"),
-            this.vjs.dom.createEl("strong", { style: "color: orange;" }, {}, "縲占ｭｦ蜻翫代♀豌励↓蜈･繧翫↓逋ｻ骭ｲ縺輔ｌ縺ｦ縺・ｋ骭ｲ逕ｻ縺ｧ縺呻ｼ∵悽蠖薙↓蜑企勁縺励∪縺吶°・・/ Warning: This is a favorite recording!"),
+            this.vjs.dom.createEl("strong", { style: "color: orange;" }, {}, "Warning: This is a favorite recording!"),
         ] : [];
 
         const prompt = this.vjs.dom.createEl("p", {}, {}, [
