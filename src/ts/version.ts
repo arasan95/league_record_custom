@@ -2,12 +2,27 @@ import { commands } from "./bindings";
 
 const VERSION_KEY = "lol_patch_version";
 const FALLBACK_VERSION = "14.23.1"; // A recent safe fallback
+const VERSION_FETCH_TIMEOUT_MS = 4000;
+
+async function fetchWithTimeout(url: string, timeoutMs: number, init?: RequestInit): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
 
 export async function initPatchVersion(): Promise<string> {
     try {
         console.log("Checking for latest LoL patch version...");
         // Add cache: "no-store" to prevent the webview from returning a stale version string
-        const response = await fetch("https://ddragon.leagueoflegends.com/api/versions.json", { cache: "no-store" });
+        const response = await fetchWithTimeout(
+            "https://ddragon.leagueoflegends.com/api/versions.json",
+            VERSION_FETCH_TIMEOUT_MS,
+            { cache: "no-store" },
+        );
         if (!response.ok) throw new Error("Failed to fetch version list");
         
         const versions = await response.json();
@@ -19,7 +34,8 @@ export async function initPatchVersion(): Promise<string> {
                 console.log(`New patch version detected: ${latest} (was ${current}). Clearing cache...`);
                 localStorage.setItem(VERSION_KEY, latest);
                 // Clear old images/stats cache so the new patch applies functionally
-                await commands.clearCache().catch(e => console.error("Failed to clear cache:", e));
+                // Run cache cleanup in the background so startup does not stall.
+                commands.clearCache().catch(e => console.error("Failed to clear cache:", e));
             } else {
                 console.log(`Patch version is up to date: ${latest}`);
             }

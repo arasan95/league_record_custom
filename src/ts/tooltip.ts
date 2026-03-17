@@ -147,17 +147,25 @@ function normalizeScaleCoefficientsForDisplay(html: string): string {
     // e.g. 最大体力の0.1~0.18の魔法ダメージ -> 最大体力の10~18%の魔法ダメージ
     // Also handles already-scaled percent values written without '%' (e.g. 5~9).
     // Applies only to health-based damage clauses to avoid changing unrelated decimals.
+    // NOTE:
+    // The previous lookahead-heavy regexes here could catastrophically backtrack
+    // on long slash-separated rank values (observed with JA Garen passive).
+    // We match the numeric block first, then validate the immediate tail context.
     out = out.replace(
-        /((?:最大|現在|減少)?体力の)\s*([0-9]*\.?[0-9]+(?:[~/][0-9]*\.?[0-9]+)*)\s*(?=の(?:物理|魔法|確定)?ダメージ)/gi,
-        (_m, prefix: string, series: string) => {
+        /((?:最大|現在|減少)?体力の)\s*([0-9]*\.?[0-9]+(?:[~/][0-9]*\.?[0-9]+)*)/gi,
+        (match: string, prefix: string, series: string, offset: number, full: string) => {
+            const tail = full.slice(offset + match.length);
+            if (!/^\s*の(?:物理|魔法|確定)?ダメージ/.test(tail)) return match;
             const converted = convertSeriesToPercent(series, 100);
             if (!converted) return `${prefix}${series}`;
             return `${prefix}${converted}`;
         },
     );
     out = out.replace(
-        /((?:最大|現在|減少)?体力の)\s*([0-9]*\.?[0-9]+(?:[~/][0-9]*\.?[0-9]+)*)\s*(?=にあたる(?:物理|魔法|確定)?ダメージ)/gi,
-        (_m, prefix: string, series: string) => {
+        /((?:最大|現在|減少)?体力の)\s*([0-9]*\.?[0-9]+(?:[~/][0-9]*\.?[0-9]+)*)/gi,
+        (match: string, prefix: string, series: string, offset: number, full: string) => {
+            const tail = full.slice(offset + match.length);
+            if (!/^\s*にあたる(?:物理|魔法|確定)?ダメージ/.test(tail)) return match;
             const converted = convertSeriesToPercent(series, 100);
             if (!converted) return `${prefix}${series}`;
             return `${prefix}${converted}`;
@@ -208,6 +216,50 @@ function normalizeScaleCoefficientsForDisplay(html: string): string {
     );
 
     return out;
+}
+
+function normalizeTooltipTextLight(input: string): string {
+    return (input || "")
+        .replace(/<br\/>\s*<br\/>\s*<br\/>/g, "<br/><br/>")
+        .replace(/\s{2,}/g, " ");
+}
+
+function estimateNormalizeComplexity(input: string): number {
+    const len = input.length;
+    const atVars = (input.match(/@[A-Za-z0-9_.:*+\-]+@/g) || []).length;
+    const tags = (input.match(/<[^>]+>/g) || []).length;
+    const braces = (input.match(/\{[A-Za-z0-9_]+\}/g) || []).length;
+    const ratios = (input.match(/[0-9]+(?:\.[0-9]+)?\/[0-9]+(?:\.[0-9]+)?/g) || []).length;
+    return len + atVars * 80 + tags * 20 + braces * 30 + ratios * 40;
+}
+
+const NORMALIZE_COMPLEXITY_THRESHOLD = 9000;
+const NORMALIZE_SLOW_MS = 24;
+const heavyNormalizeBypassKeys = new Set<string>();
+
+function normalizeTooltipTextSafe(input: string, guardKey: string = ""): string {
+    if (!input) return input;
+    const key = guardKey || "global";
+    if (heavyNormalizeBypassKeys.has(key)) {
+        return normalizeTooltipTextLight(input);
+    }
+    if (estimateNormalizeComplexity(input) > NORMALIZE_COMPLEXITY_THRESHOLD) {
+        heavyNormalizeBypassKeys.add(key);
+        return normalizeTooltipTextLight(input);
+    }
+    const started = Date.now();
+    try {
+        const out = normalizeScaleCoefficientsForDisplay(input);
+        const elapsed = Date.now() - started;
+        if (elapsed > NORMALIZE_SLOW_MS) {
+            heavyNormalizeBypassKeys.add(key);
+        }
+        return out;
+    } catch (e) {
+        console.warn("Tooltip normalization fallback (light mode):", e);
+        heavyNormalizeBypassKeys.add(key);
+        return normalizeTooltipTextLight(input);
+    }
 }
 
 export function showGlobalTooltip(target: HTMLElement, html: string) {
@@ -376,7 +428,7 @@ export function buildRuneTooltipHtml(runeData: any): string {
     // Sometimes there are nested <font> tags or color attributes
     desc = desc.replace(/<font color='([^']*)'>/gi, '<span style="color:$1;">');
     desc = desc.replace(/<\/font>/gi, '</span>');
-    desc = normalizeScaleCoefficientsForDisplay(desc);
+    desc = normalizeTooltipTextSafe(desc, "rune");
 
     return `
     <div style="display: flex; align-items: center; margin-bottom: 8px;">
@@ -968,7 +1020,8 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
             .replace(new RegExp("<keywordMajor>", "gi"), '<span style="color:#c8aa6e; font-weight:bold;">')
             .replace(new RegExp("</keywordMajor>", "gi"), '</span>');
 
-        descriptionHtml = normalizeScaleCoefficientsForDisplay(descriptionHtml);
+        const champKey = String(data?.id || data?.name || "unknown");
+        descriptionHtml = normalizeTooltipTextSafe(descriptionHtml, `${lang}:${champKey}:${key}`);
 
         html += `<div style="font-size: 12px; margin-top:5px; color:#ddd; line-height: 1.4;">${descriptionHtml}</div>`;
         html += `</div>`;
@@ -1073,66 +1126,113 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
         const championRelatedCalcKeys = champKeyLower
             ? Object.keys(allCalcFormulas).filter((k) => k.toLowerCase().includes(champKeyLower))
             : [];
+        const aliasKeyList = Array.from(new Set([...championAliasKeys, ...championRelatedCalcKeys]));
+
+        const toResolvedMap = (obj: Record<string, any>): Map<string, string> => {
+            const m = new Map<string, string>();
+            for (const [k, v] of Object.entries(obj || {})) {
+                if (v === undefined || v === null) continue;
+                const raw = typeof v === "object" && v !== null && "resolvedValue" in (v as any)
+                    ? (v as any).resolvedValue
+                    : v;
+                if (raw === undefined || raw === null) continue;
+                const s = String(raw);
+                if (!s.trim()) continue;
+                const lower = k.toLowerCase();
+                if (!m.has(lower)) m.set(lower, s);
+            }
+            return m;
+        };
+        const candidateNames = (nameLower: string): string[] => {
+            const dotTrimmed = nameLower.replace(/\.\d+$/, "");
+            return dotTrimmed !== nameLower ? [nameLower, dotTrimmed] : [nameLower];
+        };
+
+        const baseVarResolvedMap = toResolvedMap(varMapping2 || {});
+        const baseDataValueMap = toResolvedMap(dataValues2 || {});
+        const aliasResolvedMaps = new Map<string, { vm: Map<string, string>, dv: Map<string, string> }>();
+        for (const alias of aliasKeyList) {
+            const slotData = allCalcFormulas[alias];
+            if (!slotData || typeof slotData !== "object") continue;
+            aliasResolvedMaps.set(alias, {
+                vm: toResolvedMap(slotData.variableMapping || {}),
+                dv: toResolvedMap(slotData.dataValues || {}),
+            });
+        }
+        const championAliasLookupCache = new Map<string, string | undefined>();
+        const localResolveMemo = new Map<string, string | undefined>();
 
         const resolveFromChampionAliases = (nameLower: string): string | undefined => {
-            const dotTrimmed = nameLower.replace(/\.\d+$/, "");
-            const candidates = dotTrimmed !== nameLower ? [nameLower, dotTrimmed] : [nameLower];
+            if (championAliasLookupCache.has(nameLower)) {
+                return championAliasLookupCache.get(nameLower);
+            }
+            const candidates = candidateNames(nameLower);
             const found = new Set<string>();
 
-            for (const alias of [...championAliasKeys, ...championRelatedCalcKeys]) {
-                const vm = allCalcFormulas[alias]?.variableMapping;
-                if (!vm) continue;
+            for (const alias of aliasKeyList) {
+                const maps = aliasResolvedMaps.get(alias);
+                if (!maps) continue;
                 for (const cand of candidates) {
-                    const key = Object.keys(vm).find((k) => k.toLowerCase() === cand);
-                    const val = key ? vm[key]?.resolvedValue : undefined;
-                    if (val !== undefined && val !== null && String(val).trim() !== "") {
-                        found.add(String(val));
-                    }
+                    const val = maps.vm.get(cand);
+                    if (val !== undefined) found.add(val);
                 }
             }
-            if (found.size === 1) return Array.from(found)[0];
-            return undefined;
+            const result = found.size === 1 ? Array.from(found)[0] : undefined;
+            championAliasLookupCache.set(nameLower, result);
+            return result;
         };
 
         const resolveFromAlias = (alias: string, nameLower: string): string | undefined => {
-            const slotData = allCalcFormulas[alias];
-            if (!slotData || typeof slotData !== "object") return undefined;
-            const vm = slotData.variableMapping || {};
-            const dv = slotData.dataValues || {};
-
-            const dotTrimmed = nameLower.replace(/\.\d+$/, "");
-            const candidates = dotTrimmed !== nameLower ? [nameLower, dotTrimmed] : [nameLower];
+            const maps = aliasResolvedMaps.get(alias);
+            if (!maps) return undefined;
+            const candidates = candidateNames(nameLower);
             for (const cand of candidates) {
-                const vmKey = Object.keys(vm).find((k) => k.toLowerCase() === cand);
-                if (vmKey && vm[vmKey]?.resolvedValue !== undefined && vm[vmKey]?.resolvedValue !== null) {
-                    return String(vm[vmKey].resolvedValue);
-                }
-                const dvKey = Object.keys(dv).find((k) => k.toLowerCase() === cand);
-                if (dvKey && dv[dvKey] !== undefined && dv[dvKey] !== null) {
-                    return String(dv[dvKey]);
-                }
+                const vmVal = maps.vm.get(cand);
+                if (vmVal !== undefined) return vmVal;
+                const dvVal = maps.dv.get(cand);
+                if (dvVal !== undefined) return dvVal;
             }
             return undefined;
         };
 
         const resolveLocalVar = (nameRaw: string, targetFbMap: Record<string, any> = fbMap): string | undefined => {
             const name = nameRaw.toLowerCase();
-            const dotTrimmed = name.replace(/\.\d+$/, "");
-            const candidates = dotTrimmed !== name ? [name, dotTrimmed] : [name];
+            const memoKey = targetFbMap === fbMap ? name : "";
+            if (memoKey && localResolveMemo.has(memoKey)) {
+                return localResolveMemo.get(memoKey);
+            }
+            const candidates = candidateNames(name);
+
+            // Many tooltip placeholders are formatting-only wrappers and intentionally missing in data maps.
+            if (/(?:prefix|postfix|tooltip|nl)$/.test(name)) {
+                if (memoKey) localResolveMemo.set(memoKey, "");
+                return "";
+            }
 
             for (const cand of candidates) {
-                if (targetFbMap === fbMap && varMapping2[cand]?.resolvedValue !== undefined) {
-                    return String(varMapping2[cand].resolvedValue);
+                if (targetFbMap === fbMap && baseVarResolvedMap.has(cand)) {
+                    const v = baseVarResolvedMap.get(cand);
+                    if (memoKey) localResolveMemo.set(memoKey, v);
+                    return v;
                 }
                 if (targetFbMap === fbMap) {
-                    const dataKey = Object.keys(dataValues2).find((k) => k.toLowerCase() === cand);
-                    if (dataKey && dataValues2[dataKey] !== undefined) {
-                        return String(dataValues2[dataKey]);
+                    const v = baseDataValueMap.get(cand);
+                    if (v !== undefined) {
+                        if (memoKey) localResolveMemo.set(memoKey, v);
+                        return v;
                     }
                 }
-                if (targetFbMap[cand] !== undefined) return String(targetFbMap[cand]);
+                if (targetFbMap[cand] !== undefined) {
+                    const v = String(targetFbMap[cand]);
+                    if (memoKey) localResolveMemo.set(memoKey, v);
+                    return v;
+                }
                 const candHash = fnv1a_32(cand);
-                if (targetFbMap[candHash] !== undefined) return String(targetFbMap[candHash]);
+                if (targetFbMap[candHash] !== undefined) {
+                    const v = String(targetFbMap[candHash]);
+                    if (memoKey) localResolveMemo.set(memoKey, v);
+                    return v;
+                }
             }
 
             // Common pattern in WAD tooltips: "@FooCalc@" while variable mapping stores "foo".
@@ -1141,15 +1241,26 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                 const stemCandidates = [stem, stem.replace(/_$/, "")].filter(Boolean);
                 for (const stemKey of stemCandidates) {
                     if (varMapping2[stemKey]?.resolvedValue !== undefined) {
-                        return String(varMapping2[stemKey].resolvedValue);
+                        const v = String(varMapping2[stemKey].resolvedValue);
+                        if (memoKey) localResolveMemo.set(memoKey, v);
+                        return v;
                     }
-                    const dataKey = Object.keys(dataValues2).find((k) => k.toLowerCase() === stemKey);
-                    if (dataKey && dataValues2[dataKey] !== undefined) {
-                        return String(dataValues2[dataKey]);
+                    const dvVal = baseDataValueMap.get(stemKey);
+                    if (dvVal !== undefined) {
+                        if (memoKey) localResolveMemo.set(memoKey, dvVal);
+                        return dvVal;
                     }
-                    if (targetFbMap[stemKey] !== undefined) return String(targetFbMap[stemKey]);
+                    if (targetFbMap[stemKey] !== undefined) {
+                        const v = String(targetFbMap[stemKey]);
+                        if (memoKey) localResolveMemo.set(memoKey, v);
+                        return v;
+                    }
                     const stemHash = fnv1a_32(stemKey);
-                    if (targetFbMap[stemHash] !== undefined) return String(targetFbMap[stemHash]);
+                    if (targetFbMap[stemHash] !== undefined) {
+                        const v = String(targetFbMap[stemHash]);
+                        if (memoKey) localResolveMemo.set(memoKey, v);
+                        return v;
+                    }
                 }
             }
 
@@ -1166,7 +1277,10 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             // Last resort (same champion, other slots): use exact var name only when value is unique.
             if (targetFbMap === fbMap) {
                 const champWide = resolveFromChampionAliases(name);
-                if (champWide !== undefined) return champWide;
+                if (champWide !== undefined) {
+                    if (memoKey) localResolveMemo.set(memoKey, champWide);
+                    return champWide;
+                }
             }
 
             // Heuristic fallback for template-only keys that differ from WAD variable names.
@@ -1194,7 +1308,10 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                 }
                 return undefined;
             })();
-            if (semanticPick !== undefined) return semanticPick;
+            if (semanticPick !== undefined) {
+                if (memoKey) localResolveMemo.set(memoKey, semanticPick);
+                return semanticPick;
+            }
 
             const fMatch = name.match(/^f(\d+)(?:\.\d+)?$/);
             if (fMatch && targetFbMap === fbMap) {
@@ -1202,18 +1319,24 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                 if (!Number.isNaN(idx) && idx > 0) {
                     const effectAmountKey = `effect${idx}amount`;
                     if (varMapping2[effectAmountKey]?.resolvedValue !== undefined) {
-                        return String(varMapping2[effectAmountKey].resolvedValue);
+                        const v = String(varMapping2[effectAmountKey].resolvedValue);
+                        if (memoKey) localResolveMemo.set(memoKey, v);
+                        return v;
                     }
                     const effectKey = `effect${idx}`;
                     if (varMapping2[effectKey]?.resolvedValue !== undefined) {
-                        return String(varMapping2[effectKey].resolvedValue);
+                        const v = String(varMapping2[effectKey].resolvedValue);
+                        if (memoKey) localResolveMemo.set(memoKey, v);
+                        return v;
                     }
                     const calcKeys = Object.keys(varMapping2)
                         .filter((k) => !!varMapping2[k] && varMapping2[k].source === "calculationFull" && !k.startsWith("{"))
                         .sort();
                     const picked = calcKeys[idx - 1];
                     if (picked && varMapping2[picked]?.resolvedValue !== undefined) {
-                        return String(varMapping2[picked].resolvedValue);
+                        const v = String(varMapping2[picked].resolvedValue);
+                        if (memoKey) localResolveMemo.set(memoKey, v);
+                        return v;
                     }
 
                     // Fallback: some tooltips still reference f1/f2/f3 style placeholders even when
@@ -1226,10 +1349,13 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                     });
                     const genericPicked = genericKeys[idx - 1];
                     if (genericPicked && varMapping2[genericPicked]?.resolvedValue !== undefined) {
-                        return String(varMapping2[genericPicked].resolvedValue);
+                        const v = String(varMapping2[genericPicked].resolvedValue);
+                        if (memoKey) localResolveMemo.set(memoKey, v);
+                        return v;
                     }
                 }
             }
+            if (memoKey) localResolveMemo.set(memoKey, undefined);
             return undefined;
         };
 
@@ -1371,6 +1497,8 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             return changed ? `${out.join("")}` : valueText;
         };
 
+        let resolvedTokenCount = 0;
+        let unresolvedTokenCount = 0;
         descriptionHtml = descriptionHtml.replace(/@([a-zA-Z0-9_\.:\*\-\+]+)@/g, (match, p1, offset, fullStr) => {
             let varName = p1.toLowerCase();
             if (varName === 'spellmodifierdescriptionappend' || varName === 'spellmodifierdescription') return "";
@@ -1534,12 +1662,15 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                         renderedVal += ` (${calcSuffix})`;
                     }
                 }
+                resolvedTokenCount++;
                 return collapseDuplicateScalings(renderedVal);
             }
 
             if (varName === "abilityresourcename") {
+                resolvedTokenCount++;
                 return "";
             }
+            unresolvedTokenCount++;
             return ""; // unresolvable: hide unknown placeholders
         });
 
@@ -1755,7 +1886,8 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             .replace(/\?+/g, "")
             .replace(/<br\/>\s*<br\/>\s*<br\/>/g, "<br/><br/>")
             .replace(/\s{2,}/g, " ");
-        descriptionHtml = normalizeScaleCoefficientsForDisplay(descriptionHtml);
+        const champKey = String(champTooltipJson?.champion || "unknown");
+        descriptionHtml = normalizeTooltipTextSafe(descriptionHtml, `${lang}:${champKey}:${slot}`);
 
         const plainDesc = descriptionHtml.replace(/<[^>]+>/g, "").replace(/\s+/g, "").trim();
         const looksBrokenPassive = slot === "Passive" && (
@@ -1769,7 +1901,7 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                 .replace(/<br\s*\/?>/gi, "<br/>")
                 .replace(/<\/?font[^>]*>/gi, "")
                 .replace(/<br\/>\s*<br\/>\s*<br\/>/g, "<br/><br/>");
-            descriptionHtml = `<div class="tooltip-main-text">${normalizeScaleCoefficientsForDisplay(fallbackDesc)}</div>`;
+            descriptionHtml = `<div class="tooltip-main-text">${normalizeTooltipTextSafe(fallbackDesc, `${lang}:${champKey}:${slot}:fallback`)}</div>`;
         }
 
         html += headerHtml;
@@ -1778,4 +1910,109 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
     }
     
     return html;
+}
+
+export function buildLocalChampionTooltipHtmlLite(champTooltipJson: any, lang: string = "ja"): string {
+    if (!champTooltipJson) return "";
+    const localChampionName = champTooltipJson.champion_local || champTooltipJson.champion_name || champTooltipJson.champion || "Champion";
+    const localChampionTitle = champTooltipJson.champion_title || "";
+    const englishChampionName = champTooltipJson.champion_en || champTooltipJson.champion || "";
+
+    let html = `
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #333; padding-bottom:5px; margin-bottom:8px;">
+            <div>
+                <b style="color:#c8aa6e; font-size:16px;">${localChampionName}</b>
+                ${localChampionTitle ? `<span style="color:#aaa; font-size:12px; margin-left:6px;">${localChampionTitle}</span>` : ""}
+                ${englishChampionName ? `<span style="color:#888; font-size:11px; margin-left:8px;">(${englishChampionName})</span>` : ""}
+            </div>
+            <div style="color:#888; font-size:11px;">Lite</div>
+        </div>`;
+
+    const slots = ["Passive", "Q", "W", "E", "R"];
+    const slotLabel = (slot: string) => (slot === "Passive" ? "P" : slot);
+    const extractTag = (src: string, tag: string): string => {
+        const m = src.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "i"));
+        return m ? m[1] : "";
+    };
+
+    for (const slot of slots) {
+        const rawHtml = String(champTooltipJson[slot] || "");
+        if (!rawHtml) continue;
+        const title = extractTag(rawHtml, "titleLeft")
+            .replace(/\[@hotkey@\]\s*&nbsp;?/gi, "")
+            .replace(/\[@hotkey@\]/gi, "")
+            .replace(/&nbsp;/gi, " ")
+            .trim();
+        let mainText = extractTag(rawHtml, "mainText");
+        if (!mainText) {
+            mainText = rawHtml;
+        }
+        mainText = mainText
+            .replace(/<titleLeft>[\s\S]*?<\/titleLeft>/gi, "")
+            .replace(/<titleRight>[\s\S]*?<\/titleRight>/gi, "")
+            .replace(/<subtitleLeft>[\s\S]*?<\/subtitleLeft>/gi, "")
+            .replace(/<subtitleRight>[\s\S]*?<\/subtitleRight>/gi, "")
+            .replace(/<postScriptLeft>[\s\S]*?<\/postScriptLeft>/gi, "")
+            .replace(/<postScriptRight>[\s\S]*?<\/postScriptRight>/gi, "")
+            .replace(/@([a-zA-Z0-9_\.:\*\-\+]+)@/g, "")
+            .replace(/%i:[^%]*%/g, "")
+            .replace(/<mainText>/gi, "")
+            .replace(/<\/mainText>/gi, "")
+            .replace(/<br>/gi, "<br/>")
+            .replace(/<br\/>\s*<br\/>\s*<br\/>/g, "<br/><br/>")
+            .replace(/\s{2,}/g, " ");
+
+        html += `
+        <div style="margin-bottom:8px; padding-bottom:8px; border-bottom:1px dashed #333;">
+            <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+                <div>
+                    <b style="color:#00d2ff; font-size:13px;">[${slotLabel(slot)}]</b>
+                    <span style="color:#eee; font-size:13px; font-weight:bold; margin-left:4px;">${title || slot}</span>
+                </div>
+            </div>
+            <div style="font-size:12px; margin-top:5px; color:#ddd; line-height:1.4;">${mainText}</div>
+        </div>`;
+    }
+    return html;
+}
+
+type TooltipLiteSafetyDecision = {
+    useLite: boolean;
+    reason: string;
+};
+
+export function evaluateLocalTooltipSafety(champTooltipJson: any): TooltipLiteSafetyDecision {
+    const slots = ["Passive", "Q", "W", "E", "R"];
+    let totalLen = 0;
+    let totalTokenCount = 0;
+    let maxSeriesCount = 0;
+    let maxSlotLen = 0;
+
+    for (const slot of slots) {
+        const raw = champTooltipJson?.[slot];
+        if (typeof raw !== "string") continue;
+        const len = raw.length;
+        totalLen += len;
+        if (len > maxSlotLen) maxSlotLen = len;
+
+        const tokenCount = (raw.match(/@[A-Za-z0-9_.:*+\-]+@/g) || []).length;
+        totalTokenCount += tokenCount;
+
+        const seriesCount = (raw.match(/[0-9]+(?:\.[0-9]+)?(?:\/[0-9]+(?:\.[0-9]+)?){3,}/g) || []).length;
+        if (seriesCount > maxSeriesCount) maxSeriesCount = seriesCount;
+    }
+
+    if (maxSlotLen > 5500) {
+        return { useLite: true, reason: `slot_too_long:${maxSlotLen}` };
+    }
+    if (totalLen > 15000) {
+        return { useLite: true, reason: `payload_too_large:${totalLen}` };
+    }
+    if (totalTokenCount > 220) {
+        return { useLite: true, reason: `too_many_tokens:${totalTokenCount}` };
+    }
+    if (maxSeriesCount > 26) {
+        return { useLite: true, reason: `too_many_numeric_series:${maxSeriesCount}` };
+    }
+    return { useLite: false, reason: "" };
 }
