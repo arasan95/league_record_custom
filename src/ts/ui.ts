@@ -17,7 +17,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 import { open } from "@tauri-apps/plugin-shell";
 import { toVideoId, toVideoName, isFavorite } from "./util";
-import { showGlobalTooltip, hideGlobalTooltip, buildChampionTooltipHtml, buildLocalChampionTooltipHtml, buildSummonerSpellTooltipHtml, buildItemTooltipHtml, buildTrinketTooltipHtml, buildRuneTooltipHtml } from "./tooltip";
+import { showGlobalTooltip, hideGlobalTooltip, buildChampionTooltipHtml, buildLocalChampionTooltipHtml, buildLocalChampionTooltipHtmlLite, buildSummonerSpellTooltipHtml, buildItemTooltipHtml, buildTrinketTooltipHtml, buildRuneTooltipHtml, evaluateLocalTooltipSafety } from "./tooltip";
 import { getText, type Language } from "./i18n";
 import monoTower from "../assets/match-history-icons/mono-tower.png";
 import monoVoidgrub from "../assets/match-history-icons/mono-voidgrub.png";
@@ -31,6 +31,8 @@ try {
 } catch (error) {
     console.warn("Failed to get current window (likely running in browser):", error);
 }
+const globalSlowTooltipKeys = new Set<string>();
+const loggedTooltipLiteKeys = new Set<string>();
 
 function getShortQueueLabel(queueId?: number, queueName: string = ""): string {
     const id = queueId ?? 0;
@@ -3026,30 +3028,74 @@ export default class UI {
 
                 // Add Tooltip for Champion Skills
                 let isHovered = false;
+                let hoverRequestId = 0;
+                const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> => {
+                    return await Promise.race<T | null>([
+                        promise,
+                        new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+                    ]);
+                };
                 img.addEventListener("mouseenter", async () => {
                     isHovered = true;
-                    // Try local JSON first
-                    const tooltips = await getLocalChampionTooltips(p.championId, settings.language || "ja");
-                    if (!isHovered) return;
-                    
-                    if (tooltips) {
-                        const fallbackData = await getDetailedChampionData(p.championId, getCurrentPatchVersion(), settings.language);
-                        if (!isHovered) return;
-                        const html = buildLocalChampionTooltipHtml(tooltips, settings.language || "ja", fallbackData || null);
-                        if (html) showGlobalTooltip(img, html);
-                    } else {
-                        // Fallback to DDragon
-                        const data = await getDetailedChampionData(p.championId, getCurrentPatchVersion(), settings.language);
-                        if (!isHovered) return; // Prevent old fetch from stealing focus
+                    const requestId = ++hoverRequestId;
+                    const lang = settings.language || "ja";
+                    try {
+                        // Try local tooltip JSON first and show immediately.
+                        const tooltips = await getLocalChampionTooltips(p.championId, lang);
+                        if (!isHovered || requestId !== hoverRequestId) return;
 
-                        if (data && data.spells) {
-                            const html = buildChampionTooltipHtml(data, settings.language || "ja");
-                            if (html) showGlobalTooltip(img, html);
+                        if (tooltips) {
+                            const championEn = (getChampionEnglishNameByIdSync(p.championId) || "").toLowerCase();
+                            const tooltipKey = `${championEn || p.championId}:${lang}`;
+                            const safety = evaluateLocalTooltipSafety(tooltips);
+                            const useLiteBySafety = safety.useLite || globalSlowTooltipKeys.has(tooltipKey);
+                            const startedAt = Date.now();
+                            let html = "";
+                            if (useLiteBySafety) {
+                                html = buildLocalChampionTooltipHtmlLite(tooltips, lang);
+                                if (!loggedTooltipLiteKeys.has(tooltipKey)) {
+                                    console.warn(`[tooltip-lite] using local lite tooltip for ${championEn || p.championId} (${lang}) reason=${safety.reason || "slow_history"}`);
+                                    loggedTooltipLiteKeys.add(tooltipKey);
+                                }
+                            } else {
+                                try {
+                                    html = buildLocalChampionTooltipHtml(tooltips, lang, null);
+                                    const elapsed = Date.now() - startedAt;
+                                    if (elapsed > 120) {
+                                        globalSlowTooltipKeys.add(tooltipKey);
+                                        if (!loggedTooltipLiteKeys.has(tooltipKey)) {
+                                            console.warn(`[tooltip-lite] mark slow tooltip key=${tooltipKey} (${elapsed}ms)`);
+                                            loggedTooltipLiteKeys.add(tooltipKey);
+                                        }
+                                    }
+                                } catch (e) {
+                                    globalSlowTooltipKeys.add(tooltipKey);
+                                    console.warn(`[tooltip-lite] fallback after render exception key=${tooltipKey}`, e);
+                                    html = buildLocalChampionTooltipHtmlLite(tooltips, lang);
+                                }
+                            }
+                            if (html && isHovered && requestId === hoverRequestId) {
+                                showGlobalTooltip(img, html);
+                            }
+                        } else {
+                            // Fallback to DataDragon only when local tooltip is unavailable.
+                            const data = await withTimeout(
+                                getDetailedChampionData(p.championId, getCurrentPatchVersion(), settings.language),
+                                3000,
+                            );
+                            if (!isHovered || requestId !== hoverRequestId) return;
+                            if (data && data.spells) {
+                                const html = buildChampionTooltipHtml(data, lang);
+                                if (html) showGlobalTooltip(img, html);
+                            }
                         }
+                    } catch (e) {
+                        console.error("Champion tooltip hover failed:", e);
                     }
                 });
                 img.addEventListener("mouseleave", () => {
                     isHovered = false;
+                    hoverRequestId++;
                     scheduleHideTooltip();
                 });
 
