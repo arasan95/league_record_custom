@@ -23,6 +23,17 @@ let isTftDDTraitLoaded = false;
 
 let tftDDItemMap: Record<string, string> = {};
 let isTftDDItemLoaded = false;
+const DD_FETCH_TIMEOUT_MS = 5000;
+
+async function fetchWithTimeout(url: string, timeoutMs: number = DD_FETCH_TIMEOUT_MS, init?: RequestInit): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
 
 export async function ensureTftDDItemLoaded() {
     if (isTftDDItemLoaded) return;
@@ -42,7 +53,7 @@ export async function ensureTftDDItemLoaded() {
 
         if (!data) {
             const url = `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/tft-item.json`;
-            const res = await fetch(url);
+            const res = await fetchWithTimeout(url);
             if (res.ok) {
                 const json = await res.json();
                 data = json.data;
@@ -91,7 +102,7 @@ export async function ensureTftDDTraitLoaded() {
         if (!data) {
             // "ja_JP" works safely to fetch the generic images; mapping names stays the same in image map.
             const url = `https://ddragon.leagueoflegends.com/cdn/${version}/data/ja_JP/tft-trait.json`;
-            const res = await fetch(url);
+            const res = await fetchWithTimeout(url);
             if (res.ok) {
                 const json = await res.json();
                 data = json.data;
@@ -151,8 +162,8 @@ export async function ensureDataLoaded(langStr: string = "ja") {
         const championEnglishListUrl = `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`;
         
         const [champRes, champEnRes] = await Promise.all([
-            fetch(championListUrl),
-            fetch(championEnglishListUrl)
+            fetchWithTimeout(championListUrl),
+            fetchWithTimeout(championEnglishListUrl),
         ]);
 
         if (champRes.ok) cachedChampionData = (await champRes.json()).data;
@@ -230,7 +241,7 @@ export async function ensureItemDataLoaded(version: string, langStr: string = "j
         
         // Helper to fetch with retry on fallback
         const fetchItemData = async (v: string, u: string) => {
-             const res = await fetch(u);
+             const res = await fetchWithTimeout(u);
              if (res.ok) return { res, v };
              return null;
         };
@@ -332,7 +343,7 @@ export async function ensureRuneDataLoaded(version: string, langStr: string = "j
         let url = `https://ddragon.leagueoflegends.com/cdn/${targetVersion}/data/${locale}/runesReforged.json`;
         
         const fetchRuneData = async (u: string) => {
-             const res = await fetch(u);
+             const res = await fetchWithTimeout(u);
              if (res.ok) return await res.json();
              return null;
         };
@@ -490,10 +501,10 @@ export async function getDetailedChampionData(championId: number, version: strin
 
     let url = `https://ddragon.leagueoflegends.com/cdn/${targetVersion}/data/${locale}/champion/${champName}.json`;
     try {
-        let res = await fetch(url);
+        let res = await fetchWithTimeout(url);
         if (!res.ok) {
             // fallback
-            res = await fetch(`https://ddragon.leagueoflegends.com/cdn/${getCurrentPatchVersion()}/data/${locale}/champion/${champName}.json`);
+            res = await fetchWithTimeout(`https://ddragon.leagueoflegends.com/cdn/${getCurrentPatchVersion()}/data/${locale}/champion/${champName}.json`);
         }
         if (res.ok) {
              const json = await res.json();
@@ -522,7 +533,7 @@ async function mergeCDragonData(champName: string, champData: any, cdragonFilePa
             const cdDataBytes = await readFile(cdragonFilePath, { baseDir: BaseDirectory.AppLocalData });
             cdragonData = JSON.parse(new TextDecoder().decode(cdDataBytes));
         } else {
-            const cdRes = await fetch(`https://raw.communitydragon.org/latest/game/data/characters/${champName.toLowerCase()}/${champName.toLowerCase()}.bin.json`);
+            const cdRes = await fetchWithTimeout(`https://raw.communitydragon.org/latest/game/data/characters/${champName.toLowerCase()}/${champName.toLowerCase()}.bin.json`);
             if (cdRes.ok) {
                 cdragonData = await cdRes.json();
                 try {
@@ -981,9 +992,9 @@ export async function getSummonerSpellData(spellId: number, version: string, lan
     } catch(e) {}
     
     try {
-        let res = await fetch(`https://ddragon.leagueoflegends.com/cdn/${targetVersion}/data/${locale}/summoner.json`);
+        let res = await fetchWithTimeout(`https://ddragon.leagueoflegends.com/cdn/${targetVersion}/data/${locale}/summoner.json`);
         if (!res.ok) {
-            res = await fetch(`https://ddragon.leagueoflegends.com/cdn/${getCurrentPatchVersion()}/data/${locale}/summoner.json`);
+            res = await fetchWithTimeout(`https://ddragon.leagueoflegends.com/cdn/${getCurrentPatchVersion()}/data/${locale}/summoner.json`);
         }
         if (res.ok) {
              const json = await res.json();
@@ -1031,7 +1042,7 @@ export async function ensureTftDataLoaded(langStr: string = "en") {
         if (!data) {
             console.log("Fetching TFT Data from CDragon...");
             // Use en_us as fallback if localization breaks, but we will try lang locale just in case.
-            const res = await fetch(`https://raw.communitydragon.org/latest/cdragon/tft/en_us.json`);
+            const res = await fetchWithTimeout(`https://raw.communitydragon.org/latest/cdragon/tft/en_us.json`);
             if (!res.ok) throw new Error("Failed to fetch TFT data");
             data = await res.json();
             

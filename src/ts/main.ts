@@ -254,12 +254,14 @@ async function main() {
     // handle context menu based on developer mode
     await initPatchVersion();
     
-    // Make sure DataDragon champion lists are eagerly loaded so synchronous UI rendering works
-    await ensureDataLoaded("ja");
+    // Warm up DataDragon cache in background to avoid startup stalls on slow network.
+    ensureDataLoaded("ja").catch((e) => console.warn("ensureDataLoaded failed during startup:", e));
     
     // --- ADDED WAD EXTRACTOR TRIGGER ---
     console.log("Initializing dynamic tooltip fallbacks...");
-    initTooltipFallback().catch(console.error);
+    setTimeout(() => {
+        initTooltipFallback().catch(console.error);
+    }, 1500);
     addEventListener("contextmenu", (event) => {
         // We check a global-ish flag to avoid async delay during the event
         if (!(window as any)._developerModeEnabled) {

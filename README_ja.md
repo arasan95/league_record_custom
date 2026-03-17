@@ -32,6 +32,18 @@
 Tooltip修正の運用手順、参照ファイル、生成方法、検出方法は以下を参照してください。  
 `TOOLTIP_HANDOVER_JA.md`
 
+## Tooltipデバッグ検査の入口
+
+再発時に同じ検査をすぐ回せるよう、専用フォルダを追加しています。
+
+- フォルダ: `tools/tooltip-diagnostics`
+- 手順書: `tools/tooltip-diagnostics/README_ja.md`
+- 実行コマンド:
+  - `bun run diag:tooltip`（DB内の全ロケールを検査）
+  - `bun run diag:tooltip:ja`（日本語のみ検査）
+
+結果は `tmp/tooltip_diagnostics/<日時>/` に保存されます。
+
 ## FFmpegについて
 
 通常利用では、インストーラー版に同梱されたFFmpegが自動で使われます。  
