@@ -3015,9 +3015,20 @@ export default class UI {
                 const initialChampLevel = (typeof p.champLevel === "number" && p.champLevel > 0) ? p.champLevel : 1;
                 const champLevelEl = this.vjs.dom.createEl("div", {}, { class: "champ-level-overlay" }, `${initialChampLevel}`) as HTMLElement;
                 const champIconWrap = this.vjs.dom.createEl("div", {}, { class: "champ-icon-wrap" }, [img, champLevelEl]) as HTMLElement;
+                let hideTooltipTimer: number | null = null;
+                const cancelHideTooltip = () => {
+                    if (hideTooltipTimer !== null) {
+                        window.clearTimeout(hideTooltipTimer);
+                        hideTooltipTimer = null;
+                    }
+                };
                 const scheduleHideTooltip = () => {
                     // Visibility should strictly follow whether the cursor is on the icon element.
-                    setTimeout(() => hideGlobalTooltip(), 30);
+                    cancelHideTooltip();
+                    hideTooltipTimer = window.setTimeout(() => {
+                        hideGlobalTooltip();
+                        hideTooltipTimer = null;
+                    }, 30);
                 };
                 img.onerror = () => {
                     if (img.src !== cDragonUrl) {
@@ -3036,6 +3047,7 @@ export default class UI {
                     ]);
                 };
                 img.addEventListener("mouseenter", async () => {
+                    cancelHideTooltip();
                     isHovered = true;
                     const requestId = ++hoverRequestId;
                     const lang = settings.language || "ja";
@@ -3143,13 +3155,20 @@ export default class UI {
                     {el: spell1El, id: p.spell1Id},
                     {el: spell2El, id: p.spell2Id}
                 ].forEach(({el, id}) => {
+                    let spellHoverRequestId = 0;
                     el.addEventListener("mouseenter", async () => {
+                        cancelHideTooltip();
+                        const requestId = ++spellHoverRequestId;
                         const spellData = await getSummonerSpellData(id, getCurrentPatchVersion(), settings.language);
+                        if (requestId !== spellHoverRequestId) return;
                         if (spellData) {
                             showGlobalTooltip(el, buildSummonerSpellTooltipHtml(spellData));
                         }
                     });
-                    el.addEventListener("mouseleave", () => scheduleHideTooltip());
+                    el.addEventListener("mouseleave", () => {
+                        spellHoverRequestId++;
+                        scheduleHideTooltip();
+                    });
                 });
 
                 const spells = this.vjs.dom.createEl("div", {}, { class: "spells" }, [ spell1El, spell2El ]) as HTMLElement;
@@ -3158,15 +3177,22 @@ export default class UI {
                 const runeIconEl = this.vjs.dom.createEl("img", { src: runeUrlValue }, { class: "rune-icon" }) as HTMLImageElement;
                 
                 // Add Tooltip for Rune
+                let runeHoverRequestId = 0;
                 runeIconEl.addEventListener("mouseenter", async () => {
+                    cancelHideTooltip();
+                    const requestId = ++runeHoverRequestId;
                     if (p.stats.perk0 && p.stats.perk0 !== 0) {
                         const runeData = await getRuneData(p.stats.perk0, settings.language || "ja");
+                        if (requestId !== runeHoverRequestId) return;
                         if (runeData) {
                             showGlobalTooltip(runeIconEl, buildRuneTooltipHtml(runeData));
                         }
                     }
                 });
-                runeIconEl.addEventListener("mouseleave", () => scheduleHideTooltip());
+                runeIconEl.addEventListener("mouseleave", () => {
+                    runeHoverRequestId++;
+                    scheduleHideTooltip();
+                });
 
                 const runesDiv = this.vjs.dom.createEl("div", {}, { class: "runes" }, [
                    runeIconEl
@@ -3239,17 +3265,23 @@ export default class UI {
                     if (itemId === 0) {
                         i.style.visibility = "hidden";
                     }
-                    
+                    let itemHoverRequestId = 0;
                     i.addEventListener("mouseenter", async (e) => {
+                        cancelHideTooltip();
+                        const requestId = ++itemHoverRequestId;
                         const target = e.target as HTMLElement;
                         const currentId = parseInt(target.dataset.itemId || "0", 10);
                         if (currentId === 0) return;
                         const itemData = await getItemData(currentId, settings.language || "ja");
+                        if (requestId !== itemHoverRequestId) return;
                         if (itemData) {
                             showGlobalTooltip(target, buildItemTooltipHtml(itemData));
                         }
                     });
-                    i.addEventListener("mouseleave", () => scheduleHideTooltip());
+                    i.addEventListener("mouseleave", () => {
+                        itemHoverRequestId++;
+                        scheduleHideTooltip();
+                    });
                     
                     slotDiv.append(i);
                     itemsGrid.append(slotDiv);
@@ -3265,16 +3297,23 @@ export default class UI {
                     trinketImg.style.visibility = "hidden";
                 }
                 
+                let trinketHoverRequestId = 0;
                 trinketImg.addEventListener("mouseenter", async (e) => {
+                    cancelHideTooltip();
+                    const requestId = ++trinketHoverRequestId;
                     const target = e.target as HTMLElement;
                     const currentId = parseInt(target.dataset.itemId || "0", 10);
                     if (currentId === 0) return;
                     const itemData = await getItemData(currentId, settings.language || "ja");
+                    if (requestId !== trinketHoverRequestId) return;
                     if (itemData) {
                         showGlobalTooltip(target, buildTrinketTooltipHtml(itemData));
                     }
                 });
-                trinketImg.addEventListener("mouseleave", () => scheduleHideTooltip());
+                trinketImg.addEventListener("mouseleave", () => {
+                    trinketHoverRequestId++;
+                    scheduleHideTooltip();
+                });
                 
                 trinketImg.onerror = () => {
                      trinketImg.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
