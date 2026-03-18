@@ -6,7 +6,7 @@ import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import * as clipboard from "@tauri-apps/plugin-clipboard-manager";
 import { commands, type GameMetadata, type GoldFrame, type ParticipantGold, type MarkerFlags, type Recording, type Settings, type MatchTeam, type Participant, type GameEvent } from "./bindings";
-import { getChampionIconUrl, getChampionIconUrlById, getTftUnitIconUrl, getTftTraitIconUrl, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, ensureTftDataLoaded, getItemPrice, getChampionNameById, getChampionEnglishNameByIdSync, getChampionLocalizedNameByIdSync, getDetailedChampionData, getLocalChampionTooltips, getSummonerSpellData, getItemData, getRuneData, getTftItemIconUrl, getGameModeByQueueId } from "./datadragon";
+import { getChampionIconUrl, getChampionIconUrlById, getTftUnitIconUrl, getTftTraitIconUrl, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, ensureTftDataLoaded, getItemPrice, getChampionNameById, getChampionEnglishNameByIdSync, getChampionLocalizedNameByIdSync, getLocalChampionTooltips, getSummonerSpellData, getItemData, getRuneData, getTftItemIconUrl, getGameModeByQueueId } from "./datadragon";
 import { getCurrentPatchVersion, getSpawnTimers } from "./version";
 import { InventoryTimeline } from "./timeline";
 import { getObjectiveConfig } from "./objectives";
@@ -17,7 +17,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 import { open } from "@tauri-apps/plugin-shell";
 import { toVideoId, toVideoName, isFavorite } from "./util";
-import { showGlobalTooltip, hideGlobalTooltip, buildChampionTooltipHtml, buildLocalChampionTooltipHtml, buildLocalChampionTooltipHtmlLite, buildSummonerSpellTooltipHtml, buildItemTooltipHtml, buildTrinketTooltipHtml, buildRuneTooltipHtml, evaluateLocalTooltipSafety } from "./tooltip";
+import { showGlobalTooltip, hideGlobalTooltip, buildLocalChampionTooltipHtml, buildLocalChampionTooltipHtmlLite, buildSummonerSpellTooltipHtml, buildItemTooltipHtml, buildTrinketTooltipHtml, buildRuneTooltipHtml, evaluateLocalTooltipSafety } from "./tooltip";
 import { getText, type Language } from "./i18n";
 import monoTower from "../assets/match-history-icons/mono-tower.png";
 import monoVoidgrub from "../assets/match-history-icons/mono-voidgrub.png";
@@ -31,7 +31,6 @@ try {
 } catch (error) {
     console.warn("Failed to get current window (likely running in browser):", error);
 }
-const globalSlowTooltipKeys = new Set<string>();
 const loggedTooltipLiteKeys = new Set<string>();
 
 function getShortQueueLabel(queueId?: number, queueName: string = ""): string {
@@ -3060,8 +3059,7 @@ export default class UI {
                             const championEn = (getChampionEnglishNameByIdSync(p.championId) || "").toLowerCase();
                             const tooltipKey = `${championEn || p.championId}:${lang}`;
                             const safety = evaluateLocalTooltipSafety(tooltips);
-                            const useLiteBySafety = safety.useLite || globalSlowTooltipKeys.has(tooltipKey);
-                            const startedAt = Date.now();
+                            const useLiteBySafety = safety.useLite;
                             let html = "";
                             if (useLiteBySafety) {
                                 html = buildLocalChampionTooltipHtmlLite(tooltips, lang);
@@ -3071,34 +3069,14 @@ export default class UI {
                                 }
                             } else {
                                 try {
-                                    html = buildLocalChampionTooltipHtml(tooltips, lang, null);
-                                    const elapsed = Date.now() - startedAt;
-                                    if (elapsed > 120) {
-                                        globalSlowTooltipKeys.add(tooltipKey);
-                                        if (!loggedTooltipLiteKeys.has(tooltipKey)) {
-                                            console.warn(`[tooltip-lite] mark slow tooltip key=${tooltipKey} (${elapsed}ms)`);
-                                            loggedTooltipLiteKeys.add(tooltipKey);
-                                        }
-                                    }
+                                    html = buildLocalChampionTooltipHtml(tooltips, lang);
                                 } catch (e) {
-                                    globalSlowTooltipKeys.add(tooltipKey);
                                     console.warn(`[tooltip-lite] fallback after render exception key=${tooltipKey}`, e);
                                     html = buildLocalChampionTooltipHtmlLite(tooltips, lang);
                                 }
                             }
                             if (html && isHovered && requestId === hoverRequestId) {
                                 showGlobalTooltip(img, html);
-                            }
-                        } else {
-                            // Fallback to DataDragon only when local tooltip is unavailable.
-                            const data = await withTimeout(
-                                getDetailedChampionData(p.championId, getCurrentPatchVersion(), settings.language),
-                                3000,
-                            );
-                            if (!isHovered || requestId !== hoverRequestId) return;
-                            if (data && data.spells) {
-                                const html = buildChampionTooltipHtml(data, lang);
-                                if (html) showGlobalTooltip(img, html);
                             }
                         }
                     } catch (e) {
