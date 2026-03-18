@@ -17,7 +17,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 import { open } from "@tauri-apps/plugin-shell";
 import { toVideoId, toVideoName, isFavorite } from "./util";
-import { showGlobalTooltip, hideGlobalTooltip, buildLocalChampionTooltipHtml, buildLocalChampionTooltipHtmlLite, buildSummonerSpellTooltipHtml, buildItemTooltipHtml, buildTrinketTooltipHtml, buildRuneTooltipHtml, evaluateLocalTooltipSafety } from "./tooltip";
+import { showGlobalTooltip, hideGlobalTooltip, buildLocalChampionTooltipHtml, buildLocalChampionTooltipHtmlLite, buildSummonerSpellTooltipHtml, buildItemTooltipHtml, buildTrinketTooltipHtml, buildRuneTooltipHtml } from "./tooltip";
 import { getText, type Language } from "./i18n";
 import monoTower from "../assets/match-history-icons/mono-tower.png";
 import monoVoidgrub from "../assets/match-history-icons/mono-voidgrub.png";
@@ -31,7 +31,16 @@ try {
 } catch (error) {
     console.warn("Failed to get current window (likely running in browser):", error);
 }
-const loggedTooltipLiteKeys = new Set<string>();
+
+const isTooltipPerfDebugEnabled = (): boolean => {
+    try {
+        return localStorage.getItem("tooltipPerfDebug") === "1";
+    } catch {
+        return false;
+    }
+};
+let globalTooltipRenderTicket = 0;
+const timeoutTooltipKeys = new Set<string>();
 
 function getShortQueueLabel(queueId?: number, queueName: string = ""): string {
     const id = queueId ?? 0;
@@ -3049,33 +3058,68 @@ export default class UI {
                     cancelHideTooltip();
                     isHovered = true;
                     const requestId = ++hoverRequestId;
+                    const ticket = ++globalTooltipRenderTicket;
                     const lang = settings.language || "ja";
+                    const perfEnabled = isTooltipPerfDebugEnabled();
+                    const perfStart = perfEnabled ? performance.now() : 0;
                     try {
                         // Try local tooltip JSON first and show immediately.
+                        const fetchStart = perfEnabled ? performance.now() : 0;
                         const tooltips = await getLocalChampionTooltips(p.championId, lang);
-                        if (!isHovered || requestId !== hoverRequestId) return;
+                        const fetchEnd = perfEnabled ? performance.now() : 0;
+                        if (!isHovered || requestId !== hoverRequestId || ticket !== globalTooltipRenderTicket) return;
 
                         if (tooltips) {
                             const championEn = (getChampionEnglishNameByIdSync(p.championId) || "").toLowerCase();
                             const tooltipKey = `${championEn || p.championId}:${lang}`;
-                            const safety = evaluateLocalTooltipSafety(tooltips);
-                            const useLiteBySafety = safety.useLite;
+                            if (timeoutTooltipKeys.has(tooltipKey)) {
+                                return;
+                            }
                             let html = "";
-                            if (useLiteBySafety) {
-                                html = buildLocalChampionTooltipHtmlLite(tooltips, lang);
-                                if (!loggedTooltipLiteKeys.has(tooltipKey)) {
-                                    console.warn(`[tooltip-lite] using local lite tooltip for ${championEn || p.championId} (${lang}) reason=${safety.reason || "slow_history"}`);
-                                    loggedTooltipLiteKeys.add(tooltipKey);
+                            try {
+                                const renderStart = perfEnabled ? performance.now() : 0;
+                                html = await buildLocalChampionTooltipHtml(
+                                    tooltips,
+                                    lang,
+                                    null,
+                                    {
+                                        isCancelled: () =>
+                                            !isHovered ||
+                                            requestId !== hoverRequestId ||
+                                            ticket !== globalTooltipRenderTicket ||
+                                            !img.isConnected,
+                                        timeoutMs: 1700,
+                                    },
+                                );
+                                const renderEnd = perfEnabled ? performance.now() : 0;
+                                if (perfEnabled) {
+                                    const totalNow = performance.now();
+                                    console.log(
+                                        `[tooltip-perf] ${championEn || p.championId}(${lang}) fetch=${(fetchEnd - fetchStart).toFixed(1)}ms render=${(renderEnd - renderStart).toFixed(1)}ms total=${(totalNow - perfStart).toFixed(1)}ms`,
+                                    );
                                 }
-                            } else {
-                                try {
-                                    html = buildLocalChampionTooltipHtml(tooltips, lang);
-                                } catch (e) {
-                                    console.warn(`[tooltip-lite] fallback after render exception key=${tooltipKey}`, e);
-                                    html = buildLocalChampionTooltipHtmlLite(tooltips, lang);
+                            } catch (e) {
+                                const msg = String((e as any)?.message || "");
+                                if (msg.includes("tooltip_render_cancelled")) {
+                                    return;
+                                }
+                                if (msg.includes("tooltip_render_timeout")) {
+                                    timeoutTooltipKeys.add(tooltipKey);
+                                    console.warn(`[tooltip] render timeout >1700ms, skip display key=${tooltipKey}`);
+                                    return;
+                                }
+                                console.warn(`[tooltip-lite] fallback after render exception key=${tooltipKey}`, e);
+                                const liteStart = perfEnabled ? performance.now() : 0;
+                                html = buildLocalChampionTooltipHtmlLite(tooltips, lang);
+                                if (perfEnabled) {
+                                    const liteEnd = performance.now();
+                                    const totalNow = performance.now();
+                                    console.log(
+                                        `[tooltip-perf] ${championEn || p.championId}(${lang}) fetch=${(fetchEnd - fetchStart).toFixed(1)}ms lite=${(liteEnd - liteStart).toFixed(1)}ms total=${(totalNow - perfStart).toFixed(1)}ms fallback=1`,
+                                    );
                                 }
                             }
-                            if (html && isHovered && requestId === hoverRequestId) {
+                            if (html && isHovered && requestId === hoverRequestId && ticket === globalTooltipRenderTicket && img.isConnected) {
                                 showGlobalTooltip(img, html);
                             }
                         }
@@ -3086,6 +3130,7 @@ export default class UI {
                 img.addEventListener("mouseleave", () => {
                     isHovered = false;
                     hoverRequestId++;
+                    globalTooltipRenderTicket++;
                     scheduleHideTooltip();
                 });
 

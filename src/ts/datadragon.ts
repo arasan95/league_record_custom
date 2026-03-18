@@ -1148,8 +1148,10 @@ export async function getChampionIconUrl(championName: string): Promise<string> 
 
 export async function getChampionIconUrlById(championId: number): Promise<string> {
     if (championId === 0) return ""; // 0 is invalid
-    const url = `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/${championId}.png`;
-    return await getCachedAssetUrl(url, "champion_id", `${championId}.png`);
+    // Temporarily disable direct ID-icon path. Use champion-name icon flow only.
+    const championName = await getChampionNameById(championId);
+    if (!championName) return "";
+    return await getChampionIconUrl(championName);
 }
 
 export async function getChampionNameById(championId: number): Promise<string | null> {
