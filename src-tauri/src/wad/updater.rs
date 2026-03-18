@@ -9,18 +9,72 @@ use std::path::{Path, PathBuf};
 
 /// Attempt to find League of Legends installation directory
 pub fn get_league_install_dir() -> Option<PathBuf> {
-    let common_paths = vec![
+    let is_valid_lol_dir = |p: &Path| p.exists() && p.join("LeagueClient.exe").exists();
+
+    if let Ok(env_path) = std::env::var("LEAGUE_INSTALL_DIR") {
+        let p = PathBuf::from(env_path);
+        if is_valid_lol_dir(&p) {
+            return Some(p);
+        }
+    }
+
+    let common_paths = [
         "C:\\Riot Games\\League of Legends",
         "D:\\Riot Games\\League of Legends",
         "E:\\Riot Games\\League of Legends",
+        "F:\\Riot Games\\League of Legends",
+        "G:\\Riot Games\\League of Legends",
     ];
 
     for path_str in common_paths {
         let p = PathBuf::from(path_str);
-        if p.exists() && p.join("LeagueClient.exe").exists() {
+        if is_valid_lol_dir(&p) {
             return Some(p);
         }
     }
+
+    // Fallback: parse Riot installs manifest to support custom/non-standard install paths.
+    let installs_json = PathBuf::from(r"C:\ProgramData\Riot Games\RiotClientInstalls.json");
+    if let Ok(raw) = fs::read_to_string(&installs_json) {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw) {
+            fn collect_strings(v: &serde_json::Value, out: &mut Vec<String>) {
+                match v {
+                    serde_json::Value::String(s) => out.push(s.clone()),
+                    serde_json::Value::Array(arr) => {
+                        for x in arr {
+                            collect_strings(x, out);
+                        }
+                    }
+                    serde_json::Value::Object(map) => {
+                        for x in map.values() {
+                            collect_strings(x, out);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            let mut paths = Vec::new();
+            collect_strings(&value, &mut paths);
+
+            for s in paths {
+                // Manifest paths can point directly to LeagueClient.exe or its parent directory.
+                let lower = s.to_lowercase();
+                if !lower.contains("league of legends") {
+                    continue;
+                }
+
+                let mut p = PathBuf::from(&s);
+                if p.file_name().map(|x| x.eq_ignore_ascii_case("LeagueClient.exe")).unwrap_or(false) {
+                    p.pop();
+                }
+                if is_valid_lol_dir(&p) {
+                    return Some(p);
+                }
+            }
+        }
+    }
+
     None
 }
 
@@ -289,6 +343,42 @@ pub fn extract_all_champions_to_json(install_dir: &Path, output_path: &Path) -> 
     let mut all_slots = HashMap::new();
 
     for (champ_name, vars, slots) in results {
+        let mut champion_spell_debug = serde_json::Map::new();
+        let champ_lower = champ_name.to_lowercase();
+
+        let infer_slot_from_spell_id = |spell_id: &str| -> Option<&'static str> {
+            let lower = spell_id.to_lowercase();
+            if lower.contains("passive") {
+                return Some("Passive");
+            }
+            let stripped = lower
+                .strip_prefix(&champ_lower)
+                .unwrap_or(&lower)
+                .trim_start_matches('_');
+            if stripped.starts_with('q') { return Some("Q"); }
+            if stripped.starts_with('w') { return Some("W"); }
+            if stripped.starts_with('e') { return Some("E"); }
+            if stripped.starts_with('r') { return Some("R"); }
+            None
+        };
+
+        // Fallback candidates inferred directly from mScriptName.
+        let mut inferred_slot_spell: HashMap<&'static str, String> = HashMap::new();
+        for spell_id in vars.keys() {
+            if let Some(slot_key) = infer_slot_from_spell_id(spell_id) {
+                match inferred_slot_spell.get(slot_key) {
+                    Some(prev) => {
+                        if spell_id.len() < prev.len() {
+                            inferred_slot_spell.insert(slot_key, spell_id.clone());
+                        }
+                    }
+                    None => {
+                        inferred_slot_spell.insert(slot_key, spell_id.clone());
+                    }
+                }
+            }
+        }
+
         if !slots.is_empty() {
             let mut qwer_map = serde_json::Map::new();
             let keys = ["Q", "W", "E", "R"];
@@ -296,11 +386,52 @@ pub fn extract_all_champions_to_json(install_dir: &Path, output_path: &Path) -> 
                 let mut final_name = slot.clone();
                 if let Some(ext_res) = vars.get(slot) {
                     final_name = ext_res.m_script_name.clone();
+                    champion_spell_debug.insert(keys[i].to_string(), ext_res.debug_json.clone());
+                } else if let Some(inferred_spell_id) = inferred_slot_spell.get(keys[i]) {
+                    if let Some(ext_res) = vars.get(inferred_spell_id) {
+                        final_name = ext_res.m_script_name.clone();
+                        champion_spell_debug.insert(keys[i].to_string(), ext_res.debug_json.clone());
+                    }
                 }
                 qwer_map.insert(keys[i].to_string(), serde_json::Value::String(final_name));
             }
             all_slots.insert(champ_name.clone(), serde_json::Value::Object(qwer_map));
+        } else {
+            // If CharacterRecord slot list was unavailable, still export inferred QWER names.
+            let mut qwer_map = serde_json::Map::new();
+            for key in ["Q", "W", "E", "R"] {
+                if let Some(inferred_spell_id) = inferred_slot_spell.get(key) {
+                    qwer_map.insert(key.to_string(), serde_json::Value::String(inferred_spell_id.clone()));
+                    if let Some(ext_res) = vars.get(inferred_spell_id) {
+                        champion_spell_debug.insert(key.to_string(), ext_res.debug_json.clone());
+                    }
+                }
+            }
+            if !qwer_map.is_empty() {
+                all_slots.insert(champ_name.clone(), serde_json::Value::Object(qwer_map));
+            }
         }
+
+        // Best-effort passive mapping for compatibility with champion->spells format.
+        if !champion_spell_debug.contains_key("Passive") {
+            if let Some(passive_id) = inferred_slot_spell.get("Passive") {
+                if let Some(ext_res) = vars.get(passive_id) {
+                    champion_spell_debug.insert("Passive".to_string(), ext_res.debug_json.clone());
+                }
+            } else if let Some((_sid, ext_res)) = vars
+                .iter()
+                .find(|(sid, _)| sid.to_lowercase().contains("passive"))
+            {
+                champion_spell_debug.insert("Passive".to_string(), ext_res.debug_json.clone());
+            }
+        }
+
+        if !champion_spell_debug.is_empty() {
+            let mut champ_obj = serde_json::Map::new();
+            champ_obj.insert("spells".to_string(), serde_json::Value::Object(champion_spell_debug));
+            all_debug.insert(champ_name.clone(), serde_json::Value::Object(champ_obj));
+        }
+
         for (spell_id, ext_res) in vars {
             all_mappings.insert(spell_id.clone(), ext_res.flat_map);
             all_debug.insert(spell_id, ext_res.debug_json);

@@ -27,37 +27,84 @@ pub fn extract_spell_vars(
     }
 
     let mut data_values_map: std::collections::HashMap<String, Vec<f32>> = std::collections::HashMap::new();
-    let mut hash_to_name: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     let mut dbg_var_map = serde_json::Map::new();
 
-    if let Some(BinValue::List(dv_list)) = m_spell.get("DataValues") {
+    let extract_numeric_list = |val: &BinValue| -> Vec<f32> {
+        let mut out = Vec::new();
+        if let BinValue::List(list) = val {
+            for item in list {
+                match item {
+                    BinValue::Float(f) => out.push(*f),
+                    BinValue::I32(i) => out.push(*i as f32),
+                    BinValue::U32(u) => out.push(*u as f32),
+                    BinValue::U8(u) => out.push(*u as f32),
+                    BinValue::I8(i) => out.push(*i as f32),
+                    BinValue::U16(u) => out.push(*u as f32),
+                    BinValue::I16(i) => out.push(*i as f32),
+                    _ => {}
+                }
+            }
+        }
+        out
+    };
+
+    let data_values_prop = m_spell
+        .get("DataValues")
+        .or_else(|| {
+            m_spell
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("DataValues"))
+                .map(|(_, v)| v)
+        })
+        .or_else(|| {
+            let hk = format!("{{{:08x}}}", crate::wad::hash::fnv1a_32("DataValues"));
+            m_spell.get(&hk)
+        });
+
+    if let Some(BinValue::List(dv_list)) = data_values_prop {
         for dv_val in dv_list {
             if let BinValue::Struct(dv) | BinValue::Embedded(dv) = dv_val {
-                let name = match dv.get("mName") {
-                    Some(BinValue::String(s)) => s.clone(),
-                    Some(BinValue::Hash(s)) => s.clone(),
+                // Newer WADs often hash DataValue field names (e.g. {8d39bde6}/{34474c3b})
+                // so we cannot rely on mName/mValues only.
+                let name = dv
+                    .get("mName")
+                    .or_else(|| dv.get("{8d39bde6}"))
+                    .and_then(|v| match v {
+                        BinValue::String(s) => Some(s.clone()),
+                        BinValue::Hash(s) => Some(s.clone()),
+                        _ => None,
+                    })
+                    .or_else(|| {
+                        dv.iter()
+                            .filter(|(k, _)| *k != "__type")
+                            .find_map(|(_, v)| match v {
+                                BinValue::String(s) => Some(s.clone()),
+                                BinValue::Hash(s) => Some(s.clone()),
+                                _ => None,
+                            })
+                    });
+                let name = match name {
+                    Some(s) if !s.is_empty() => s,
                     _ => continue,
                 };
 
-                let vals = match dv.get("mValues") {
-                    Some(BinValue::List(list)) => {
-                        let mut v_arr = Vec::new();
-                        for item in list {
-                            match item {
-                                BinValue::Float(f) => v_arr.push(*f),
-                                BinValue::I32(i) => v_arr.push(*i as f32),
-                                BinValue::U32(u) => v_arr.push(*u as f32),
-                                BinValue::U8(u) => v_arr.push(*u as f32),
-                                BinValue::I8(i) => v_arr.push(*i as f32),
-                                BinValue::U16(u) => v_arr.push(*u as f32),
-                                BinValue::I16(i) => v_arr.push(*i as f32),
-                                _ => v_arr.push(0.0),
-                            }
-                        }
-                        v_arr
-                    }
-                    _ => continue,
-                };
+                let vals = dv
+                    .get("mValues")
+                    .or_else(|| dv.get("{34474c3b}"))
+                    .map(extract_numeric_list)
+                    .filter(|v| !v.is_empty())
+                    .or_else(|| {
+                        dv.values()
+                            .filter_map(|v| {
+                                let arr = extract_numeric_list(v);
+                                if arr.is_empty() { None } else { Some(arr) }
+                            })
+                            .next()
+                    })
+                    .unwrap_or_default();
+                if vals.is_empty() {
+                    continue;
+                }
 
                 let lower_name = name.to_lowercase();
 
@@ -68,8 +115,6 @@ pub fn extract_spell_vars(
                     h = h.wrapping_mul(0x01000193);
                 }
                 let hash_str = format!("{{{:08x}}}", h);
-
-                hash_to_name.insert(hash_str.clone(), lower_name.clone());
 
                 data_values_map.insert(lower_name, vals.clone());
                 data_values_map.insert(hash_str, vals);
@@ -215,26 +260,29 @@ pub fn extract_spell_vars(
     };
 
     for (field_name, prefix) in [("mEffectAmount", "effect"), ("mEffectBurnAmount", "effectburn")] {
-        if let Some(BinValue::List(effect_list)) = m_spell.get(field_name) {
+        if let Some(BinValue::List(effect_list)) = get_spell_prop(field_name) {
             for (idx, effect_val) in effect_list.iter().enumerate() {
                 // each element is a struct/embedded with a mValues list
                 let vals: Vec<f32> = if let BinValue::Struct(ef) | BinValue::Embedded(ef) = effect_val {
-                    if let Some(BinValue::List(mv)) = ef.get("mValues").or_else(|| ef.get("{425ed3ca}")) {
-                        mv.iter().map(|v| extract_float(v)).collect()
+                    if let Some(arr) = ef
+                        .get("mValues")
+                        .or_else(|| ef.get("{425ed3ca}"))
+                        .or_else(|| ef.get("{34474c3b}"))
+                        .map(extract_numeric_list)
+                        .filter(|v| !v.is_empty())
+                    {
+                        arr
+                    } else if let Some(arr) = ef
+                        .values()
+                        .filter_map(|v| {
+                            let list = extract_numeric_list(v);
+                            if list.is_empty() { None } else { Some(list) }
+                        })
+                        .next()
+                    {
+                        arr
                     } else {
-                        // fallback to finding the first List in the struct
-                        let mut found_list = None;
-                        for val in ef.values() {
-                            if let BinValue::List(l) = val {
-                                found_list = Some(l);
-                                break;
-                            }
-                        }
-                        if let Some(l) = found_list {
-                            l.iter().map(|v| extract_float(v)).collect()
-                        } else {
-                            vec![extract_float(effect_val)]
-                        }
+                        vec![extract_float(effect_val)]
                     }
                 } else {
                     vec![extract_float(effect_val)]
@@ -1567,7 +1615,7 @@ pub fn extract_spell_vars(
     let mut spell_vars = std::collections::HashMap::new();
     let mut dbg_calcs_map = serde_json::Map::new();
 
-    if let Some(BinValue::Map(calcs)) = m_spell.get("mSpellCalculations") {
+    if let Some(BinValue::Map(calcs)) = get_spell_prop("mSpellCalculations") {
         for (k, v) in calcs.iter() {
             all_calcs_map.insert(k.clone(), v.clone());
         }

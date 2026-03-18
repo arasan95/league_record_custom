@@ -8,14 +8,14 @@ let dynamicTooltipFallback: Record<string, Record<string, string>> = {};
 let allCalcFormulas: Record<string, any> = {};
 
 export async function initTooltipFallback() {
-    try {
-        const cacheDir = "tooltip_cache";
-        const filePath = `${cacheDir}/tooltip_variable_fallback.json`;
-        const verPath = `${cacheDir}/tooltip_version.txt`;
-        const currentVersion = getCurrentPatchVersion();
+    const cacheDir = "tooltip_cache";
+    const filePath = `${cacheDir}/tooltip_variable_fallback.json`;
+    const verPath = `${cacheDir}/tooltip_version.txt`;
+    const calcFormulasPath = `${cacheDir}/all_calc_formulas.json`;
+    const currentVersion = getCurrentPatchVersion();
 
-        let shouldExtract = false;
-        
+    let shouldExtract = false;
+    try {
         if (!(await exists(verPath, { baseDir: BaseDirectory.AppLocalData }))) {
             shouldExtract = true;
         } else {
@@ -30,21 +30,31 @@ export async function initTooltipFallback() {
         if (!(await exists(filePath, { baseDir: BaseDirectory.AppLocalData }))) {
             shouldExtract = true;
         }
+    } catch (e) {
+        console.warn("Failed to inspect tooltip cache metadata. Will try extraction and fallback to existing cache:", e);
+        shouldExtract = true;
+    }
 
-        if (shouldExtract) {
+    if (shouldExtract) {
+        try {
             console.log("Starting background WAD extraction...");
             await invoke("update_champion_data");
             await writeFile(verPath, new TextEncoder().encode(currentVersion), { baseDir: BaseDirectory.AppLocalData });
+        } catch (e) {
+            // Keep app usable: if extraction fails, continue loading previous cache data.
+            console.warn("WAD extraction failed. Falling back to existing tooltip cache:", e);
         }
+    }
 
+    try {
         if (await exists(filePath, { baseDir: BaseDirectory.AppLocalData })) {
             const raw = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
             const str = new TextDecoder().decode(raw);
             const generated = JSON.parse(str);
-            
+
             dynamicTooltipFallback = { ...generated };
             const manualFallbackMappings: Record<string, Record<string, string>> = manualFallbackMappingsRaw;
-            
+
             for (const spellId of Object.keys(manualFallbackMappings)) {
                 if (!dynamicTooltipFallback[spellId]) {
                     dynamicTooltipFallback[spellId] = {};
@@ -53,19 +63,26 @@ export async function initTooltipFallback() {
                     dynamicTooltipFallback[spellId][k] = manualFallbackMappings[spellId][k];
                 }
             }
-            
+
             console.log("Loaded dynamic tooltip fallbacks:", Object.keys(dynamicTooltipFallback).length, "spells");
+        } else {
+            console.warn("tooltip_variable_fallback.json not found. Tooltip variable resolution may be limited.");
         }
-        
-        const calcFormulasPath = `${cacheDir}/all_calc_formulas.json`;
+    } catch (e) {
+        console.error("Failed to load tooltip_variable_fallback.json:", e);
+    }
+
+    try {
         if (await exists(calcFormulasPath, { baseDir: BaseDirectory.AppLocalData })) {
             const raw = await readFile(calcFormulasPath, { baseDir: BaseDirectory.AppLocalData });
             const str = new TextDecoder().decode(raw);
             allCalcFormulas = JSON.parse(str);
             console.log("Loaded all_calc_formulas with", Object.keys(allCalcFormulas).length, "champions");
+        } else {
+            console.warn("all_calc_formulas.json not found. Tooltip formulas may be limited.");
         }
     } catch (e) {
-        console.error("Failed to init tooltip fallbacks:", e);
+        console.error("Failed to load all_calc_formulas.json:", e);
     }
 }
 
@@ -144,6 +161,16 @@ function normalizeScaleCoefficientsForDisplay(html: string): string {
         },
     );
 
+    // e.g. +0.02%AD / +0.01%AP -> +2%AD / +1%AP
+    out = out.replace(
+        /([+\-]?\s*)(\d*\.\d+)%\s*(AD|AP|bonusAD|bAD)\b/gi,
+        (_m, sign: string, num: string, stat: string) => {
+            const pct = toPercent(num);
+            if (!pct) return `${sign}${num}%${stat}`;
+            return `${sign}${pct}${stat}`;
+        },
+    );
+
     // e.g. 最大体力の0.1~0.18の魔法ダメージ -> 最大体力の10~18%の魔法ダメージ
     // Also handles already-scaled percent values written without '%' (e.g. 5~9).
     // Applies only to health-based damage clauses to avoid changing unrelated decimals.
@@ -214,7 +241,7 @@ function normalizeScaleCoefficientsForDisplay(html: string): string {
             return `${label}${converted}`;
         },
     );
-
+    out = out.replace(/(%){2,}/g, "%");
     return out;
 }
 
@@ -1385,6 +1412,69 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                     }
                 }
             }
+
+            // WAD updates sometimes move base damage into missile/aux spell records
+            // (e.g. Ahri Q: BaseDamage* missing on AhriQ, present as effect1amount on AhriQReturnMissile).
+            if (targetFbMap === fbMap) {
+                const slotStem = `${String(champTooltipJson.champion || "").toLowerCase()}${slot.toLowerCase()}`;
+                const relatedAliasKeys = aliasKeyList.filter((k) => {
+                    const kl = String(k || "").toLowerCase();
+                    if (!kl) return false;
+                    if (spellMapAlias && kl === String(spellMapAlias).toLowerCase()) return true;
+                    return slotStem.length > 0 && kl.includes(slotStem);
+                });
+                const orderedAliasKeys = Array.from(new Set([
+                    ...(spellMapAlias ? [spellMapAlias] : []),
+                    ...relatedAliasKeys,
+                    ...aliasKeyList,
+                ]));
+
+                const getAliasSeries = (seriesKeys: string[]): string | undefined => {
+                    for (const alias of orderedAliasKeys) {
+                        const maps = aliasResolvedMaps.get(alias);
+                        if (!maps) continue;
+                        for (const sk of seriesKeys) {
+                            const cands = candidateNames(sk.toLowerCase());
+                            for (const cand of cands) {
+                                const vm = maps.vm.get(cand);
+                                if (vm !== undefined && String(vm).trim() !== "") return vm;
+                                const dv = maps.dv.get(cand);
+                                if (dv !== undefined && String(dv).trim() !== "") return dv;
+                            }
+                        }
+                    }
+                    return undefined;
+                };
+
+                const pickRank = (series: string, idx1: number): string | undefined => {
+                    const parts = String(series).split("/");
+                    if (parts.length === 0) return undefined;
+                    if (idx1 >= 1 && idx1 <= parts.length) return parts[idx1 - 1];
+                    if (parts.length === 1) return parts[0];
+                    return undefined;
+                };
+
+                const bdMatch = name.match(/^basedamage(\d+)$/);
+                if (bdMatch) {
+                    const rank = parseInt(bdMatch[1], 10);
+                    const series = getAliasSeries(["effect1amount", "effect1", "damage", "basedamage"]);
+                    if (series) {
+                        const picked = pickRank(series, rank);
+                        if (picked !== undefined) {
+                            if (memoKey) localResolveMemo.set(memoKey, picked);
+                            return picked;
+                        }
+                    }
+                }
+
+                if (name === "basedamage") {
+                    const series = getAliasSeries(["effect1amount", "effect1", "damage"]);
+                    if (series) {
+                        if (memoKey) localResolveMemo.set(memoKey, series);
+                        return series;
+                    }
+                }
+            }
             if (memoKey) localResolveMemo.set(memoKey, undefined);
             return undefined;
         };
@@ -1466,14 +1556,24 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             if (/(duration|time|cooldown|cast|delay|stun|silence|root|slowduration|knockup|taunt|fear|charm)/.test(key)) {
                 return valueText;
             }
-            if (!/(percent|ratio|movespeed|attackspeed|slow|haste|lifesteal|omnivamp|tenacity|amp|mult)/.test(key)) {
+            const ratioLikeKey = /(percent|ratio|movespeed|attackspeed|slow|haste|lifesteal|omnivamp|tenacity|amp|max_?health.*damage|missing_?health.*damage|current_?health.*damage)/.test(key);
+            if (!ratioLikeKey) {
                 return valueText;
             }
-            if (!valueText || valueText.includes("%")) return valueText;
-            if (!/^[+\-]?(?:\d+\.?\d*|\d*\.\d+)(?:[~/][+\-]?(?:\d+\.?\d*|\d*\.\d+))*$/.test(valueText.trim())) {
+            if (!valueText) return valueText;
+
+            const plain = valueText.trim().match(/^[+\-]?(?:\d+\.?\d*|\d*\.\d+)(?:[~/][+\-]?(?:\d+\.?\d*|\d*\.\d+))*$/);
+            const withTail = valueText.trim().match(/^([+\-]?(?:\d+\.?\d*|\d*\.\d+)(?:[~/][+\-]?(?:\d+\.?\d*|\d*\.\d+))*)([\s\S]*)$/);
+            if (!plain && !withTail) {
                 return valueText;
             }
-            const parts = valueText.split(/([~/])/);
+
+            const numericHead = plain ? valueText.trim() : (withTail?.[1] || "");
+            const tail = plain ? "" : (withTail?.[2] || "");
+            if (!plain && /^\s*%/.test(tail)) {
+                return valueText;
+            }
+            const parts = numericHead.split(/([~/])/);
             const out: string[] = [];
             let changed = false;
             for (const p of parts) {
@@ -1483,12 +1583,25 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                 }
                 const n = Number(p);
                 if (!Number.isFinite(n) || Math.abs(n) >= 1) {
-                    return valueText;
+                    changed = false;
+                    break;
                 }
                 out.push(ratioToPercentText(n));
                 changed = true;
             }
-            return changed ? `${out.join("")}%` : valueText;
+            if (changed) {
+                return `${out.join("")}%${tail}`;
+            }
+
+            // Some WAD formulas resolve percent-like stats as already-scaled numbers
+            // (e.g. movespeed=25, calc_max_health_damage=1), so keep the number and append %.
+            const shouldForcePercentSuffix =
+                /(movespeed|attackspeed|(?:^|_)slow(?:$|_)|haste|lifesteal|omnivamp|tenacity|max_?health.*damage|missing_?health.*damage|current_?health.*damage)/.test(key)
+                && !/(flat|absolute|raw|duration|time)/.test(key);
+            if (shouldForcePercentSuffix) {
+                return `${numericHead}%${tail}`;
+            }
+            return valueText;
         };
         const maybePercentizeByTemplateContext = (valueText: string, fullText: string, tokenEnd: number): string => {
             const trimNum = (n: number): string => {
@@ -1525,6 +1638,73 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                 changed = true;
             }
             return changed ? `${out.join("")}` : valueText;
+        };
+        const parseSeries = (s: string): number[] | null => {
+            const t = (s || "").trim();
+            if (!/^[+\-]?(?:\d+\.?\d*|\d*\.\d+)(?:[~/][+\-]?(?:\d+\.?\d*|\d*\.\d+))*$/.test(t)) return null;
+            const parts = t.split(/[~/]/).map((x) => Number(x));
+            if (parts.some((n) => !Number.isFinite(n))) return null;
+            return parts;
+        };
+        const approxEqSeries = (a: number[], b: number[], eps: number = 0.25): boolean => {
+            if (a.length === 0 || b.length === 0) return false;
+            const n = Math.max(a.length, b.length);
+            for (let i = 0; i < n; i++) {
+                const av = a[Math.min(i, a.length - 1)];
+                const bv = b[Math.min(i, b.length - 1)];
+                if (Math.abs(av - bv) > eps) return false;
+            }
+            return true;
+        };
+        const maybePercentizeBySemanticHpMap = (
+            valueText: string,
+            targetFbMap: Record<string, any>,
+            targetVarName: string,
+        ): string => {
+            if (!valueText) return valueText;
+            const trimmed = valueText.trim();
+            const plain = trimmed.match(/^([+\-]?(?:\d+\.?\d*|\d*\.\d+)(?:[~/][+\-]?(?:\d+\.?\d*|\d*\.\d+))*)([\s\S]*)$/);
+            if (!plain) return valueText;
+            const head = plain[1];
+            const tail = plain[2] || "";
+            if (/%/.test(head) || /^\s*%/.test(tail)) return valueText;
+            if (!/%\s*(?:AP|AD|bonusAD|bAD|HP|Health)/i.test(tail)) return valueText;
+
+            // Quick path: key itself strongly implies HP-ratio damage.
+            const key = (targetVarName || "").toLowerCase();
+            if (/(?:^|_)(?:max|missing|current)_?health|(?:^|_)hp(?:$|_)|hpdamage|healthdamage/.test(key)) {
+                return `${head}%${tail}`;
+            }
+
+            // Language-agnostic inference:
+            // If resolved head (e.g. "1") matches *100 of any hp/health ratio source value
+            // (e.g. "basehpdamage=0.01"), treat the head as percentage.
+            const headSeries = parseSeries(head);
+            if (!headSeries) return valueText;
+            if (headSeries.some((n) => !Number.isFinite(n) || n <= 0 || n > 100)) return valueText;
+
+            const hpLike = /(hp|health|maxhealth|missinghealth|currenthealth)/i;
+            const candidateSeries: number[][] = [];
+
+            for (const [k, v] of Object.entries(targetFbMap || {})) {
+                if (!hpLike.test(k)) continue;
+                const arr = parseSeries(String(v));
+                if (!arr || arr.length === 0) continue;
+                if (arr.some((n) => Math.abs(n) > 1.0)) continue;
+                candidateSeries.push(arr.map((n) => n * 100));
+            }
+            for (const [k, v] of baseVarResolvedMap.entries()) {
+                if (!hpLike.test(k)) continue;
+                const arr = parseSeries(String(v));
+                if (!arr || arr.length === 0) continue;
+                if (arr.some((n) => Math.abs(n) > 1.0)) continue;
+                candidateSeries.push(arr.map((n) => n * 100));
+            }
+
+            if (candidateSeries.some((cand) => approxEqSeries(headSeries, cand))) {
+                return `${head}%${tail}`;
+            }
+            return valueText;
         };
 
         let resolvedTokenCount = 0;
@@ -1679,7 +1859,13 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                 let renderedVal = formatFallbackValue(resolvedVal);
                 renderedVal = maybePercentizeByVarName(renderedVal, varName);
                 renderedVal = maybePercentizeByTemplateContext(renderedVal, String(fullStr || ""), Number(offset || 0) + String(match || "").length);
+                renderedVal = maybePercentizeBySemanticHpMap(
+                    renderedVal,
+                    targetFbMap,
+                    varName,
+                );
                 renderedVal = collapseDuplicateScalings(renderedVal);
+                renderedVal = renderedVal.replace(/(%){2,}/g, "%");
                 let calcSuffix = resolveCalcSuffix(p1, varName, targetFbMap);
                 if (calcSuffix === undefined && targetFbMap === fbMap && spellMapAlias) {
                     // Fallback to alias map when current map is merged and key is alias-centric.
@@ -1690,6 +1876,30 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                     calcSuffix = normalizeCalcText(calcSuffix);
                     if (calcSuffix && !hasEquivalentScaling(renderedVal, calcSuffix)) {
                         renderedVal += ` (${calcSuffix})`;
+                    }
+                }
+                // Some slots store "TotalDamage" as scaling-only text while base values are in effect1amount.
+                if (targetFbMap === fbMap && varName.includes("totaldamage")) {
+                    const renderedTrim = renderedVal.replace(/\s+/g, "");
+                    const scalingOnly = /%/.test(renderedTrim) && !/\d+\s*(?:\/\s*\d+)+/.test(renderedTrim) && !/^\d+(?:\.\d+)?(?:\/\d+(?:\.\d+)?)*$/.test(renderedTrim);
+                    if (scalingOnly) {
+                        const slotStem = `${String(champTooltipJson.champion || "").toLowerCase()}${slot.toLowerCase()}`;
+                        const relatedAliasKeys = aliasKeyList.filter((k) => String(k || "").toLowerCase().includes(slotStem));
+                        const orderedAliasKeys = Array.from(new Set([
+                            ...(spellMapAlias ? [spellMapAlias] : []),
+                            ...relatedAliasKeys,
+                            ...aliasKeyList,
+                        ]));
+                        let baseSeries: string | undefined;
+                        for (const alias of orderedAliasKeys) {
+                            const maps = aliasResolvedMaps.get(alias);
+                            if (!maps) continue;
+                            baseSeries = maps.vm.get("effect1amount") || maps.dv.get("effect1amount") || maps.vm.get("effect1") || maps.dv.get("effect1");
+                            if (baseSeries && String(baseSeries).trim() !== "") break;
+                        }
+                        if (baseSeries && !renderedVal.includes(baseSeries)) {
+                            renderedVal = `${baseSeries}${renderedVal.startsWith("(") ? "" : " "}${renderedVal}`;
+                        }
                     }
                 }
                 resolvedTokenCount++;
