@@ -1,0 +1,373 @@
+{
+  "locale": "ja_JP",
+  "generatedAt": "2026-03-18T13:52:49.114Z",
+  "timeoutMs": 1700,
+  "slowThresholdMs": 200,
+  "dbPath": "C:\\Users\\fjnce\\AppData\\Roaming/com.leaguerecord.custom/tooltip_db/tooltip_data.db",
+  "cacheDir": "C:\\Users\\fjnce\\AppData\\Local/com.leaguerecord.custom/tooltip_cache",
+  "championCount": 172,
+  "slowCount": 0,
+  "top": [
+    {
+      "champion": "Varus",
+      "totalMs": 136.7,
+      "slotMaxMs": 36,
+      "slotAvgMs": 14.6,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "basepercenthpperstack2*100.000000",
+        "total": 5,
+        "resolve": 0,
+        "normalize": 5,
+        "calc": 0,
+        "hits": 1,
+        "slot": "W"
+      }
+    },
+    {
+      "champion": "RekSai",
+      "totalMs": 68.36,
+      "slotMaxMs": 31,
+      "slotAvgMs": 13.6,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "spell.reksaiq:burrowdamagetooltip",
+        "total": 2,
+        "resolve": 0,
+        "normalize": 0,
+        "calc": 0,
+        "hits": 1,
+        "slot": "Q"
+      }
+    },
+    {
+      "champion": "Velkoz",
+      "totalMs": 67.84,
+      "slotMaxMs": 31,
+      "slotAvgMs": 12.8,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "cost1",
+        "total": 2,
+        "resolve": 0,
+        "normalize": 2,
+        "calc": 0,
+        "hits": 1,
+        "slot": "Q"
+      }
+    },
+    {
+      "champion": "TwistedFate",
+      "totalMs": 66.77,
+      "slotMaxMs": 37,
+      "slotAvgMs": 12.8,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "effect3amount1",
+        "total": 2,
+        "resolve": 0,
+        "normalize": 2,
+        "calc": 0,
+        "hits": 1,
+        "slot": "W"
+      }
+    },
+    {
+      "champion": "Udyr",
+      "totalMs": 64.64,
+      "slotMaxMs": 31,
+      "slotAvgMs": 12.6,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "ultcdreduction*100",
+        "total": 1,
+        "resolve": 0,
+        "normalize": 1,
+        "calc": 0,
+        "hits": 1,
+        "slot": "Passive"
+      }
+    },
+    {
+      "champion": "Nidalee",
+      "totalMs": 62.82,
+      "slotMaxMs": 26,
+      "slotAvgMs": 12.2,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "spell.aspectofthecougar:pouncecooldown",
+        "total": 4,
+        "resolve": 0,
+        "normalize": 0,
+        "calc": 0,
+        "hits": 2,
+        "slot": "W"
+      }
+    },
+    {
+      "champion": "TahmKench",
+      "totalMs": 62.41,
+      "slotMaxMs": 28,
+      "slotAvgMs": 11.8,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "percenthealthhealing1*100.000000",
+        "total": 4,
+        "resolve": 3,
+        "normalize": 0,
+        "calc": 0,
+        "hits": 1,
+        "slot": "Q"
+      }
+    },
+    {
+      "champion": "Veigar",
+      "totalMs": 62.27,
+      "slotMaxMs": 29,
+      "slotAvgMs": 12.2,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "spell.ruby_boss_fnveigarpassive:apperstack",
+        "total": 3,
+        "resolve": 0,
+        "normalize": 0,
+        "calc": 0,
+        "hits": 1,
+        "slot": "Passive"
+      }
+    },
+    {
+      "champion": "Soraka",
+      "totalMs": 60.08,
+      "slotMaxMs": 30,
+      "slotAvgMs": 11.8,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "spell.nexusblitz_sorakabotq:movespeedhaste*100",
+        "total": 6,
+        "resolve": 0,
+        "normalize": 0,
+        "calc": 0,
+        "hits": 1,
+        "slot": "W"
+      }
+    },
+    {
+      "champion": "Hwei",
+      "totalMs": 60.01,
+      "slotMaxMs": 26,
+      "slotAvgMs": 11.8,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "spell.hweie:tooltip_eedamage",
+        "total": 2,
+        "resolve": 0,
+        "normalize": 1,
+        "calc": 0,
+        "hits": 1,
+        "slot": "E"
+      }
+    },
+    {
+      "champion": "Vi",
+      "totalMs": 58.28,
+      "slotMaxMs": 23,
+      "slotAvgMs": 10.8,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "maxdamagetooltip",
+        "total": 1,
+        "resolve": 0,
+        "normalize": 0,
+        "calc": 0,
+        "hits": 1,
+        "slot": "Q"
+      }
+    },
+    {
+      "champion": "Gnar",
+      "totalMs": 46.48,
+      "slotMaxMs": 14,
+      "slotAvgMs": 8.8,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "spell.gnarw:megatotaldamage",
+        "total": 2,
+        "resolve": 0,
+        "normalize": 0,
+        "calc": 0,
+        "hits": 1,
+        "slot": "W"
+      }
+    },
+    {
+      "champion": "Tryndamere",
+      "totalMs": 40.22,
+      "slotMaxMs": 30,
+      "slotAvgMs": 7.4,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "passivecritconversiontooltip",
+        "total": 1,
+        "resolve": 0,
+        "normalize": 1,
+        "calc": 0,
+        "hits": 1,
+        "slot": "Passive"
+      }
+    },
+    {
+      "champion": "Naafiri",
+      "totalMs": 39.43,
+      "slotMaxMs": 36,
+      "slotAvgMs": 7.6,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "spell.naafiriq:totalmaxdamagesecondcast",
+        "total": 2,
+        "resolve": 0,
+        "normalize": 0,
+        "calc": 0,
+        "hits": 1,
+        "slot": "Q"
+      }
+    },
+    {
+      "champion": "Evelynn",
+      "totalMs": 36.23,
+      "slotMaxMs": 30,
+      "slotAvgMs": 7,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "healingthresholdtooltip",
+        "total": 1,
+        "resolve": 0,
+        "normalize": 1,
+        "calc": 0,
+        "hits": 1,
+        "slot": "Passive"
+      }
+    },
+    {
+      "champion": "Elise",
+      "totalMs": 36.08,
+      "slotMaxMs": 12,
+      "slotAvgMs": 7,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "spell.eliser:spiderlingsstored",
+        "total": 2,
+        "resolve": 0,
+        "normalize": 0,
+        "calc": 0,
+        "hits": 1,
+        "slot": "Passive"
+      }
+    },
+    {
+      "champion": "Skarner",
+      "totalMs": 36.08,
+      "slotMaxMs": 31,
+      "slotAvgMs": 6.8,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "spell.skarnerq:abilitydamage",
+        "total": 2,
+        "resolve": 0,
+        "normalize": 0,
+        "calc": 0,
+        "hits": 1,
+        "slot": "Q"
+      }
+    },
+    {
+      "champion": "Nautilus",
+      "totalMs": 35.89,
+      "slotMaxMs": 29,
+      "slotAvgMs": 7,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "rootduration",
+        "total": 1,
+        "resolve": 0,
+        "normalize": 1,
+        "calc": 0,
+        "hits": 1,
+        "slot": "Passive"
+      }
+    },
+    {
+      "champion": "Pantheon",
+      "totalMs": 34.76,
+      "slotMaxMs": 29,
+      "slotAvgMs": 6.8,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "spell.pantheonq:holddamagecalc",
+        "total": 1,
+        "resolve": 0,
+        "normalize": 0,
+        "calc": 0,
+        "hits": 1,
+        "slot": "R"
+      }
+    },
+    {
+      "champion": "Zyra",
+      "totalMs": 33.84,
+      "slotMaxMs": 26,
+      "slotAvgMs": 6.6,
+      "slotCount": 5,
+      "status": "ok",
+      "error": "",
+      "hottestToken": {
+        "token": "spell.zyrap:plantdamage",
+        "total": 1,
+        "resolve": 0,
+        "normalize": 0,
+        "calc": 0,
+        "hits": 1,
+        "slot": "Q"
+      }
+    }
+  ],
+  "slow": []
+}

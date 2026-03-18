@@ -75,13 +75,11 @@ pub fn extract_spell_vars(
                         _ => None,
                     })
                     .or_else(|| {
-                        dv.iter()
-                            .filter(|(k, _)| *k != "__type")
-                            .find_map(|(_, v)| match v {
-                                BinValue::String(s) => Some(s.clone()),
-                                BinValue::Hash(s) => Some(s.clone()),
-                                _ => None,
-                            })
+                        dv.iter().filter(|(k, _)| *k != "__type").find_map(|(_, v)| match v {
+                            BinValue::String(s) => Some(s.clone()),
+                            BinValue::Hash(s) => Some(s.clone()),
+                            _ => None,
+                        })
                     });
                 let name = match name {
                     Some(s) if !s.is_empty() => s,
@@ -97,7 +95,11 @@ pub fn extract_spell_vars(
                         dv.values()
                             .filter_map(|v| {
                                 let arr = extract_numeric_list(v);
-                                if arr.is_empty() { None } else { Some(arr) }
+                                if arr.is_empty() {
+                                    None
+                                } else {
+                                    Some(arr)
+                                }
                             })
                             .next()
                     })
@@ -157,7 +159,7 @@ pub fn extract_spell_vars(
                         BinValue::I8(i) => v_arr.push(*i as f32),
                         BinValue::U16(u) => v_arr.push(*u as f32),
                         BinValue::I16(i) => v_arr.push(*i as f32),
-                        _ => {},
+                        _ => {}
                     }
                 }
             } else {
@@ -182,7 +184,7 @@ pub fn extract_spell_vars(
                     h = h.wrapping_mul(0x01000193);
                 }
                 let hash_str = format!("{{{:08x}}}", h);
-                
+
                 data_values_map.insert(target_key.to_string(), v_arr.clone());
                 data_values_map.insert(hash_str, v_arr);
             }
@@ -276,7 +278,11 @@ pub fn extract_spell_vars(
                         .values()
                         .filter_map(|v| {
                             let list = extract_numeric_list(v);
-                            if list.is_empty() { None } else { Some(list) }
+                            if list.is_empty() {
+                                None
+                            } else {
+                                Some(list)
+                            }
                         })
                         .next()
                     {
@@ -356,10 +362,7 @@ pub fn extract_spell_vars(
         }
     }
 
-    fn get_prop<'a>(
-        map: &'a std::collections::HashMap<String, BinValue>,
-        key: &str,
-    ) -> Option<&'a BinValue> {
+    fn get_prop<'a>(map: &'a std::collections::HashMap<String, BinValue>, key: &str) -> Option<&'a BinValue> {
         if let Some(v) = map.get(key) {
             return Some(v);
         }
@@ -367,9 +370,7 @@ pub fn extract_spell_vars(
         map.get(&h)
     }
 
-    fn expand_char_level_breakpoints(
-        part: &std::collections::HashMap<String, BinValue>,
-    ) -> Vec<f32> {
+    fn expand_char_level_breakpoints(part: &std::collections::HashMap<String, BinValue>) -> Vec<f32> {
         let mut values = Vec::with_capacity(18);
         let mut per_level = extract_num(get_prop(part, "mInitialBonusPerLevel"));
         let mut current = extract_num(get_prop(part, "mLevel1Value"));
@@ -389,9 +390,7 @@ pub fn extract_spell_vars(
                         *add_at_level.entry(lvl_usize).or_insert(0.0) += add;
                     }
                     let new_per_level = extract_num(get_prop(m, "mBonusPerLevelAtAndAfter"));
-                    if new_per_level.abs() > f32::EPSILON
-                        || get_prop(m, "mBonusPerLevelAtAndAfter").is_some()
-                    {
+                    if new_per_level.abs() > f32::EPSILON || get_prop(m, "mBonusPerLevelAtAndAfter").is_some() {
                         per_level_at_level.insert(lvl_usize, new_per_level);
                     }
                 }
@@ -1478,19 +1477,12 @@ pub fn extract_spell_vars(
                                         }
                                     }
                                     if !added_from_named_subpart {
-                                        let sub_text = part_to_formula(
-                                            &BinValue::Struct(sub.clone()),
-                                            dv_map,
-                                            all_calcs,
-                                            false,
-                                        );
+                                        let sub_text =
+                                            part_to_formula(&BinValue::Struct(sub.clone()), dv_map, all_calcs, false);
                                         if let Some(vals) = parse_num_list(&sub_text) {
-                                            let mapped: Vec<f32> = vals
-                                                .iter()
-                                                .map(|v| (v * 100.0 * 10.0).round() / 10.0)
-                                                .collect();
-                                            let all_same =
-                                                mapped.iter().all(|&v| (v - mapped[0]).abs() < f32::EPSILON);
+                                            let mapped: Vec<f32> =
+                                                vals.iter().map(|v| (v * 100.0 * 10.0).round() / 10.0).collect();
+                                            let all_same = mapped.iter().all(|&v| (v - mapped[0]).abs() < f32::EPSILON);
                                             let pct_str = if all_same {
                                                 mapped[0].to_string()
                                             } else {
@@ -1653,16 +1645,10 @@ pub fn extract_spell_vars(
                 let mut scaling_str = None;
                 if resolved.contains(" + (") && resolved.ends_with(")") {
                     let inner = &resolved[resolved.find(" + (").unwrap() + 4..resolved.len() - 1];
-                    scaling_str = Some(format!(
-                        "+{}",
-                        inner.trim().trim_start_matches('+')
-                    ));
+                    scaling_str = Some(format!("+{}", inner.trim().trim_start_matches('+')));
                 } else if resolved.contains(" (") && resolved.ends_with(")") {
                     let inner = &resolved[resolved.find(" (").unwrap() + 2..resolved.len() - 1];
-                    scaling_str = Some(format!(
-                        "+{}",
-                        inner.trim().trim_start_matches('+')
-                    ));
+                    scaling_str = Some(format!("+{}", inner.trim().trim_start_matches('+')));
                 } else if resolved.starts_with("(") && resolved.ends_with(")") {
                     scaling_str = Some(format!(
                         "+{}",
@@ -1735,6 +1721,40 @@ pub fn extract_spell_vars(
                 dv_dbg.insert("resolvedValue".to_string(), serde_json::Value::String(formatted));
                 dbg_var_map.insert(k.clone(), serde_json::Value::Object(dv_dbg));
             }
+
+            // Export rank-indexed aliases for tooltip templates that use
+            // @Foo1@ / @Foo2@ / @Foo3@ and @Foo1Prefix@ / @Foo1Postfix@ style tokens.
+            // This is required by several WAD-localized postScript blocks (e.g. Aphelios R).
+            if !k.starts_with('{') && !k.ends_with('}') {
+                for (idx, raw) in ranks_to_format.iter().enumerate() {
+                    let rank_num = idx + 1;
+                    let rank_key = format!("{}{}", k, rank_num);
+                    let rank_val = ((*raw * 10000.0).round() / 10000.0).to_string();
+                    spell_vars.insert(rank_key.clone(), rank_val.clone());
+
+                    let mut rank_dbg = serde_json::Map::new();
+                    rank_dbg.insert(
+                        "source".to_string(),
+                        serde_json::Value::String("dataValueRankAlias".to_string()),
+                    );
+                    rank_dbg.insert("resolvedValue".to_string(), serde_json::Value::String(rank_val));
+                    dbg_var_map.insert(rank_key.clone(), serde_json::Value::Object(rank_dbg));
+
+                    for suffix in ["prefix", "postfix"] {
+                        let affix_key = format!("{}{}", rank_key, suffix);
+                        spell_vars.entry(affix_key.clone()).or_insert_with(String::new);
+                        let mut affix_dbg = serde_json::Map::new();
+                        affix_dbg.insert(
+                            "source".to_string(),
+                            serde_json::Value::String("dataValueRankAffixAlias".to_string()),
+                        );
+                        affix_dbg.insert("resolvedValue".to_string(), serde_json::Value::String(String::new()));
+                        dbg_var_map
+                            .entry(affix_key)
+                            .or_insert_with(|| serde_json::Value::Object(affix_dbg));
+                    }
+                }
+            }
         }
     }
 
@@ -1755,13 +1775,14 @@ pub fn extract_spell_vars(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wad::parser::{parse_wad_entries, extract_file_from_wad};
     use crate::wad::bin::parse_prop;
+    use crate::wad::parser::{extract_file_from_wad, parse_wad_entries};
     use std::path::PathBuf;
 
     #[test]
     fn test_dump_character_record() {
-        let install_dir = crate::wad::updater::get_league_install_dir().unwrap_or(PathBuf::from("C:/Riot Games/League of Legends"));
+        let install_dir =
+            crate::wad::updater::get_league_install_dir().unwrap_or(PathBuf::from("C:/Riot Games/League of Legends"));
         let wad_path = install_dir.join("Game/DATA/FINAL/Champions/Caitlyn.wad.client");
         if !wad_path.exists() {
             println!("No caitlyn wad found");
@@ -1769,14 +1790,23 @@ mod tests {
         }
 
         let mut db = crate::wad::hash::build_basic_hash_db();
-        let words = vec!["Character", "mCharacter", "mSpells", "spellNames", "Abilities", "CharacterRecord"];
+        let words = vec![
+            "Character",
+            "mCharacter",
+            "mSpells",
+            "spellNames",
+            "Abilities",
+            "CharacterRecord",
+        ];
         for w in words {
             db.insert(crate::wad::hash::fnv1a_32(w), w.to_string());
         }
 
         let entries = parse_wad_entries(&wad_path).unwrap();
         for entry in entries {
-            if entry.comp_size > 0 && (entry.comp_type == 0 || entry.comp_type == 2 || entry.comp_type == 3 || entry.comp_type == 36) {
+            if entry.comp_size > 0
+                && (entry.comp_type == 0 || entry.comp_type == 2 || entry.comp_type == 3 || entry.comp_type == 36)
+            {
                 if let Ok(data) = extract_file_from_wad(&wad_path, &entry) {
                     if data.len() >= 4 && (&data[0..4] == b"PROP" || &data[0..4] == b"PTCH") {
                         if let Ok(parsed) = parse_prop(&data, &db) {
