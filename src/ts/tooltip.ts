@@ -7,6 +7,15 @@ import manualFallbackMappingsRaw from "../assets/fallback_mappings.json";
 let dynamicTooltipFallback: Record<string, Record<string, string>> = {};
 let allCalcFormulas: Record<string, any> = {};
 
+// Debug/diagnostics helper: allow offline perf scripts to inject caches without Tauri runtime.
+export function __setTooltipDebugCaches(
+    fallbackMap: Record<string, Record<string, string>>,
+    calcMap: Record<string, any>,
+) {
+    dynamicTooltipFallback = fallbackMap || {};
+    allCalcFormulas = calcMap || {};
+}
+
 export async function initTooltipFallback() {
     const cacheDir = "tooltip_cache";
     const filePath = `${cacheDir}/tooltip_variable_fallback.json`;
@@ -91,6 +100,7 @@ let currentTooltipTarget: HTMLElement | null = null;
 let globalTooltipObserver: MutationObserver | null = null;
 let globalTooltipMoveListener: ((e: MouseEvent) => void) | null = null;
 let globalTooltipWheelListener: ((e: WheelEvent) => void) | null = null;
+let globalTooltipMouseDownListener: ((e: MouseEvent) => void) | null = null;
 
 function normalizeScaleCoefficientsForDisplay(html: string): string {
     if (!html) return html;
@@ -138,7 +148,6 @@ function normalizeScaleCoefficientsForDisplay(html: string): string {
         }
         return hasNumeric ? `${out.join("")}%` : null;
     };
-
     let out = html;
 
     // e.g. 増加攻撃力x0.1 / AP*0.6 -> 増加攻撃力x10% / AP*60%
@@ -241,7 +250,16 @@ function normalizeScaleCoefficientsForDisplay(html: string): string {
             return `${label}${converted}`;
         },
     );
+
+    // e.g. 100 + (60%AP) * 0.01 -> 1% (+60%AP)
+    out = out.replace(
+        /([+\-]?(?:\d+\.?\d*|\d*\.\d+)(?:[~/][+\-]?(?:\d+\.?\d*|\d*\.\d+))*)\s*\+\s*\(([^()]*%[a-zA-Z][^()]*)\)\s*\*\s*0\.0*1\b/g,
+        (_m, baseSeries: string, scaling: string) => {
+            return `${baseSeries} + (${scaling}) * 0.01`;
+        },
+    );
     out = out.replace(/(%){2,}/g, "%");
+    out = out.replace(/\s\*\s/g, " × ");
     return out;
 }
 
@@ -266,27 +284,11 @@ const heavyNormalizeBypassKeys = new Set<string>();
 
 function normalizeTooltipTextSafe(input: string, guardKey: string = ""): string {
     if (!input) return input;
-    const key = guardKey || "global";
-    if (heavyNormalizeBypassKeys.has(key)) {
-        return normalizeTooltipTextLight(input);
-    }
-    if (estimateNormalizeComplexity(input) > NORMALIZE_COMPLEXITY_THRESHOLD) {
-        heavyNormalizeBypassKeys.add(key);
-        return normalizeTooltipTextLight(input);
-    }
-    const started = Date.now();
-    try {
-        const out = normalizeScaleCoefficientsForDisplay(input);
-        const elapsed = Date.now() - started;
-        if (elapsed > NORMALIZE_SLOW_MS) {
-            heavyNormalizeBypassKeys.add(key);
-        }
-        return out;
-    } catch (e) {
-        console.warn("Tooltip normalization fallback (light mode):", e);
-        heavyNormalizeBypassKeys.add(key);
-        return normalizeTooltipTextLight(input);
-    }
+    const out = normalizeTooltipTextLight(input);
+    // Keep this path intentionally cheap to avoid hover-time UI stalls.
+    return out
+        .replace(/(%){2,}/g, "%")
+        .replace(/\s\*\s(?=\d)/g, " × ");
 }
 
 export function showGlobalTooltip(target: HTMLElement, html: string) {
@@ -366,45 +368,32 @@ export function showGlobalTooltip(target: HTMLElement, html: string) {
         }
     });
     globalTooltipObserver.observe(observeRoot, { childList: true, subtree: true });
-
-    if (globalTooltipMoveListener) {
-        document.removeEventListener("mousemove", globalTooltipMoveListener);
-    }
-    let lastMoveCheck = Date.now(); // 表示直後に即座に判定されるのを防ぐ
-    globalTooltipMoveListener = (e: MouseEvent) => {
-        const now = Date.now();
-        if (now - lastMoveCheck < 100) return; 
-        lastMoveCheck = now;
-        if (!currentTooltipTarget) return;
-        if (globalTooltip && globalTooltip.style.display !== "none") {
-            const tr = globalTooltip.getBoundingClientRect();
-            if (e.clientX >= tr.left && e.clientX <= tr.right && e.clientY >= tr.top && e.clientY <= tr.bottom) {
+    if (!globalTooltipMouseDownListener) {
+        globalTooltipMouseDownListener = (e: MouseEvent) => {
+            if (!currentTooltipTarget) return;
+            const targetEl = e.target as HTMLElement | null;
+            if (!targetEl) {
+                hideGlobalTooltip();
                 return;
             }
-        }
-        const r = currentTooltipTarget.getBoundingClientRect();
-        // 判定に少しゆとり(Tolerance)を持たせ、意図せぬ非表示（チラつき）を防ぐ
-        if (e.clientX < r.left - 5 || e.clientX > r.right + 5 || e.clientY < r.top - 5 || e.clientY > r.bottom + 5) {
+            if (targetEl === currentTooltipTarget || targetEl.closest?.(".champ-icon") === currentTooltipTarget) {
+                return;
+            }
             hideGlobalTooltip();
-        }
-    };
-    document.addEventListener("mousemove", globalTooltipMoveListener, { passive: true });
-
+        };
+        document.addEventListener("mousedown", globalTooltipMouseDownListener, { capture: true });
+    }
     if (!globalTooltipWheelListener) {
         globalTooltipWheelListener = (e: WheelEvent) => {
-            if (!globalTooltip || globalTooltip.style.display === "none") return;
-            const r = globalTooltip.getBoundingClientRect();
-            const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-            const targetEl = e.target as HTMLElement | null;
-            const hoveredIcon = targetEl?.closest?.(".champ-icon") as HTMLElement | null;
-            const onCurrentChampionIcon = !!(currentTooltipTarget && hoveredIcon && hoveredIcon === currentTooltipTarget);
-            if (!inside && !onCurrentChampionIcon) return;
-            // Even with pointer-events:none, route wheel input to tooltip scrolling.
+            if (!globalTooltip || globalTooltip.style.display === "none" || !currentTooltipTarget) return;
+            const hovered = (currentTooltipTarget as any).matches?.(":hover");
+            if (!hovered) return;
+            if (globalTooltip.scrollHeight <= globalTooltip.clientHeight) return;
             globalTooltip.scrollTop += e.deltaY;
             e.preventDefault();
             e.stopPropagation();
         };
-        document.addEventListener("wheel", globalTooltipWheelListener, { passive: false, capture: true });
+        document.addEventListener("wheel", globalTooltipWheelListener, { capture: true, passive: false });
     }
 }
 
@@ -420,6 +409,14 @@ export function hideGlobalTooltip() {
         if (globalTooltipMoveListener) {
             document.removeEventListener("mousemove", globalTooltipMoveListener);
             globalTooltipMoveListener = null;
+        }
+        if (globalTooltipWheelListener) {
+            document.removeEventListener("wheel", globalTooltipWheelListener, true);
+            globalTooltipWheelListener = null;
+        }
+        if (globalTooltipMouseDownListener) {
+            document.removeEventListener("mousedown", globalTooltipMouseDownListener, true);
+            globalTooltipMouseDownListener = null;
         }
     }
 }
@@ -1056,7 +1053,16 @@ export function buildChampionTooltipHtml(data: any, lang: string = "ja"): string
     return html;
 }
 
-export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: string = "ja", fallbackChampionData: any = null): string {
+export async function buildLocalChampionTooltipHtml(
+    champTooltipJson: any,
+    lang: string = "ja",
+    fallbackChampionData: any = null,
+    options?: {
+        isCancelled?: () => boolean;
+        timeoutMs?: number;
+        onProfile?: (profile: any) => void;
+    },
+): Promise<string> {
     if (!champTooltipJson) return "";
 
     const fnv1a_32 = (s: string) => {
@@ -1099,10 +1105,118 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             </div>
             <div style="color:#888; font-size: 11px; text-align: right;">${localMeta.join(" | ")}</div>
         </div>`;
+    let lastYieldAt = Date.now();
+    const isCancelled = options?.isCancelled;
+    const timeoutMs = typeof options?.timeoutMs === "number" ? Math.max(0, options.timeoutMs) : 0;
+    const startedAt = Date.now();
+    const prof: any = {
+        champion: String(champTooltipJson?.champion || ""),
+        startedAt,
+        precomputeMs: 0,
+        slots: {},
+        counters: {
+            resolveLocalVar: 0,
+            resolveFromChampionAliases: 0,
+            resolveCalcSuffix: 0,
+            expandCalcMacros: 0,
+        },
+    };
+    const enableDetailedProfile = typeof options?.onProfile === "function";
+    const shouldAbort = (): "cancelled" | "timeout" | null => {
+        if (isCancelled?.()) return "cancelled";
+        if (timeoutMs > 0 && Date.now() - startedAt >= timeoutMs) return "timeout";
+        return null;
+    };
+    const assertNotAborted = () => {
+        const state = shouldAbort();
+        if (state === "cancelled") {
+            throw new Error("tooltip_render_cancelled");
+        }
+        if (state === "timeout") {
+            throw new Error("tooltip_render_timeout");
+        }
+    };
+    const maybeYield = async () => {
+        assertNotAborted();
+        if (Date.now() - lastYieldAt < 8) return;
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        lastYieldAt = Date.now();
+        assertNotAborted();
+    };
+    const replaceTokensCooperatively = async (
+        input: string,
+        tokenRe: RegExp,
+        replacer: (match: string, p1: string, offset: number, fullStr: string) => string,
+    ): Promise<string> => {
+        if (!input) return input;
+        const flags = tokenRe.flags.includes("g") ? tokenRe.flags : `${tokenRe.flags}g`;
+        const re = new RegExp(tokenRe.source, flags);
+        let out = "";
+        let lastIndex = 0;
+        let m: RegExpExecArray | null = null;
+        while ((m = re.exec(input)) !== null) {
+            assertNotAborted();
+            const whole = m[0] ?? "";
+            const p1 = m[1] ?? "";
+            const at = m.index ?? 0;
+            out += input.slice(lastIndex, at);
+            out += replacer(whole, p1, at, input);
+            lastIndex = at + whole.length;
+            await maybeYield();
+        }
+        out += input.slice(lastIndex);
+        return out;
+    };
+
+    const toResolvedMap = (obj: Record<string, any>): Map<string, string> => {
+        const m = new Map<string, string>();
+        for (const [k, v] of Object.entries(obj || {})) {
+            if (v === undefined || v === null) continue;
+            const raw = typeof v === "object" && v !== null && "resolvedValue" in (v as any)
+                ? (v as any).resolvedValue
+                : v;
+            if (raw === undefined || raw === null) continue;
+            const s = String(raw);
+            if (!s.trim()) continue;
+            const lower = k.toLowerCase();
+            if (!m.has(lower)) m.set(lower, s);
+        }
+        return m;
+    };
+    const candidateNames = (nameLower: string): string[] => {
+        const dotTrimmed = nameLower.replace(/\.\d+$/, "");
+        return dotTrimmed !== nameLower ? [nameLower, dotTrimmed] : [nameLower];
+    };
 
     const slots = ["Passive", "Q", "W", "E", "R"];
+    const championAliasKeys = slots
+        .map((k) => champTooltipJson.spell_map?.[k] || champTooltipJson.spell_map?.[k === "Passive" ? "P" : k])
+        .filter((v: any): v is string => typeof v === "string" && v.length > 0);
+    const champKeyLower = String(champTooltipJson.champion || "").toLowerCase();
+    const championRelatedCalcKeys = champKeyLower
+        ? Object.keys(allCalcFormulas).filter((k) => k.toLowerCase().includes(champKeyLower))
+        : [];
+    const aliasKeyList = Array.from(new Set([...championAliasKeys, ...championRelatedCalcKeys]));
+    const championAliasResolvedMaps = new Map<string, { vm: Map<string, string>, dv: Map<string, string> }>();
+    const precomputeStart = Date.now();
+    let aliasScanCount = 0;
+    for (const alias of aliasKeyList) {
+        const slotData = allCalcFormulas[alias];
+        if (!slotData || typeof slotData !== "object") continue;
+        championAliasResolvedMaps.set(alias, {
+            vm: toResolvedMap(slotData.variableMapping || {}),
+            dv: toResolvedMap(slotData.dataValues || {}),
+        });
+        aliasScanCount++;
+        if ((aliasScanCount & 7) === 0) {
+            await maybeYield();
+        }
+    }
+    prof.precomputeMs = Date.now() - precomputeStart;
     
     for (const slot of slots) {
+        const slotStart = Date.now();
+        await maybeYield();
         const slotCandidates = slot === "Passive" ? ["Passive", "P", ""] : [slot];
         let rawHtml = "";
         for (const key of slotCandidates) {
@@ -1176,50 +1290,15 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
         const fbById = dynamicTooltipFallback[spellId] || {};
         const fbByCd = spellMapAlias ? (dynamicTooltipFallback[spellMapAlias] || {}) : {};
         const fbMap = { ...fbByCd, ...fbById };
-        const championAliasKeys = ["Passive", "Q", "W", "E", "R"]
-            .map((k) => champTooltipJson.spell_map?.[k] || champTooltipJson.spell_map?.[k === "Passive" ? "P" : k])
-            .filter((v: any): v is string => typeof v === "string" && v.length > 0);
-        const champKeyLower = String(champTooltipJson.champion || "").toLowerCase();
-        const championRelatedCalcKeys = champKeyLower
-            ? Object.keys(allCalcFormulas).filter((k) => k.toLowerCase().includes(champKeyLower))
-            : [];
-        const aliasKeyList = Array.from(new Set([...championAliasKeys, ...championRelatedCalcKeys]));
-
-        const toResolvedMap = (obj: Record<string, any>): Map<string, string> => {
-            const m = new Map<string, string>();
-            for (const [k, v] of Object.entries(obj || {})) {
-                if (v === undefined || v === null) continue;
-                const raw = typeof v === "object" && v !== null && "resolvedValue" in (v as any)
-                    ? (v as any).resolvedValue
-                    : v;
-                if (raw === undefined || raw === null) continue;
-                const s = String(raw);
-                if (!s.trim()) continue;
-                const lower = k.toLowerCase();
-                if (!m.has(lower)) m.set(lower, s);
-            }
-            return m;
-        };
-        const candidateNames = (nameLower: string): string[] => {
-            const dotTrimmed = nameLower.replace(/\.\d+$/, "");
-            return dotTrimmed !== nameLower ? [nameLower, dotTrimmed] : [nameLower];
-        };
 
         const baseVarResolvedMap = toResolvedMap(varMapping2 || {});
         const baseDataValueMap = toResolvedMap(dataValues2 || {});
-        const aliasResolvedMaps = new Map<string, { vm: Map<string, string>, dv: Map<string, string> }>();
-        for (const alias of aliasKeyList) {
-            const slotData = allCalcFormulas[alias];
-            if (!slotData || typeof slotData !== "object") continue;
-            aliasResolvedMaps.set(alias, {
-                vm: toResolvedMap(slotData.variableMapping || {}),
-                dv: toResolvedMap(slotData.dataValues || {}),
-            });
-        }
+        const aliasResolvedMaps = championAliasResolvedMaps;
         const championAliasLookupCache = new Map<string, string | undefined>();
         const localResolveMemo = new Map<string, string | undefined>();
 
         const resolveFromChampionAliases = (nameLower: string): string | undefined => {
+            prof.counters.resolveFromChampionAliases++;
             if (championAliasLookupCache.has(nameLower)) {
                 return championAliasLookupCache.get(nameLower);
             }
@@ -1253,6 +1332,8 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
         };
 
         const resolveLocalVar = (nameRaw: string, targetFbMap: Record<string, any> = fbMap): string | undefined => {
+            prof.counters.resolveLocalVar++;
+            assertNotAborted();
             const name = nameRaw.toLowerCase();
             const memoKey = targetFbMap === fbMap ? name : "";
             if (memoKey && localResolveMemo.has(memoKey)) {
@@ -1267,6 +1348,7 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             }
 
             for (const cand of candidates) {
+                assertNotAborted();
                 if (targetFbMap === fbMap && baseVarResolvedMap.has(cand)) {
                     const v = baseVarResolvedMap.get(cand);
                     if (memoKey) localResolveMemo.set(memoKey, v);
@@ -1297,6 +1379,7 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                 const stem = name.replace(/calc$/, "");
                 const stemCandidates = [stem, stem.replace(/_$/, "")].filter(Boolean);
                 for (const stemKey of stemCandidates) {
+                    assertNotAborted();
                     if (varMapping2[stemKey]?.resolvedValue !== undefined) {
                         const v = String(varMapping2[stemKey].resolvedValue);
                         if (memoKey) localResolveMemo.set(memoKey, v);
@@ -1480,6 +1563,7 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
         };
 
         const resolveCalcSuffix = (nameRaw: string, nameLower: string, targetFbMap: Record<string, any>): string | undefined => {
+            prof.counters.resolveCalcSuffix++;
             const keys = [
                 `${nameRaw}_calc`,
                 `${nameLower}_calc`,
@@ -1497,6 +1581,7 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
         };
 
         const expandCalcMacros = (text: string, targetFbMap: Record<string, any>): string => {
+            prof.counters.expandCalcMacros++;
             return text.replace(/\{([a-zA-Z0-9_]+)\}/g, (_m, macroKey: string) => {
                 const macroVal = resolveLocalVar(macroKey, targetFbMap);
                 if (macroVal === undefined) return `{${macroKey}}`;
@@ -1515,7 +1600,7 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                 .toLowerCase()
                 .replace(/[()\[\]{}]/g, "")
                 .replace(/\s+/g, "")
-                .replace(/＋/g, "+")
+                .replace(/\uFF0B/g, "+")
                 .replace(/\+{2,}/g, "+");
             const baseNorm = norm(baseText || "");
             const scalingNorm = norm(scalingText || "");
@@ -1539,6 +1624,48 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             }
             return out;
         };
+        const isLikelyPercentLikeVar = (varKey: string): boolean => {
+            const key = (varKey || "").toLowerCase();
+            if (!key) return false;
+            if (/(duration|time|cast|delay|stun|silence|root|knockup|taunt|fear|charm)/.test(key)) {
+                return false;
+            }
+            return /(percent|ratio|movespeed|attackspeed|(?:^|_)slow(?:$|_)|haste|lifesteal|omnivamp|tenacity|(?:^|_)cdr(?:$|_)|cooldownreduction|cdrefund|max_?health.*damage|missing_?health.*damage|current_?health.*damage|hpdamage|healthdamage|percenthealth|(?:^|_)ms(?:$|_)|ms$|(?:^|_)as(?:$|_)|as$)/.test(key);
+        };
+        const splitNumericSeriesHead = (text: string): { head: string; tail: string } | null => {
+            const trimmed = String(text || "").trim();
+            if (!trimmed) return null;
+            let end = 0;
+            for (; end < trimmed.length; end++) {
+                const ch = trimmed.charCodeAt(end);
+                const isDigit = ch >= 48 && ch <= 57;
+                if (
+                    isDigit ||
+                    ch === 46 || // .
+                    ch === 47 || // /
+                    ch === 126 || // ~
+                    ch === 43 || // +
+                    ch === 45 // -
+                ) {
+                    continue;
+                }
+                break;
+            }
+            if (end === 0) return null;
+            const head = trimmed.slice(0, end);
+            const tail = trimmed.slice(end);
+            if (!head || /^[~/]/.test(head) || /[~/]$/.test(head) || /[~/]{2,}/.test(head)) {
+                return null;
+            }
+            const parts = head.split(/[~/]/);
+            if (parts.length === 0) return null;
+            for (const part of parts) {
+                if (!/^[+\-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(part)) {
+                    return null;
+                }
+            }
+            return { head, tail };
+        };
         const maybePercentizeByVarName = (valueText: string, varKey: string): string => {
             const trimNum = (n: number): string => {
                 return String(n).replace(/\.0+$/, "").replace(/(\.\d*?[1-9])0+$/, "$1");
@@ -1556,21 +1683,19 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             if (/(duration|time|cooldown|cast|delay|stun|silence|root|slowduration|knockup|taunt|fear|charm)/.test(key)) {
                 return valueText;
             }
-            const ratioLikeKey = /(percent|ratio|movespeed|attackspeed|slow|haste|lifesteal|omnivamp|tenacity|amp|max_?health.*damage|missing_?health.*damage|current_?health.*damage)/.test(key);
-            if (!ratioLikeKey) {
+            if (!isLikelyPercentLikeVar(key)) {
                 return valueText;
             }
             if (!valueText) return valueText;
 
-            const plain = valueText.trim().match(/^[+\-]?(?:\d+\.?\d*|\d*\.\d+)(?:[~/][+\-]?(?:\d+\.?\d*|\d*\.\d+))*$/);
-            const withTail = valueText.trim().match(/^([+\-]?(?:\d+\.?\d*|\d*\.\d+)(?:[~/][+\-]?(?:\d+\.?\d*|\d*\.\d+))*)([\s\S]*)$/);
-            if (!plain && !withTail) {
+            const parsed = splitNumericSeriesHead(valueText);
+            if (!parsed) {
                 return valueText;
             }
-
-            const numericHead = plain ? valueText.trim() : (withTail?.[1] || "");
-            const tail = plain ? "" : (withTail?.[2] || "");
-            if (!plain && /^\s*%/.test(tail)) {
+            const numericHead = parsed.head;
+            const tail = parsed.tail;
+            const isPlain = !tail.trim();
+            if (!isPlain && /^\s*%/.test(tail)) {
                 return valueText;
             }
             const parts = numericHead.split(/([~/])/);
@@ -1596,9 +1721,12 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             // Some WAD formulas resolve percent-like stats as already-scaled numbers
             // (e.g. movespeed=25, calc_max_health_damage=1), so keep the number and append %.
             const shouldForcePercentSuffix =
-                /(movespeed|attackspeed|(?:^|_)slow(?:$|_)|haste|lifesteal|omnivamp|tenacity|max_?health.*damage|missing_?health.*damage|current_?health.*damage)/.test(key)
+                /(movespeed|attackspeed|(?:^|_)slow(?:$|_)|haste|lifesteal|omnivamp|tenacity|max_?health.*damage|missing_?health.*damage|current_?health.*damage|hpdamage|healthdamage|(?:^|_)ms(?:$|_)|ms$|(?:^|_)as(?:$|_)|as$)/.test(key)
                 && !/(flat|absolute|raw|duration|time)/.test(key);
             if (shouldForcePercentSuffix) {
+                return `${numericHead}%${tail}`;
+            }
+            if (/(percent|ratio)/.test(key)) {
                 return `${numericHead}%${tail}`;
             }
             return valueText;
@@ -1619,10 +1747,11 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             if (!valueText || valueText.includes("%")) return valueText;
             const next = fullText.slice(tokenEnd).trimStart();
             if (!next.startsWith("%")) return valueText;
-            if (!/^[+\-]?(?:\d+\.?\d*|\d*\.\d+)(?:[~/][+\-]?(?:\d+\.?\d*|\d*\.\d+))*$/.test(valueText.trim())) {
+            const parsed = splitNumericSeriesHead(valueText);
+            if (!parsed || !!parsed.tail.trim()) {
                 return valueText;
             }
-            const parts = valueText.split(/([~/])/);
+            const parts = parsed.head.split(/([~/])/);
             const out: string[] = [];
             let changed = false;
             for (const p of parts) {
@@ -1639,12 +1768,148 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             }
             return changed ? `${out.join("")}` : valueText;
         };
+        const maybePercentizeByHealthPhraseContext = (
+            valueText: string,
+            fullText: string,
+            tokenStart: number,
+            tokenEnd: number,
+        ): string => {
+            if (!valueText || valueText.includes("%")) return valueText;
+            const parsed = splitNumericSeriesHead(valueText);
+            if (!parsed) return valueText;
+            const head = parsed.head;
+            const tail = parsed.tail || "";
+            if (/^\s*%/.test(tail)) return valueText;
+
+            const next = String(fullText || "").slice(tokenEnd).trimStart();
+            if (next.startsWith("%")) return valueText;
+
+            const left = String(fullText || "").slice(Math.max(0, tokenStart - 24), tokenStart);
+            const right = String(fullText || "").slice(tokenEnd, Math.min((fullText || "").length, tokenEnd + 24));
+            const ctx = `${left} ${right}`;
+            if (!/(最大体力|減少体力|現在体力|max(?:imum)?\s*health|missing\s*health|current\s*health)/i.test(ctx)) {
+                return valueText;
+            }
+
+            const arr = parseSeries(head);
+            if (!arr || arr.length === 0) return valueText;
+            const maxAbs = Math.max(...arr.map((n) => Math.abs(n)));
+            if (maxAbs >= 120 && maxAbs <= 20000) {
+                return `${formatSeries(arr.map((n) => n / 100))}%${tail}`;
+            }
+            if (maxAbs > 0 && maxAbs <= 100) {
+                return `${head}%${tail}`;
+            }
+            return valueText;
+        };
         const parseSeries = (s: string): number[] | null => {
-            const t = (s || "").trim();
-            if (!/^[+\-]?(?:\d+\.?\d*|\d*\.\d+)(?:[~/][+\-]?(?:\d+\.?\d*|\d*\.\d+))*$/.test(t)) return null;
-            const parts = t.split(/[~/]/).map((x) => Number(x));
+            const parsed = splitNumericSeriesHead(s || "");
+            if (!parsed || !!parsed.tail.trim()) return null;
+            const parts = parsed.head.split(/[~/]/).map((x) => Number(x));
             if (parts.some((n) => !Number.isFinite(n))) return null;
             return parts;
+        };
+        const formatSeries = (arr: number[]): string => {
+            return arr
+                .map((n) => String(Math.round(n * 10000) / 10000).replace(/\.0+$/, "").replace(/(\.\d*?[1-9])0+$/, "$1"))
+                .join("/");
+        };
+        const maybeNormalizePercentProductExpression = (valueText: string, varKey: string): string => {
+            const key = (varKey || "").toLowerCase();
+            if (!/(hp|health|percent|ratio|heal|damage)/.test(key)) return valueText;
+            const raw = valueText.trim();
+            const starIdx = raw.lastIndexOf("*");
+            if (starIdx <= 0) return valueText;
+            const ratioLiteral = raw.slice(starIdx + 1).trim();
+            if (!/^0\.0*1$/i.test(ratioLiteral)) return valueText;
+            const left = raw.slice(0, starIdx).trim();
+            const closeParen = left.lastIndexOf(")");
+            const openParen = closeParen >= 0 ? left.lastIndexOf("(", closeParen) : -1;
+            if (openParen < 0 || closeParen < 0 || openParen >= closeParen) return valueText;
+            const scaling = left.slice(openParen + 1, closeParen).trim();
+            if (!/%[a-zA-Z]/i.test(scaling)) return valueText;
+            const plusIdx = left.lastIndexOf("+", openParen);
+            if (plusIdx <= 0) return valueText;
+            const baseExpr = left.slice(0, plusIdx).trim();
+            const base = parseSeries(baseExpr);
+            if (!base) return valueText;
+            const scaled = formatSeries(base.map((n) => n * 0.01));
+            const scaleExpr = scaling.replace(/^\+/, "").trim();
+            return `${scaled}% (+${scaleExpr})`;
+        };
+        const maybeDownscaleOverscaledPercent = (valueText: string, varKey: string): string => {
+            const key = (varKey || "").toLowerCase();
+            if (!isLikelyPercentLikeVar(key)) {
+                return valueText;
+            }
+            // Downscaling by 1/100 is only safe for health-ratio damage families.
+            // For speed/AS style keys, values like 50~130 are already display-scale percentages.
+            if (!/(max_?health.*damage|missing_?health.*damage|current_?health.*damage|hpdamage|healthdamage|percenthealth)/.test(key)) {
+                return valueText;
+            }
+            const parsed = splitNumericSeriesHead(valueText);
+            if (!parsed) return valueText;
+            const head = parsed.head;
+            const tail = parsed.tail || "";
+            if (/%/.test(head)) return valueText;
+            const arr = parseSeries(head);
+            if (!arr || arr.length === 0) return valueText;
+
+            const maxAbs = Math.max(...arr.map((n) => Math.abs(n)));
+            // Heuristic: values like 2000/3500... or 150/170... in percent-like vars
+            // are typically already multiplied by 100 compared to expected display scale.
+            if (maxAbs < 120 || maxAbs > 20000) return valueText;
+
+            const down = arr.map((n) => n / 100);
+            return `${formatSeries(down)}${tail}`;
+        };
+        const maybeDownscaleOverscaledPercentByTemplateContext = (valueText: string, fullText: string, tokenEnd: number): string => {
+            if (!valueText || valueText.includes("%")) return valueText;
+            const next = String(fullText || "").slice(tokenEnd).trimStart();
+            if (!next.startsWith("%")) return valueText;
+
+            const parsed = splitNumericSeriesHead(valueText);
+            if (!parsed) return valueText;
+            const head = parsed.head;
+            const tail = parsed.tail || "";
+            const arr = parseSeries(head);
+            if (!arr || arr.length === 0) return valueText;
+            const maxAbs = Math.max(...arr.map((n) => Math.abs(n)));
+            if (maxAbs < 120 || maxAbs > 20000) return valueText;
+            return `${formatSeries(arr.map((n) => n / 100))}${tail}`;
+        };
+        const maybeFixOverscaledAttackSpeedFromBase = (
+            valueText: string,
+            varKey: string,
+            targetFbMap: Record<string, any>,
+        ): string => {
+            const key = (varKey || "").toLowerCase();
+            if (!key.includes("bonusattackspeed")) return valueText;
+            const parsed = splitNumericSeriesHead(valueText);
+            if (!parsed) return valueText;
+            const head = parsed.head;
+            const tail = parsed.tail || "";
+            const arr = parseSeries(head);
+            if (!arr || arr.length === 0) return valueText;
+            const maxAbs = Math.max(...arr.map((n) => Math.abs(n)));
+            if (maxAbs < 500) return valueText;
+
+            const baseRaw =
+                resolveLocalVar("baseattackspeed", targetFbMap) ??
+                resolveLocalVar("attackspeed", targetFbMap) ??
+                String(targetFbMap["baseattackspeed"] ?? targetFbMap["attackspeed"] ?? "");
+            if (!baseRaw) return valueText;
+            const baseSeries = parseSeries(baseRaw);
+            if (!baseSeries || baseSeries.length === 0) return valueText;
+            const expandedBase = baseSeries.map((n, i) => {
+                const v = baseSeries[Math.min(i, baseSeries.length - 1)];
+                return v * 100;
+            });
+            if (!approxEqSeries(arr, expandedBase, 5)) return valueText;
+            return `${formatSeries(baseSeries)}${tail}`;
+        };
+        const normalizeMultiplySign = (valueText: string): string => {
+            return valueText.replace(/\s\*\s(?=\d)/g, " × ");
         };
         const approxEqSeries = (a: number[], b: number[], eps: number = 0.25): boolean => {
             if (a.length === 0 || b.length === 0) return false;
@@ -1662,11 +1927,10 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             targetVarName: string,
         ): string => {
             if (!valueText) return valueText;
-            const trimmed = valueText.trim();
-            const plain = trimmed.match(/^([+\-]?(?:\d+\.?\d*|\d*\.\d+)(?:[~/][+\-]?(?:\d+\.?\d*|\d*\.\d+))*)([\s\S]*)$/);
-            if (!plain) return valueText;
-            const head = plain[1];
-            const tail = plain[2] || "";
+            const parsed = splitNumericSeriesHead(valueText);
+            if (!parsed) return valueText;
+            const head = parsed.head;
+            const tail = parsed.tail || "";
             if (/%/.test(head) || /^\s*%/.test(tail)) return valueText;
             if (!/%\s*(?:AP|AD|bonusAD|bAD|HP|Health)/i.test(tail)) return valueText;
 
@@ -1706,50 +1970,86 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             }
             return valueText;
         };
+        const normalizeResolvedTokenValue = (
+            rawValue: string | number,
+            targetVarName: string,
+            targetFbMap: Record<string, any>,
+            fullText: string,
+            tokenStart: number,
+            tokenEnd: number,
+        ): string => {
+            let renderedVal = formatFallbackValue(rawValue);
+            renderedVal = maybeFixOverscaledAttackSpeedFromBase(renderedVal, targetVarName, targetFbMap);
+            renderedVal = maybeNormalizePercentProductExpression(renderedVal, targetVarName);
+            renderedVal = maybeDownscaleOverscaledPercent(renderedVal, targetVarName);
+            renderedVal = maybeDownscaleOverscaledPercentByTemplateContext(renderedVal, fullText, tokenEnd);
+            renderedVal = maybePercentizeByHealthPhraseContext(renderedVal, fullText, tokenStart, tokenEnd);
+            renderedVal = maybePercentizeByVarName(renderedVal, targetVarName);
+            renderedVal = maybePercentizeByTemplateContext(renderedVal, fullText, tokenEnd);
+            renderedVal = maybePercentizeBySemanticHpMap(renderedVal, targetFbMap, targetVarName);
+            renderedVal = collapseDuplicateScalings(renderedVal);
+            renderedVal = normalizeMultiplySign(renderedVal);
+            renderedVal = renderedVal.replace(/(%){2,}/g, "%");
+            return renderedVal;
+        };
 
         let resolvedTokenCount = 0;
         let unresolvedTokenCount = 0;
-        descriptionHtml = descriptionHtml.replace(/@([a-zA-Z0-9_\.:\*\-\+]+)@/g, (match, p1, offset, fullStr) => {
-            let varName = p1.toLowerCase();
-            if (varName === 'spellmodifierdescriptionappend' || varName === 'spellmodifierdescription') return "";
-            if (varName === 'hotkey') return slot;
+        const tokenMsByVar = new Map<string, number>();
+        const tokenHitByVar = new Map<string, number>();
+        const tokenStageMsByVar = enableDetailedProfile
+            ? new Map<string, { resolve: number; normalize: number; calc: number; total: number; hits: number }>()
+            : null;
+        descriptionHtml = await replaceTokensCooperatively(descriptionHtml, /@([a-zA-Z0-9_\.:\*\-\+]+)@/g, (match, p1, offset, fullStr) => {
+            const tokenProfileKey = String(p1 || "").toLowerCase();
+            const tokenProfileStart = Date.now();
+            let stageResolveMs = 0;
+            let stageNormalizeMs = 0;
+            let stageCalcMs = 0;
+            try {
+                assertNotAborted();
+                let varName = p1.toLowerCase();
+                if (varName === 'spellmodifierdescriptionappend' || varName === 'spellmodifierdescription') return "";
+                if (varName === 'hotkey') return slot;
 
-            let targetFbMap = fbMap;
-            
-            // Check cross-spell references e.g. spell.KarmaMantra:RQImpactDamage
-            if (varName.startsWith('spell.')) {
-                const parts = varName.split(':');
-                if (parts.length === 2) {
-                    const spellRef = parts[0].replace('spell.', '');
-                    const actualSpellKey = Object.keys(dynamicTooltipFallback).find(k => k.toLowerCase() === spellRef);
-                    if (actualSpellKey) {
-                        targetFbMap = dynamicTooltipFallback[actualSpellKey];
+                let targetFbMap = fbMap;
+                
+                // Check cross-spell references e.g. spell.KarmaMantra:RQImpactDamage
+                if (varName.startsWith('spell.')) {
+                    const parts = varName.split(':');
+                    if (parts.length === 2) {
+                        const spellRef = parts[0].replace('spell.', '');
+                        const actualSpellKey = Object.keys(dynamicTooltipFallback).find(k => k.toLowerCase() === spellRef);
+                        if (actualSpellKey) {
+                            targetFbMap = dynamicTooltipFallback[actualSpellKey];
+                        }
+                        varName = parts[1];
                     }
-                    varName = parts[1];
                 }
-            }
 
-            // Check basic math modifiers e.g. RQSlow*-100
-            let multiplier = 1;
-            if (varName.includes('*')) {
-                const parts = varName.split('*');
-                varName = parts[0];
-                multiplier = parseFloat(parts[1]);
-                if (isNaN(multiplier)) multiplier = 1;
-            }
-            
-            let resolvedVal: string | number | undefined = undefined;
+                // Check basic math modifiers e.g. RQSlow*-100
+                let multiplier = 1;
+                if (varName.includes('*')) {
+                    const parts = varName.split('*');
+                    varName = parts[0];
+                    multiplier = parseFloat(parts[1]);
+                    if (isNaN(multiplier)) multiplier = 1;
+                }
+
+                const tokenEnd = Number(offset || 0) + String(match || "").length;
+                
+                let resolvedVal: string | number | undefined = undefined;
+                const resolveStart = Date.now();
 
             // first check if pre-resolved in all_calc_formulas (only if not a cross-spell ref)
-            if (targetFbMap === fbMap && varMapping2[varName] && varMapping2[varName].resolvedValue !== undefined && varMapping2[varName].resolvedValue !== null) {
-                resolvedVal = varMapping2[varName].resolvedValue;
-            } else {
-                // then check datavalues (only if not a cross-spell ref)
-                if (targetFbMap === fbMap) {
-                    const exactCases = Object.keys(dataValues2);
-                    const keyMatch = exactCases.find(k => k.toLowerCase() === varName);
-                    if (keyMatch && dataValues2[keyMatch] !== undefined && dataValues2[keyMatch] !== null) {
-                        resolvedVal = dataValues2[keyMatch];
+            if (targetFbMap === fbMap) {
+                const vmVal = baseVarResolvedMap.get(varName);
+                if (vmVal !== undefined) {
+                    resolvedVal = vmVal;
+                } else {
+                    const dvVal = baseDataValueMap.get(varName);
+                    if (dvVal !== undefined) {
+                        resolvedVal = dvVal;
                     }
                 }
             }
@@ -1798,26 +2098,26 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                         if (affix) return ""; // Hide unmapped prefixes/postfixes to prevent clutter
                         
                         let baseVal: string | number | undefined = resolveLocalVar(baseKey, targetFbMap);
-                        if (targetFbMap === fbMap && varMapping2[baseKey] && varMapping2[baseKey].resolvedValue !== undefined && varMapping2[baseKey].resolvedValue !== null) {
-                            baseVal = varMapping2[baseKey].resolvedValue;
-                        } else {
-                            if (targetFbMap === fbMap) {
-                                const exactCases = Object.keys(dataValues2);
-                                const keyMatch = exactCases.find(k => k.toLowerCase() === baseKey);
-                                if (keyMatch && dataValues2[keyMatch] !== undefined && dataValues2[keyMatch] !== null) {
-                                    baseVal = dataValues2[keyMatch];
+                        if (targetFbMap === fbMap) {
+                            const vmVal = baseVarResolvedMap.get(baseKey);
+                            if (vmVal !== undefined) {
+                                baseVal = vmVal;
+                            } else {
+                                const dvVal = baseDataValueMap.get(baseKey);
+                                if (dvVal !== undefined) {
+                                    baseVal = dvVal;
                                 }
                             }
-                            if (baseVal === undefined) {
-                                if (targetFbMap[baseKey] !== undefined) {
-                                    baseVal = targetFbMap[baseKey];
-                                } else if (targetFbMap[baseKey.toLowerCase()] !== undefined) {
-                                    baseVal = targetFbMap[baseKey.toLowerCase()];
-                                } else {
-                                    const baseHash = fnv1a_32(baseKey.toLowerCase());
-                                    if (targetFbMap[baseHash] !== undefined) {
-                                        baseVal = targetFbMap[baseHash];
-                                    }
+                        }
+                        if (baseVal === undefined) {
+                            if (targetFbMap[baseKey] !== undefined) {
+                                baseVal = targetFbMap[baseKey];
+                            } else if (targetFbMap[baseKey.toLowerCase()] !== undefined) {
+                                baseVal = targetFbMap[baseKey.toLowerCase()];
+                            } else {
+                                const baseHash = fnv1a_32(baseKey.toLowerCase());
+                                if (targetFbMap[baseHash] !== undefined) {
+                                    baseVal = targetFbMap[baseHash];
                                 }
                             }
                         }
@@ -1840,8 +2140,30 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                     resolvedVal = localResolved;
                 }
             }
+            stageResolveMs = Date.now() - resolveStart;
 
             if (resolvedVal !== undefined) {
+                assertNotAborted();
+                if (multiplier !== 1) {
+                    const nextTokenText = String(fullStr || "").slice(Number(offset || 0) + String(match || "").length).trimStart();
+                    const isPercentLikeVar = /(percent|ratio|movespeed|attackspeed|slow|haste|lifesteal|omnivamp|tenacity|cdr|cooldownreduction|max_?health.*damage|missing_?health.*damage|current_?health.*damage)/.test(varName);
+                    const maybeSeries = parseSeries(String(resolvedVal));
+                    const alreadyScaledPercentLike =
+                        isPercentLikeVar &&
+                        Math.abs(multiplier) >= 99 &&
+                        !!maybeSeries &&
+                        maybeSeries.every((n) => Number.isFinite(n) && Math.abs(n) >= 1 && Math.abs(n) <= 1000);
+
+                    if (alreadyScaledPercentLike) {
+                        // Some sources already provide percent-scaled values (e.g. 20/35/50...)
+                        // while template still uses *100. Avoid double-scaling to 2000/3500/...
+                        multiplier = 1;
+                    }
+                    if (multiplier !== 1 && Math.abs(multiplier) >= 99 && !!maybeSeries && nextTokenText.startsWith("%")) {
+                        // Template like @AttackSpeed*100@% with already-scaled values should not be multiplied again.
+                        multiplier = 1;
+                    }
+                }
                 if (multiplier !== 1) {
                     if (typeof resolvedVal === 'string' && resolvedVal.includes('/')) {
                         const parts = resolvedVal.split('/');
@@ -1856,16 +2178,18 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                         }
                     }
                 }
-                let renderedVal = formatFallbackValue(resolvedVal);
-                renderedVal = maybePercentizeByVarName(renderedVal, varName);
-                renderedVal = maybePercentizeByTemplateContext(renderedVal, String(fullStr || ""), Number(offset || 0) + String(match || "").length);
-                renderedVal = maybePercentizeBySemanticHpMap(
-                    renderedVal,
-                    targetFbMap,
+                const normalizeStart = Date.now();
+                let renderedVal = normalizeResolvedTokenValue(
+                    resolvedVal,
                     varName,
+                    targetFbMap,
+                    String(fullStr || ""),
+                    Number(offset || 0),
+                    tokenEnd,
                 );
-                renderedVal = collapseDuplicateScalings(renderedVal);
-                renderedVal = renderedVal.replace(/(%){2,}/g, "%");
+                stageNormalizeMs = Date.now() - normalizeStart;
+                assertNotAborted();
+                const calcStart = Date.now();
                 let calcSuffix = resolveCalcSuffix(p1, varName, targetFbMap);
                 if (calcSuffix === undefined && targetFbMap === fbMap && spellMapAlias) {
                     // Fallback to alias map when current map is merged and key is alias-centric.
@@ -1902,17 +2226,35 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
                         }
                     }
                 }
+                stageCalcMs = Date.now() - calcStart;
                 resolvedTokenCount++;
                 return collapseDuplicateScalings(renderedVal);
             }
 
-            if (varName === "abilityresourcename") {
-                resolvedTokenCount++;
-                return "";
+                if (varName === "abilityresourcename") {
+                    resolvedTokenCount++;
+                    return "";
+                }
+                unresolvedTokenCount++;
+                return ""; // unresolvable: hide unknown placeholders
+            } finally {
+                const d = Date.now() - tokenProfileStart;
+                tokenMsByVar.set(tokenProfileKey, (tokenMsByVar.get(tokenProfileKey) || 0) + d);
+                tokenHitByVar.set(tokenProfileKey, (tokenHitByVar.get(tokenProfileKey) || 0) + 1);
+                if (tokenStageMsByVar) {
+                    const staged = tokenStageMsByVar.get(tokenProfileKey) || { resolve: 0, normalize: 0, calc: 0, total: 0, hits: 0 };
+                    staged.resolve += stageResolveMs;
+                    staged.normalize += stageNormalizeMs;
+                    staged.calc += stageCalcMs;
+                    staged.total += d;
+                    staged.hits += 1;
+                    tokenStageMsByVar.set(tokenProfileKey, staged);
+                }
             }
-            unresolvedTokenCount++;
-            return ""; // unresolvable: hide unknown placeholders
         });
+        descriptionHtml = descriptionHtml
+            .replace(/\s\*\s(?=\d)/g, " × ")
+            .replace(/(%){2,}/g, "%");
 
         // Keep WAD tooltip as source of truth even when some vars are unresolved.
 
@@ -2066,7 +2408,6 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             .replace(new RegExp("</physicalDamage>", "gi"), '</span>')
             .replace(new RegExp("<magicDamage>", "gi"), '<span class="tooltip-magic-damage">')
             .replace(new RegExp("</magicDamage>", "gi"), '</span>')
-            .replace(/([\d./]+%?(?:秒間|秒)?[^<>]{0,30}?)<status>(.*?)<\/status>/gi, '<span class="tooltip-status">$1$2</span>')
             .replace(new RegExp("<status>", "gi"), '<span class="tooltip-status">')
             .replace(new RegExp("</status>", "gi"), '</span>')
             .replace(new RegExp("<keyword[^>]*>", "gi"), '<span class="tooltip-keyword">')
@@ -2119,13 +2460,31 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
             .replace(new RegExp("</flavorText>", "gi"), '</span>')
             .replace(new RegExp("<keywordMajor>", "gi"), '<span class="tooltip-keyword-major">')
             .replace(new RegExp("</keywordMajor>", "gi"), '</span>')
+            .replace(new RegExp("<scaleLethality>", "gi"), '<span class="tooltip-scale-lethality">')
+            .replace(new RegExp("</scaleLethality>", "gi"), '</span>')
+            .replace(/<font[^>]*>/gi, "<span>")
+            .replace(/<\/font>/gi, "</span>")
+            .replace(/<size=[^>]*>/gi, "")
+            .replace(/<\/size>/gi, "")
+            .replace(/font-size\s*:\s*[^;"]+;?/gi, "")
             .replace(new RegExp("<infoArea>", "gi"), '')
             .replace(new RegExp("</infoArea>", "gi"), '');
 
         descriptionHtml = descriptionHtml
             .replace(/\?+/g, "")
+            .replace(/\[\s*\]/g, "")
+            .replace(/<li>\s*<\/li>/gi, "")
+            .replace(/<span[^>]*>\s*\/\s*<\/span>/gi, "")
+            .replace(/<li>\s*[:：]\s*<\/li>/gi, "")
+            .replace(/<li>\s*[:：]?\s*(?:<span[^>]*>\s*<\/span>\s*)*<\/li>/gi, "")
             .replace(/<br\/>\s*<br\/>\s*<br\/>/g, "<br/><br/>")
             .replace(/\s{2,}/g, " ");
+
+        // Some extracted slots may come as plain text without <mainText> wrapper.
+        // Keep visual consistency (and avoid larger default font) by wrapping them.
+        if (!/class=\"tooltip-main-text\"/i.test(descriptionHtml)) {
+            descriptionHtml = `<div class="tooltip-main-text">${descriptionHtml}</div>`;
+        }
         const champKey = String(champTooltipJson?.champion || "unknown");
         descriptionHtml = normalizeTooltipTextSafe(descriptionHtml, `${lang}:${champKey}:${slot}`);
 
@@ -2147,6 +2506,49 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
         html += headerHtml;
         html += descriptionHtml;
         html += `</div>`;
+        const topTokenCosts = Array.from(tokenMsByVar.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 6)
+            .map(([token, ms]) => ({ token, ms, hits: tokenHitByVar.get(token) || 0 }));
+        const topTokenStageCosts = tokenStageMsByVar
+            ? Array.from(tokenStageMsByVar.entries())
+                .sort((a, b) => b[1].total - a[1].total)
+                .slice(0, 6)
+                .map(([token, stat]) => ({ token, ...stat }))
+            : [];
+        prof.slots[slot] = {
+            ms: Date.now() - slotStart,
+            resolvedTokenCount,
+            unresolvedTokenCount,
+            topTokenCosts,
+            topTokenStageCosts,
+        };
+    }
+
+    const apheliosWeaponSummary = String(champTooltipJson?.Extra_ApheliosWeaponSummary || "").trim();
+    if (apheliosWeaponSummary) {
+        const summaryLabel = String(lang || "").toLowerCase().startsWith("ja") ? "武器説明" : "Weapon Summary";
+        const summaryHtml = normalizeTooltipTextSafe(
+            apheliosWeaponSummary
+                .replace(/<br>/gi, "<br/>")
+                .replace(/\{\{[^}]+\}\}/g, "")
+                .replace(/@([a-zA-Z0-9_\.:\*\-\+]+)@/g, ""),
+            `${lang}:${String(champTooltipJson?.champion || "unknown")}:Extra_ApheliosWeaponSummary`,
+        );
+        html += `
+        <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #333;">
+            <div style="display: flex; align-items: baseline; margin-bottom: 4px;">
+                <b style="color:#00d2ff; font-size: 13px;">[Extra]</b>
+                <span style="color:#eee; font-size: 13px; font-weight: bold; margin-left: 4px;">${summaryLabel}</span>
+            </div>
+            <div class="tooltip-main-text">${summaryHtml}</div>
+        </div>`;
+    }
+    prof.totalMs = Date.now() - startedAt;
+    if (options?.onProfile) {
+        try {
+            options.onProfile(prof);
+        } catch {}
     }
     
     return html;
@@ -2225,8 +2627,10 @@ export function evaluateLocalTooltipSafety(champTooltipJson: any): TooltipLiteSa
     const slots = ["Passive", "Q", "W", "E", "R"];
     let totalLen = 0;
     let totalTokenCount = 0;
+    let maxSlotTokenCount = 0;
     let maxSeriesCount = 0;
     let maxSlotLen = 0;
+    let maxSlotComplexity = 0;
 
     for (const slot of slots) {
         const raw = champTooltipJson?.[slot];
@@ -2237,9 +2641,13 @@ export function evaluateLocalTooltipSafety(champTooltipJson: any): TooltipLiteSa
 
         const tokenCount = (raw.match(/@[A-Za-z0-9_.:*+\-]+@/g) || []).length;
         totalTokenCount += tokenCount;
+        if (tokenCount > maxSlotTokenCount) maxSlotTokenCount = tokenCount;
 
         const seriesCount = (raw.match(/[0-9]+(?:\.[0-9]+)?(?:\/[0-9]+(?:\.[0-9]+)?){3,}/g) || []).length;
         if (seriesCount > maxSeriesCount) maxSeriesCount = seriesCount;
+
+        const slotComplexity = estimateNormalizeComplexity(raw);
+        if (slotComplexity > maxSlotComplexity) maxSlotComplexity = slotComplexity;
     }
 
     if (maxSlotLen > 5500) {
@@ -2252,6 +2660,14 @@ export function evaluateLocalTooltipSafety(champTooltipJson: any): TooltipLiteSa
     // Keep this threshold very high to avoid unnecessary lite fallback.
     if (totalTokenCount > 500) {
         return { useLite: true, reason: `too_many_tokens:${totalTokenCount}` };
+    }
+    // Per-slot token bursts are a stronger freeze signal than total count.
+    if (maxSlotTokenCount >= 74) {
+        return { useLite: true, reason: `slot_token_burst:${maxSlotTokenCount}` };
+    }
+    // Keep full rendering away from slots that are near pathological regex/token workloads.
+    if (maxSlotComplexity > 8600) {
+        return { useLite: true, reason: `slot_complexity:${maxSlotComplexity}` };
     }
     if (maxSeriesCount > 26) {
         return { useLite: true, reason: `too_many_numeric_series:${maxSeriesCount}` };
