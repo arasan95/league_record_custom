@@ -318,46 +318,36 @@ export function showGlobalTooltip(target: HTMLElement, html: string) {
     globalTooltip.style.display = "block";
 
     const rect = target.getBoundingClientRect();
-    let left = rect.left + rect.width / 2;
-    let top = rect.top - 10;
-    
-    // First apply basic position (resetting any modifications from previous tooltips)
+    const viewportMargin = 10;
+    const verticalGap = 10;
+    const maxTooltipHeight = Math.max(120, window.innerHeight - viewportMargin * 2);
+
+    // Always allow tooltip to use full viewport height before enabling internal scroll.
     globalTooltip.style.bottom = "";
     globalTooltip.style.overflowY = "auto";
-    globalTooltip.style.left = `${left}px`;
-    globalTooltip.style.top = `${top}px`;
-    globalTooltip.style.transform = "translate(-50%, -100%)";
-    
-    // Wait for the browser to render the tooltip to get its actual height
+    globalTooltip.style.maxHeight = `${maxTooltipHeight}px`;
+    globalTooltip.style.transform = "none";
+
+    // Start centered on target, then clamp.
+    globalTooltip.style.left = `${rect.left + rect.width / 2}px`;
+    globalTooltip.style.top = `${rect.top}px`;
+
     requestAnimationFrame(() => {
         if (!globalTooltip) return;
         const tooltipRect = globalTooltip.getBoundingClientRect();
-        
-        // Check top edge collision
-        if (tooltipRect.top < 10) {
-            // If it goes above the screen, show it BELOW the target instead
-            globalTooltip.style.top = `${rect.bottom + 10}px`;
-            globalTooltip.style.transform = "translate(-50%, 0)";
-            
-            // Re-check bottom edge
-            const newTooltipRect = globalTooltip.getBoundingClientRect();
-            if (newTooltipRect.bottom > window.innerHeight - 10) {
-                // If it still goes below the screen, just fix it to bottom to show as much as possible
-                // (User requested no scrollbars)
-                globalTooltip.style.top = "auto";
-                globalTooltip.style.bottom = "10px";
-                globalTooltip.style.transform = "translate(-50%, 0)";
-            }
-        }
-        
-        // Check horizontal collisions
-        if (tooltipRect.left < 10) {
-            globalTooltip.style.left = `10px`;
-            globalTooltip.style.transform = globalTooltip.style.transform.replace("-50%", "0");
-        } else if (tooltipRect.right > window.innerWidth - 10) {
-            globalTooltip.style.left = `${window.innerWidth - tooltipRect.width - 10}px`;
-            globalTooltip.style.transform = globalTooltip.style.transform.replace("-50%", "0");
-        }
+
+        // Prefer above the cursor/target. If not enough room, pin to top edge and keep max height.
+        const preferredTop = rect.top - verticalGap - tooltipRect.height;
+        let top = Math.max(viewportMargin, preferredTop);
+        const maxTop = window.innerHeight - viewportMargin - tooltipRect.height;
+        if (top > maxTop) top = Math.max(viewportMargin, maxTop);
+
+        // Center horizontally; clamp within viewport.
+        let left = rect.left + rect.width / 2 - tooltipRect.width / 2;
+        left = Math.max(viewportMargin, Math.min(left, window.innerWidth - viewportMargin - tooltipRect.width));
+
+        globalTooltip.style.left = `${left}px`;
+        globalTooltip.style.top = `${top}px`;
     });
 
     if (globalTooltipObserver) globalTooltipObserver.disconnect();
