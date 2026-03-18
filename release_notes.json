@@ -1,3 +1,3 @@
 ﻿{
-  "notes": "- Improved champion tooltip accuracy across many abilities and passives.\n- Fixed several cases where tooltip values were missing, shown as 0, or mapped to the wrong scaling.\n- Corrected multiple level-based and max-health-based tooltip values so they now display proper progression.\n- Fixed passive tooltip mismatches where some champions showed another slot's text.\n- Improved tooltip fallback handling to reduce unresolved or partially rendered values.\n- Better patch-to-patch reliability for tooltip data updates across locales."
+  "notes": "- 特定の言語特定のチャンピオンでtooltipが表示されずフリーズする問題を解決\n- スコアボードのチャンピオンレベルの背景を追加\n- シヴァーナのリワークツールチップに追加"
 }

@@ -1044,11 +1044,21 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
     };
 
     // === Header ===
-    const localChampionName = champTooltipJson.champion_local || champTooltipJson.champion_name || champTooltipJson.champion;
-    const localChampionTitle = champTooltipJson.champion_title || "";
-    const englishChampionName = champTooltipJson.champion_en || champTooltipJson.champion || "";
-    const localMs = champTooltipJson?.champion_stats?.movespeed;
-    const localAaRange = champTooltipJson?.champion_stats?.attackrange;
+    const localChampionName =
+        champTooltipJson.champion_local ||
+        champTooltipJson.champion_name ||
+        fallbackChampionData?.name ||
+        champTooltipJson.champion;
+    const localChampionTitle = champTooltipJson.champion_title || fallbackChampionData?.title || "";
+    const englishChampionName = champTooltipJson.champion_en || fallbackChampionData?.id || champTooltipJson.champion || "";
+    const localMs =
+        champTooltipJson?.champion_stats?.movespeed ??
+        fallbackChampionData?.stats?.movespeed ??
+        fallbackChampionData?.stats?.moveSpeed;
+    const localAaRange =
+        champTooltipJson?.champion_stats?.attackrange ??
+        fallbackChampionData?.stats?.attackrange ??
+        fallbackChampionData?.stats?.attackRange;
     const localMeta: string[] = [];
     if (typeof localMs === "number") localMeta.push(`MS: ${Math.round(localMs)}`);
     if (typeof localAaRange === "number") localMeta.push(`AA: ${Math.round(localAaRange)}`);
@@ -1066,10 +1076,16 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
     const slots = ["Passive", "Q", "W", "E", "R"];
     
     for (const slot of slots) {
-        if (!champTooltipJson[slot]) continue;
-        
-        const rawHtml = champTooltipJson[slot];
-        if (!rawHtml || typeof rawHtml !== 'string') continue;
+        const slotCandidates = slot === "Passive" ? ["Passive", "P", ""] : [slot];
+        let rawHtml = "";
+        for (const key of slotCandidates) {
+            const slotHtml = champTooltipJson[key];
+            if (typeof slotHtml === "string" && slotHtml.trim()) {
+                rawHtml = slotHtml.trim();
+                break;
+            }
+        }
+        if (!rawHtml) continue;
         
         html += `
         <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #333;">`;
@@ -1090,6 +1106,20 @@ export function buildLocalChampionTooltipHtml(champTooltipJson: any, lang: strin
         const titleRightRaw = extractTag("titleRight");
         const subtitleLeftRaw = extractTag("subtitleLeft");
         const subtitleRightRaw = extractTag("subtitleRight");
+
+        if (slot === "Passive") {
+            const mainTextRaw = extractTag("mainText");
+            if (mainTextRaw && /<spellActive>/i.test(mainTextRaw)) {
+                const passiveOnly = mainTextRaw
+                    .split(/<spellActive>/i)[0]
+                    .replace(/<br\s*\/?>\s*<br\s*\/?>\s*$/i, "")
+                    .trim();
+                descriptionHtml = descriptionHtml.replace(
+                    /<mainText>[\s\S]*?<\/mainText>/i,
+                    `<mainText>${passiveOnly}</mainText>`,
+                );
+            }
+        }
 
         stripTag("titleLeft");
         stripTag("titleRight");
@@ -2008,7 +2038,9 @@ export function evaluateLocalTooltipSafety(champTooltipJson: any): TooltipLiteSa
     if (totalLen > 15000) {
         return { useLite: true, reason: `payload_too_large:${totalLen}` };
     }
-    if (totalTokenCount > 220) {
+    // Token count alone is not a strong freeze signal for many modern champions.
+    // Keep this threshold very high to avoid unnecessary lite fallback.
+    if (totalTokenCount > 500) {
         return { useLite: true, reason: `too_many_tokens:${totalTokenCount}` };
     }
     if (maxSeriesCount > 26) {
