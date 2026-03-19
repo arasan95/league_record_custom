@@ -5,7 +5,7 @@ members = ["riot_datatypes"]
 exclude = ["vendor"]
 
 [workspace.package]
-version = "1.1.12"
+version = "1.1.14"
 edition = "2021"
 authors = ["arasan95"]
 license = "GPL-3.0-or-later"
@@ -59,6 +59,10 @@ path = "src/bin/find_wad_object.rs"
 [[bin]]
 name = "dump_aphelios_wad_tooltips"
 path = "src/bin/dump_aphelios_wad_tooltips.rs"
+
+[[bin]]
+name = "rebuild_tooltip_cache"
+path = "src/bin/rebuild_tooltip_cache.rs"
 
 [dependencies]
 tauri = { version = "2.10", features = ["protocol-asset", "tray-icon"] }
