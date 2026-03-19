@@ -586,6 +586,10 @@ fn ensure_tooltip_db_installed(app_handle: &AppHandle) -> Result<PathBuf, String
     }
     let target_db = db_dir.join("tooltip_data.db");
     if target_db.exists() {
+        // Recover from corrupted/empty user DB by refreshing from bundled resource DB.
+        if !tooltip_db_has_rows(&target_db) {
+            copy_bundled_tooltip_db(app_handle, &target_db)?;
+        }
         return Ok(target_db);
     }
 
@@ -699,11 +703,30 @@ fn is_tooltip_locale_payload_valid(data_json: &str) -> bool {
     champions >= 120 && (enough_spell_map || enough_modern_schema) && aphelios_has_extra_block
 }
 
+fn tooltip_db_has_rows(db_path: &PathBuf) -> bool {
+    let conn = match rusqlite::Connection::open(db_path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let count: i64 = match conn.query_row("SELECT COUNT(*) FROM champion_tooltips", [], |row| row.get(0))
+    {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    count > 0
+}
+
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub async fn load_tooltip_locale_db(locale: String, app_handle: AppHandle) -> Result<Option<String>, String> {
     let db_path = ensure_tooltip_db_installed(&app_handle)?;
     let mut data_json = read_tooltip_locale_json(&db_path, &locale)?;
+
+    // If locale row is missing (e.g. stale empty DB), restore bundled DB and retry once.
+    if data_json.is_none() {
+        copy_bundled_tooltip_db(&app_handle, &db_path)?;
+        data_json = read_tooltip_locale_json(&db_path, &locale)?;
+    }
 
     if let Some(ref payload) = data_json {
         if !is_tooltip_locale_payload_valid(payload) {
