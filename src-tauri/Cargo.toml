@@ -64,6 +64,10 @@ path = "src/bin/dump_aphelios_wad_tooltips.rs"
 name = "rebuild_tooltip_cache"
 path = "src/bin/rebuild_tooltip_cache.rs"
 
+[[bin]]
+name = "extract_rcp_asset"
+path = "src/bin/extract_rcp_asset.rs"
+
 [dependencies]
 tauri = { version = "2.10", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-updater = "2.10"
@@ -119,6 +123,7 @@ hex = "0.4.3"
 tauri-plugin-process = "2"
 regex = "1.12.3"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
+xxhash-rust = { version = "0.8.15", features = ["xxh64"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.3", features = [
