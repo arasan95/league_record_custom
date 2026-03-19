@@ -238,7 +238,7 @@ export default class UI {
     public checkWindowSize() {
         const w = window.innerWidth;
         const h = window.innerHeight;
-        this.updateStorageInfoVisibility();
+        void this.updateStorageInfoVisibility();
         
         // Sidebar Responsive
         if (w < 800) {
@@ -274,10 +274,23 @@ export default class UI {
         }
     }
 
-    private updateStorageInfoVisibility() {
+    private async updateStorageInfoVisibility() {
         if (!this.storageInfoEl) return;
 
-        const currentHeight = window.outerHeight || window.innerHeight;
+        // If the window is maximized (including drag-to-top maximize), always show.
+        if (appWindow) {
+            try {
+                const isMaximized = await appWindow.isMaximized();
+                if (isMaximized) {
+                    this.storageInfoEl.style.display = "";
+                    return;
+                }
+            } catch {
+                // Fall through to size-based check if the API isn't available.
+            }
+        }
+
+        const currentHeight = window.innerHeight || window.outerHeight;
         const maxHeight = window.screen?.availHeight || window.innerHeight;
         const hideThreshold = maxHeight * 0.7;
         const shouldHide = currentHeight <= hideThreshold;
