@@ -1,4 +1,5 @@
 #[path = "../wad/mod.rs"]
+#[allow(dead_code)]
 mod wad;
 
 use std::collections::HashSet;
