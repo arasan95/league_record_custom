@@ -1142,16 +1142,31 @@ const RUNE_MAP: Record<number, string> = {
 };
 
 export async function getChampionIconUrl(championName: string): Promise<string> {
+    if (!championName) return "";
+    await ensureDataLoaded();
+    if (cachedChampionData) {
+        const lower = championName.toLowerCase();
+        const entry = Object.values(cachedChampionData).find((c: any) => {
+            const idStr = String(c?.id ?? "").toLowerCase();
+            const nameStr = String(c?.name ?? "").toLowerCase();
+            const keyStr = String(c?.key ?? "");
+            return idStr === lower || nameStr === lower || keyStr === championName;
+        }) as any;
+        const idNum = entry ? Number(entry.key) : 0;
+        if (Number.isFinite(idNum) && idNum > 0) {
+            return await getChampionIconUrlById(idNum);
+        }
+    }
+
+    // Fallback for unknown names (kept for compatibility).
     const url = `${getBaseUrl()}/champion/${championName}.png`;
     return await getCachedAssetUrl(url, "champion", `${championName}.png`);
 }
 
 export async function getChampionIconUrlById(championId: number): Promise<string> {
     if (championId === 0) return ""; // 0 is invalid
-    // Temporarily disable direct ID-icon path. Use champion-name icon flow only.
-    const championName = await getChampionNameById(championId);
-    if (!championName) return "";
-    return await getChampionIconUrl(championName);
+    const url = `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/${championId}.png`;
+    return await getCachedAssetUrl(url, "champion", `${championId}.png`);
 }
 
 export async function getChampionNameById(championId: number): Promise<string | null> {
