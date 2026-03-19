@@ -6,7 +6,7 @@ import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import * as clipboard from "@tauri-apps/plugin-clipboard-manager";
 import { commands, type GameMetadata, type GoldFrame, type ParticipantGold, type MarkerFlags, type Recording, type Settings, type MatchTeam, type Participant, type GameEvent } from "./bindings";
-import { getChampionIconUrl, getChampionIconUrlById, getTftUnitIconUrl, getTftTraitIconUrl, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, ensureTftDataLoaded, getItemPrice, getChampionNameById, getChampionEnglishNameByIdSync, getChampionLocalizedNameByIdSync, getLocalChampionTooltips, getDetailedChampionData, getSummonerSpellData, getItemData, getRuneData, getTftItemIconUrl, getGameModeByQueueId } from "./datadragon";
+import { getChampionIconUrl, getChampionIconUrlById, getTftUnitIconUrl, getTftTraitIconUrl, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, ensureItemDataLoaded, ensureTftDataLoaded, getItemPrice, getChampionNameById, getChampionEnglishNameByIdSync, getChampionLocalizedNameByIdSync, getLocalChampionTooltips, getDetailedChampionData, getSummonerSpellData, getItemData, getRuneData, getTftItemIconUrl, getGameModeByQueueId } from "./datadragon";
 import { getCurrentPatchVersion, getSpawnTimers } from "./version";
 import { InventoryTimeline } from "./timeline";
 import { getObjectiveConfig } from "./objectives";
@@ -3083,7 +3083,10 @@ export default class UI {
                                     .map((k) => String((tooltips as any)?.[k] || ""))
                                     .join("\n");
                                 const hasUnresolvedSpellKey = /\{\{\s*Spell_[^}]+\}\}/i.test(slotsText);
-                                if (lang !== "ja" || hasUnresolvedSpellKey) {
+                                const hasLocalHeaderStats =
+                                    typeof (tooltips as any)?.champion_stats?.movespeed === "number" &&
+                                    typeof (tooltips as any)?.champion_stats?.attackrange === "number";
+                                if (lang !== "ja" || hasUnresolvedSpellKey || !hasLocalHeaderStats) {
                                     const version = this.currentGameVersion || getCurrentPatchVersion();
                                     fallbackChampionData = await withTimeout(
                                         getDetailedChampionData(p.championId, version, lang),
@@ -4340,28 +4343,6 @@ export default class UI {
             style: "width: 100%; box-sizing: border-box;"
         }) as HTMLInputElement;
 
-        // --- Assets Section ---
-        // --- Assets Section ---
-        // --- Assets Section ---
-        const downloadAssetsBtn = this.vjs.dom.createEl("button", {}, { class: "btn-browse" }, getText(lang, "downloadIcons")) as HTMLButtonElement;
-        const assetsStatus = this.vjs.dom.createEl("div", {}, { style: "font-size: 0.8em; color: #888; margin-top: 5px; text-align: center; min-height: 1.2em;" }, "");
-
-        downloadAssetsBtn.onclick = async () => {
-            downloadAssetsBtn.disabled = true;
-            downloadAssetsBtn.textContent = getText(lang, "downloading");
-            await downloadAllAssets((msg) => {
-                assetsStatus.textContent = msg;
-            });
-            downloadAssetsBtn.textContent = getText(lang, "downloadComplete");
-            setTimeout(() => { 
-                downloadAssetsBtn.disabled = false; 
-                downloadAssetsBtn.textContent = getText(lang, "downloadIcons");
-                assetsStatus.textContent = "";
-            }, 3000);
-        };
-        
-        const assetsWrapper = this.vjs.dom.createEl("div", {}, { style: "width: 100%;" }, [downloadAssetsBtn, assetsStatus]);
-
         // --- Keybinds Section ---
         // --- Tab Containers ---
         // Scroll containers (handle scrollbar at edge)
@@ -5082,7 +5063,6 @@ export default class UI {
             scoreboardLinksContent,
             
             // Modernized Sections (Moved to bottom)
-            createGroup("Local Assets", assetsWrapper as HTMLElement, true),
             createGroup("Troubleshooting", clearCacheBtn as HTMLElement, true)
         );
 
