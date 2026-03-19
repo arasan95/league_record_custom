@@ -6,7 +6,7 @@ import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import * as clipboard from "@tauri-apps/plugin-clipboard-manager";
 import { commands, type GameMetadata, type GoldFrame, type ParticipantGold, type MarkerFlags, type Recording, type Settings, type MatchTeam, type Participant, type GameEvent } from "./bindings";
-import { getChampionIconUrl, getChampionIconUrlById, getTftUnitIconUrl, getTftTraitIconUrl, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, ensureTftDataLoaded, getItemPrice, getChampionNameById, getChampionEnglishNameByIdSync, getChampionLocalizedNameByIdSync, getLocalChampionTooltips, getSummonerSpellData, getItemData, getRuneData, getTftItemIconUrl, getGameModeByQueueId } from "./datadragon";
+import { getChampionIconUrl, getChampionIconUrlById, getTftUnitIconUrl, getTftTraitIconUrl, getItemIconUrl, getRuneIconUrl, getSpellIconUrl, downloadAllAssets, ensureItemDataLoaded, ensureTftDataLoaded, getItemPrice, getChampionNameById, getChampionEnglishNameByIdSync, getChampionLocalizedNameByIdSync, getLocalChampionTooltips, getDetailedChampionData, getSummonerSpellData, getItemData, getRuneData, getTftItemIconUrl, getGameModeByQueueId } from "./datadragon";
 import { getCurrentPatchVersion, getSpawnTimers } from "./version";
 import { InventoryTimeline } from "./timeline";
 import { getObjectiveConfig } from "./objectives";
@@ -3075,13 +3075,29 @@ export default class UI {
                             if (timeoutTooltipKeys.has(tooltipKey)) {
                                 return;
                             }
+                            let fallbackChampionData: any = null;
+                            try {
+                                // Non-Japanese locales frequently contain unresolved {{Spell_*_Tooltip}}
+                                // placeholders in local WAD text. Load DDragon detail as a safe fallback source.
+                                const slotsText = ["Passive", "Q", "W", "E", "R"]
+                                    .map((k) => String((tooltips as any)?.[k] || ""))
+                                    .join("\n");
+                                const hasUnresolvedSpellKey = /\{\{\s*Spell_[^}]+\}\}/i.test(slotsText);
+                                if (lang !== "ja" || hasUnresolvedSpellKey) {
+                                    const version = this.currentGameVersion || getCurrentPatchVersion();
+                                    fallbackChampionData = await withTimeout(
+                                        getDetailedChampionData(p.championId, version, lang),
+                                        1800,
+                                    );
+                                }
+                            } catch {}
                             let html = "";
                             try {
                                 const renderStart = perfEnabled ? performance.now() : 0;
                                 html = await buildLocalChampionTooltipHtml(
                                     tooltips,
                                     lang,
-                                    null,
+                                    fallbackChampionData,
                                     {
                                         isCancelled: () =>
                                             !isHovered ||
