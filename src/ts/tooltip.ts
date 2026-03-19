@@ -1054,6 +1054,9 @@ export async function buildLocalChampionTooltipHtml(
     },
 ): Promise<string> {
     if (!champTooltipJson) return "";
+    const isEnglishUi = String(lang || "").toLowerCase().startsWith("en");
+    const headerTitleFontSize = isEnglishUi ? 12 : 13;
+    const headerEnglishNameFontSize = isEnglishUi ? 11 : 12;
 
     const fnv1a_32 = (s: string) => {
         let h = 0x811c9dc5;
@@ -1090,8 +1093,8 @@ export async function buildLocalChampionTooltipHtml(
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 8px;">
             <div>
                 <b style="color:#c8aa6e; font-size: 16px;">${localChampionName}</b>
-                ${localChampionTitle ? `<span style="color:#aaa; font-size: 12px; margin-left: 6px;">${localChampionTitle}</span>` : ""}
-                ${englishChampionName ? `<span style="color:#888; font-size: 11px; margin-left: 8px;">(${englishChampionName})</span>` : ""}
+                ${localChampionTitle ? `<span style="color:#aaa; font-size: ${headerTitleFontSize}px; margin-left: 6px;">${localChampionTitle}</span>` : ""}
+                ${!isEnglishUi && englishChampionName ? `<span style="color:#888; font-size: ${headerEnglishNameFontSize}px; margin-left: 8px;">(${englishChampionName})</span>` : ""}
             </div>
             <div style="color:#888; font-size: 11px; text-align: right;">${localMeta.join(" | ")}</div>
         </div>`;
@@ -2568,6 +2571,9 @@ export async function buildLocalChampionTooltipHtml(
 
 export function buildLocalChampionTooltipHtmlLite(champTooltipJson: any, lang: string = "ja"): string {
     if (!champTooltipJson) return "";
+    const isEnglishUi = String(lang || "").toLowerCase().startsWith("en");
+    const headerTitleFontSize = isEnglishUi ? 12 : 13;
+    const headerEnglishNameFontSize = isEnglishUi ? 11 : 12;
     const localChampionName = champTooltipJson.champion_local || champTooltipJson.champion_name || champTooltipJson.champion || "Champion";
     const localChampionTitle = champTooltipJson.champion_title || "";
     const englishChampionName = champTooltipJson.champion_en || champTooltipJson.champion || "";
@@ -2576,8 +2582,8 @@ export function buildLocalChampionTooltipHtmlLite(champTooltipJson: any, lang: s
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #333; padding-bottom:5px; margin-bottom:8px;">
             <div>
                 <b style="color:#c8aa6e; font-size:16px;">${localChampionName}</b>
-                ${localChampionTitle ? `<span style="color:#aaa; font-size:12px; margin-left:6px;">${localChampionTitle}</span>` : ""}
-                ${englishChampionName ? `<span style="color:#888; font-size:11px; margin-left:8px;">(${englishChampionName})</span>` : ""}
+                ${localChampionTitle ? `<span style="color:#aaa; font-size:${headerTitleFontSize}px; margin-left:6px;">${localChampionTitle}</span>` : ""}
+                ${!isEnglishUi && englishChampionName ? `<span style="color:#888; font-size:${headerEnglishNameFontSize}px; margin-left:8px;">(${englishChampionName})</span>` : ""}
             </div>
             <div style="color:#888; font-size:11px;">Lite</div>
         </div>`;
