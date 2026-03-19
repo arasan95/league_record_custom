@@ -1,4 +1,5 @@
 #[path = "../wad/mod.rs"]
+#[allow(dead_code)]
 mod wad;
 
 use std::collections::HashMap;
@@ -128,4 +129,3 @@ fn main() {
     println!("written_files={}", written);
     println!("output_dir={}", out_dir.display());
 }
-
