@@ -951,6 +951,14 @@ async fn try_extract_lcu_asset_from_local_wad(
 }
 
 fn write_image_source_marker(file_path: &PathBuf, payload: serde_json::Value) -> Result<(), String> {
+    // Opt-in only: avoid writing marker files unless explicitly enabled.
+    let enabled = std::env::var("LEAGUERECORD_WRITE_IMAGE_MARKERS")
+        .map(|v| v == "1")
+        .unwrap_or(false);
+    if !enabled {
+        return Ok(());
+    }
+
     let sidecar = PathBuf::from(format!("{}.source.json", file_path.display()));
     let body = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
     std::fs::write(sidecar, body).map_err(|e| e.to_string())?;
