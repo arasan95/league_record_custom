@@ -2479,13 +2479,35 @@ export async function buildLocalChampionTooltipHtml(
         descriptionHtml = normalizeTooltipTextSafe(descriptionHtml, `${lang}:${champKey}:${slot}`);
 
         const plainDesc = descriptionHtml.replace(/<[^>]+>/g, "").replace(/\s+/g, "").trim();
+        const unresolvedSpellLocKey = /\{\{\s*Spell_[^}]+\}\}/i.test(descriptionHtml);
+        const unresolvedTemplateKey = /\{\{[^}]+\}\}/.test(descriptionHtml);
         const looksBrokenPassive = slot === "Passive" && (
             !plainDesc ||
             plainDesc === "クリックまたは[]でレベルアップ" ||
             plainDesc.length <= 6
         );
-        const looksBrokenAny = !plainDesc || plainDesc === "クリックまたは[]でレベルアップ";
-        if ((looksBrokenPassive || looksBrokenAny) && fallbackSpell?.description) {
+        const looksBrokenAny =
+            !plainDesc ||
+            plainDesc === "クリックまたは[]でレベルアップ" ||
+            unresolvedSpellLocKey ||
+            (unresolvedTemplateKey && plainDesc.length < 40);
+        const fallbackPlainDesc = String(fallbackSpell?.description || "")
+            .replace(/<[^>]+>/g, "")
+            .replace(/\s+/g, "")
+            .trim();
+        const localLooksTooSimple =
+            slot !== "Passive" &&
+            !!fallbackPlainDesc &&
+            plainDesc.length > 0 &&
+            fallbackPlainDesc.length >= Math.floor(plainDesc.length * 1.35) &&
+            !/<postscriptleft>|<postscriptright>/i.test(rawHtml);
+        const localLooksVeryShort =
+            slot !== "Passive" &&
+            !!fallbackPlainDesc &&
+            plainDesc.length > 0 &&
+            plainDesc.length < 180 &&
+            fallbackPlainDesc.length >= Math.max(plainDesc.length + 30, Math.floor(plainDesc.length * 1.15));
+        if ((looksBrokenPassive || looksBrokenAny || localLooksTooSimple || localLooksVeryShort) && fallbackSpell?.description) {
             const fallbackDesc = String(fallbackSpell.description)
                 .replace(/<br\s*\/?>/gi, "<br/>")
                 .replace(/<\/?font[^>]*>/gi, "")
