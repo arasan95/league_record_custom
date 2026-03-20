@@ -103,7 +103,8 @@ jobs:
           }
 
           $json = @{
-            version = "v$version"
+            # Tauri updater expects a semver string (e.g. "1.1.15"), not "v1.1.15".
+            version = "$version"
             notes = $notes
             pub_date = $date
             platforms = @{
