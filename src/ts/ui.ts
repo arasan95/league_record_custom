@@ -1982,7 +1982,10 @@ export default class UI {
                     await relaunch();
                 } catch (e) {
                     console.error("Install update failed", e);
-                    statusMsg.innerText = getText(lang as any, "updateError" as any) || "Update failed.";
+                    const detail =
+                        e instanceof Error ? e.message : (typeof e === "string" ? e : JSON.stringify(e));
+                    statusMsg.innerText =
+                        `${getText(lang as any, "updateError" as any) || "Update failed."} ${detail ?? ""}`.trim();
                     statusMsg.style.color = "#ff5555";
                     updateBtn.disabled = false;
                     laterBtn.disabled = false;
