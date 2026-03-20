@@ -1191,6 +1191,19 @@ export async function buildLocalChampionTooltipHtml(
         : [];
     const aliasKeyList = Array.from(new Set([...championAliasKeys, ...championRelatedCalcKeys]));
     const championAliasResolvedMaps = new Map<string, { vm: Map<string, string>, dv: Map<string, string> }>();
+    const apheliosHasWeaponDetailsInPayload =
+        String(champTooltipJson?.champion || "").toLowerCase() === "aphelios" &&
+        Array.from({ length: 5 }, (_v, i) => i + 1).some((idx) =>
+            Boolean(
+                String(champTooltipJson?.[`Extra_ApheliosWeapon${idx}Q`] || "").trim() ||
+                String(champTooltipJson?.[`Extra_ApheliosWeapon${idx}E`] || "").trim() ||
+                String(champTooltipJson?.[`Extra_ApheliosWeapon${idx}Offhand`] || "").trim(),
+            ),
+        );
+    const apheliosSummaryPlainNormalized = String(champTooltipJson?.Extra_ApheliosWeaponSummary || "")
+        .replace(/<[^>]+>/g, "")
+        .replace(/\s+/g, "")
+        .trim();
     const precomputeStart = Date.now();
     let aliasScanCount = 0;
     for (const alias of aliasKeyList) {
@@ -1220,7 +1233,11 @@ export async function buildLocalChampionTooltipHtml(
             }
         }
         if (!rawHtml) continue;
-        
+        if (apheliosHasWeaponDetailsInPayload && slot === "Q") {
+            // Weapon detail block already covers this summary text.
+            continue;
+        }
+
         html += `
         <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #333;">`;
         
@@ -1871,6 +1888,25 @@ export async function buildLocalChampionTooltipHtml(
             if (maxAbs < 120 || maxAbs > 20000) return valueText;
             return `${formatSeries(arr.map((n) => n / 100))}${tail}`;
         };
+        const maybeNormalizeRegenCalcPercent = (valueText: string, varKey: string): string => {
+            const key = (varKey || "").toLowerCase();
+            if (key !== "regencalc") return valueText;
+            const parsed = splitNumericSeriesHead(valueText);
+            if (!parsed) return valueText;
+            const head = parsed.head;
+            const tail = parsed.tail || "";
+            if (/%/.test(head) || /^\s*%/.test(tail)) return valueText;
+            const arr = parseSeries(head);
+            if (!arr || arr.length === 0) return valueText;
+            const maxAbs = Math.max(...arr.map((n) => Math.abs(n)));
+            if (maxAbs >= 120 && maxAbs <= 20000) {
+                return `${formatSeries(arr.map((n) => n / 100))}%${tail}`;
+            }
+            if (maxAbs > 0 && maxAbs <= 100) {
+                return `${head}%${tail}`;
+            }
+            return valueText;
+        };
         const maybeFixOverscaledAttackSpeedFromBase = (
             valueText: string,
             varKey: string,
@@ -1974,6 +2010,7 @@ export async function buildLocalChampionTooltipHtml(
             let renderedVal = formatFallbackValue(rawValue);
             renderedVal = maybeFixOverscaledAttackSpeedFromBase(renderedVal, targetVarName, targetFbMap);
             renderedVal = maybeNormalizePercentProductExpression(renderedVal, targetVarName);
+            renderedVal = maybeNormalizeRegenCalcPercent(renderedVal, targetVarName);
             renderedVal = maybeDownscaleOverscaledPercent(renderedVal, targetVarName);
             renderedVal = maybeDownscaleOverscaledPercentByTemplateContext(renderedVal, fullText, tokenEnd);
             renderedVal = maybePercentizeByHealthPhraseContext(renderedVal, fullText, tokenStart, tokenEnd);
@@ -2380,6 +2417,57 @@ export async function buildLocalChampionTooltipHtml(
             return cleanParts.join('/');
         }
         
+        const stripPostscriptStatRows = (rawHtml: string): string => {
+            const leftRe = /<postscriptLeft>([\s\S]*?)<\/postscriptLeft>/i;
+            const rightRe = /<postscriptRight>([\s\S]*?)<\/postscriptRight>/i;
+            const leftMatch = rawHtml.match(leftRe);
+            if (!leftMatch) return rawHtml;
+
+            const splitRows = (s: string): string[] =>
+                String(s)
+                    .split(/<br\s*\/?>/i)
+                    .map((x) => x.trim());
+            const joinRows = (rows: string[]): string => rows.filter((r) => r.length > 0).join("<br>");
+            const normalize = (s: string): string =>
+                String(s)
+                    .replace(/<[^>]+>/g, " ")
+                    .replace(/&nbsp;/gi, " ")
+                    .replace(/\s+/g, " ")
+                    .trim()
+                    .toLowerCase();
+
+            const hidePatterns = [
+                /cool\s*down|cooldown|recharge|cd|クールダウン|冷却|재사용|쿨타임|перезар|odnow|tempo de recarga|enfriamiento|ricarica|schad|délai/i,
+                /damage|dmg|ダメージ|伤害|傷害|피해|урон|dañ|dano|dégât|schaden|danni|sát thương|obraże|poškoz|sebz|hasar/i,
+                /cost|mana cost|resource cost|コスト|消費|消耗|費用|비용|стоимость|costo|coste|coût|kosten|mana/i,
+            ];
+            const shouldHide = (line: string): boolean => {
+                const n = normalize(line);
+                if (!n) return false;
+                return hidePatterns.some((re) => re.test(n));
+            };
+
+            const leftRows = splitRows(leftMatch[1]);
+            if (leftRows.length === 0) return rawHtml;
+            const hideIdx = new Set<number>();
+            leftRows.forEach((row, idx) => {
+                if (shouldHide(row)) hideIdx.add(idx);
+            });
+            if (hideIdx.size === 0) return rawHtml;
+
+            const filteredLeft = joinRows(leftRows.filter((_row, idx) => !hideIdx.has(idx)));
+            let out = rawHtml.replace(leftRe, `<postscriptLeft>${filteredLeft}</postscriptLeft>`);
+
+            const rightMatch = rawHtml.match(rightRe);
+            if (rightMatch) {
+                const rightRows = splitRows(rightMatch[1]);
+                const filteredRight = joinRows(rightRows.filter((_row, idx) => !hideIdx.has(idx)));
+                out = out.replace(rightRe, `<postscriptRight>${filteredRight}</postscriptRight>`);
+            }
+            return out;
+        };
+        descriptionHtml = stripPostscriptStatRows(descriptionHtml);
+
         // Fix Riot specific tags: <mainText> etc.
         descriptionHtml = descriptionHtml
             .replace(/<infoArea>[\s\S]*?<\/infoArea>/gi, "")
@@ -2540,9 +2628,144 @@ export async function buildLocalChampionTooltipHtml(
         };
     }
 
+    const apheliosExtraSpellMapCache = new Map<string, Record<string, any>>();
+    const getApheliosExtraSpellMap = (spellRef: string): Record<string, any> => {
+        const ref = String(spellRef || "").toLowerCase().trim();
+        if (!ref) return {};
+        const cached = apheliosExtraSpellMapCache.get(ref);
+        if (cached) return cached;
+
+        let out: Record<string, any> = {};
+        const fbKey = Object.keys(dynamicTooltipFallback).find((k) => k.toLowerCase() === ref);
+        if (fbKey && dynamicTooltipFallback[fbKey] && typeof dynamicTooltipFallback[fbKey] === "object") {
+            out = dynamicTooltipFallback[fbKey];
+        } else {
+            const calcKey = Object.keys(allCalcFormulas).find((k) => k.toLowerCase() === ref);
+            const calcObj = calcKey ? allCalcFormulas[calcKey] : null;
+            if (calcObj && typeof calcObj === "object") {
+                const merged: Record<string, any> = {};
+                const push = (src: any) => {
+                    if (!src || typeof src !== "object") return;
+                    for (const [k, v] of Object.entries(src)) {
+                        if (v === undefined || v === null) continue;
+                        if (typeof v === "object" && v !== null && "resolvedValue" in (v as any)) {
+                            merged[String(k)] = (v as any).resolvedValue;
+                        } else {
+                            merged[String(k)] = v;
+                        }
+                    }
+                };
+                push(calcObj.variableMapping);
+                push(calcObj.dataValues);
+                out = merged;
+            }
+        }
+
+        apheliosExtraSpellMapCache.set(ref, out);
+        return out;
+    };
+
+    const resolveApheliosVarFromMap = (map: Record<string, any>, rawName: string): string => {
+        if (!map || !rawName) return "";
+        const name = String(rawName).toLowerCase().trim();
+
+        const read = (k: string): any => {
+            if (!k) return undefined;
+            if ((map as any)[k] !== undefined) return (map as any)[k];
+            const lk = k.toLowerCase();
+            if ((map as any)[lk] !== undefined) return (map as any)[lk];
+            const hk = fnv1a_32(lk);
+            if ((map as any)[hk] !== undefined) return (map as any)[hk];
+            return undefined;
+        };
+
+        for (const cand of candidateNames(name)) {
+            const v = read(cand);
+            if (v !== undefined && v !== null && String(v).trim()) return String(v);
+        }
+
+        const dotted = name.match(/^([a-z0-9_\.:]+)\.(\d+)$/);
+        if (dotted) {
+            const base = resolveApheliosVarFromMap(map, dotted[1]);
+            if (base) {
+                const idx = parseInt(dotted[2], 10);
+                const parts = String(base).split("/");
+                if (!Number.isNaN(idx) && idx >= 0 && idx < parts.length) return parts[idx];
+                return base;
+            }
+        }
+
+        const numbered = name.match(/^([a-z0-9_\.:]+?)(\d+)(prefix|postfix)?$/);
+        if (numbered) {
+            if (numbered[3]) return "";
+            const base = resolveApheliosVarFromMap(map, numbered[1]);
+            if (base) {
+                const idx = Math.max(0, parseInt(numbered[2], 10) - 1);
+                const parts = String(base).split("/");
+                if (idx < parts.length) return parts[idx];
+                if (parts.length === 1) return parts[0];
+            }
+        }
+
+        return "";
+    };
+
+    const resolveApheliosExtraToken = (tokenRaw: string): string => {
+        let expr = String(tokenRaw || "").trim();
+        if (!expr) return "";
+        if (expr.toLowerCase() === "hotkey") return "";
+
+        let mul = 1;
+        if (expr.includes("*")) {
+            const parts = expr.split("*");
+            const maybe = parseFloat(parts[parts.length - 1]);
+            if (!Number.isNaN(maybe)) {
+                mul = maybe;
+                expr = parts.slice(0, -1).join("*");
+            }
+        }
+
+        const applyMul = (v: string): string => {
+            if (mul === 1) return v;
+            const n = Number(v);
+            if (!Number.isFinite(n)) return v;
+            return String(Math.round(n * mul * 100) / 100);
+        };
+
+        if (expr.toLowerCase().startsWith("spell.")) {
+            const parts = expr.split(":");
+            const spellRef = String(parts[0] || "").replace(/^spell\./i, "");
+            const varName = parts.slice(1).join(":");
+            const map = getApheliosExtraSpellMap(spellRef);
+            const hit = resolveApheliosVarFromMap(map, varName);
+            return hit ? applyMul(hit) : "";
+        }
+
+        const refs = [
+            "ApheliosP", "ApheliosQ", "ApheliosW", "ApheliosE", "ApheliosR",
+            "ApheliosCalibrumQ", "ApheliosSeverumQ", "ApheliosInfernumQ",
+            "ApheliosCrescendumQ", "ApheliosGravitumQ",
+        ];
+        for (const ref of refs) {
+            const map = getApheliosExtraSpellMap(ref);
+            const hit = resolveApheliosVarFromMap(map, expr);
+            if (hit) return applyMul(hit);
+        }
+
+        return "";
+    };
+
     const apheliosWeaponSummary = String(champTooltipJson?.Extra_ApheliosWeaponSummary || "").trim();
-    if (apheliosWeaponSummary) {
-        const summaryLabel = String(lang || "").toLowerCase().startsWith("ja") ? "武器説明" : "Weapon Summary";
+    const hasApheliosWeaponDetail = Array.from({ length: 5 }, (_v, i) => i + 1).some((idx) =>
+        Boolean(
+            String(champTooltipJson?.[`Extra_ApheliosWeapon${idx}Q`] || "").trim() ||
+            String(champTooltipJson?.[`Extra_ApheliosWeapon${idx}E`] || "").trim() ||
+            String(champTooltipJson?.[`Extra_ApheliosWeapon${idx}Offhand`] || "").trim(),
+        ),
+    );
+
+    if (apheliosWeaponSummary && !hasApheliosWeaponDetail) {
+        const summaryLabel = String(lang || "").toLowerCase().startsWith("ja") ? "武器概要" : "Weapon Summary";
         const summaryHtml = normalizeTooltipTextSafe(
             apheliosWeaponSummary
                 .replace(/<br>/gi, "<br/>")
@@ -2559,6 +2782,68 @@ export async function buildLocalChampionTooltipHtml(
             <div class="tooltip-main-text">${summaryHtml}</div>
         </div>`;
     }
+
+    const sanitizeApheliosWeaponDetail = (raw: string, guardKey: string): string => {
+        if (!raw) return "";
+        let text = String(raw).trim().replace(/<br>/gi, "<br/>");
+        for (let i = 0; i < 4; i++) {
+            const next = text
+                .replace(/^\s*\{\{\s*/g, "")
+                .replace(/\s*\}\}\s*$/g, "")
+                .trim();
+            if (next === text) break;
+            text = next;
+        }
+        text = text.replace(/@([a-zA-Z0-9_\.:\*\-\+]+)@/g, (_m, p1) => {
+            return resolveApheliosExtraToken(String(p1 || ""));
+        });
+        text = text
+            .replace(/\{\{\s*/g, "")
+            .replace(/\s*\}\}/g, "")
+            .replace(/(%){2,}/g, "%");
+        return normalizeTooltipTextSafe(text, guardKey);
+    };
+
+    if (hasApheliosWeaponDetail) {
+        const detailsLabel = String(lang || "").toLowerCase().startsWith("ja") ? "武器詳細" : "Weapon Details";
+        html += `
+        <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #333;">
+            <div style="display: flex; align-items: baseline; margin-bottom: 4px;">
+                <b style="color:#00d2ff; font-size: 13px;">[Extra]</b>
+                <span style="color:#eee; font-size: 13px; font-weight: bold; margin-left: 4px;">${detailsLabel}</span>
+            </div>`;
+
+        for (let idx = 1; idx <= 5; idx++) {
+            const qRaw = String(champTooltipJson?.[`Extra_ApheliosWeapon${idx}Q`] || "").trim();
+            const eRaw = String(champTooltipJson?.[`Extra_ApheliosWeapon${idx}E`] || "").trim();
+            const offhandRaw = String(champTooltipJson?.[`Extra_ApheliosWeapon${idx}Offhand`] || "").trim();
+            if (!qRaw && !eRaw && !offhandRaw) continue;
+
+            const weaponLabel = String(lang || "").toLowerCase().startsWith("ja") ? `武器 ${idx}` : `Weapon ${idx}`;
+            const qHtml = sanitizeApheliosWeaponDetail(
+                qRaw,
+                `${lang}:${String(champTooltipJson?.champion || "unknown")}:Extra_ApheliosWeapon${idx}Q`,
+            );
+            const eHtml = sanitizeApheliosWeaponDetail(
+                eRaw,
+                `${lang}:${String(champTooltipJson?.champion || "unknown")}:Extra_ApheliosWeapon${idx}E`,
+            );
+            const offhandHtml = sanitizeApheliosWeaponDetail(
+                offhandRaw,
+                `${lang}:${String(champTooltipJson?.champion || "unknown")}:Extra_ApheliosWeapon${idx}Offhand`,
+            );
+
+            html += `
+            <div style="margin-top: 6px; padding-top: 6px; border-top: 1px dotted #2d2d2d;">
+                <div style="color:#c8aa6e; font-size: 12px; font-weight: bold; margin-bottom: 2px;">${weaponLabel}</div>
+                ${qHtml ? `<div class="tooltip-main-text"><span style="color:#9ad8ff; font-weight:bold;">[Q]</span> ${qHtml}</div>` : ""}
+                ${eHtml ? `<div class="tooltip-main-text"><span style="color:#9ad8ff; font-weight:bold;">[E]</span> ${eHtml}</div>` : ""}
+                ${offhandHtml ? `<div class="tooltip-main-text"><span style="color:#9ad8ff; font-weight:bold;">[Offhand]</span> ${offhandHtml}</div>` : ""}
+            </div>`;
+        }
+        html += `</div>`;
+    }
+
     prof.totalMs = Date.now() - startedAt;
     if (options?.onProfile) {
         try {

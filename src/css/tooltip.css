@@ -4,13 +4,23 @@
  * Styles for the Riot tags mapped in tooltip.ts buildLocalChampionTooltipHtml
  */
 .league-tooltip .tooltip-postscript-left {
-    display: none;
+    /* display: none; */
+    display: inline-block;
+    width: auto;
+    vertical-align: top;
+    margin-right: 10px;
+    white-space: nowrap;
     font-size: 10px; /* Reduces font size specifically for the left postscript column */
     color: #888;
 }
 
 .league-tooltip .tooltip-postscript-right {
-    display: none;
+    /* display: none; */
+    display: inline-block;
+    width: auto;
+    vertical-align: top;
+    text-align: left;
+    white-space: nowrap;
     font-size: 10px; /* Reduces font size specifically for the right postscript column */
     color: #888;
 }
