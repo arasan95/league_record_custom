@@ -35,6 +35,8 @@ target
 # Custom Dev Scripts
 target_alt
 run_sandbox
+# Debug output
+debug/
 # s
 src-tauri/src/bin/debug_events.rs
 .log/
