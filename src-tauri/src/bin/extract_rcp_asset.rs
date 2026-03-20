@@ -11,7 +11,7 @@ use xxhash_rust::xxh64::xxh64;
 
 fn print_usage() {
     eprintln!(
-        "Usage:\n  extract_rcp_asset <asset_path> <out_file>\n\nExamples:\n  extract_rcp_asset plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/266.png C:\\\\tmp\\\\266.png\n  extract_rcp_asset plugins/rcp-be-lol-game-data/global/default/v1/perk-images/styles/precision/presstheattack/presstheattack.png C:\\\\tmp\\\\pta.png\n"
+        "Usage:\n  extract_rcp_asset <asset_path> <out_file>\n\nExamples:\n  extract_rcp_asset plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/266.png out/266.png\n  extract_rcp_asset plugins/rcp-be-lol-game-data/global/default/v1/perk-images/styles/precision/presstheattack/presstheattack.png out/pta.png\n"
     );
 }
 
