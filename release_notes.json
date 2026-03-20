@@ -1,3 +1,3 @@
 ﻿{
-  "notes": "- 特定の言語設定かつ特定のチャンピオンでツールチップが表示されず、フリーズする問題を修正 / Fixed a freeze issue where tooltips would not appear for certain champions in specific language settings\n- スコアボードのチャンピオンレベル背景を追加 / Added champion level backgrounds to the scoreboard\n- シヴァーナのリワークツールチップを追加 / Added tooltips for Shyvana's rework\n- ツールチップで値が表示されない問題を修正 / Fixed missing tooltip values\n- ツールチップの表示位置を修正 / Fixed tooltip positioning"
+  "notes": "- ストレージ情報の表示不具合を修正\n- ツールチップ表示を改善（表示崩れ・欠落・言語差分などの問題を修正）\n- アイコン画像の取得元をオンラインからローカルWAD抽出に変更（読み込みの安定性を向上）\n\n- Fixed a UI bug in the storage information display\n- Improved tooltips (fixed layout issues, missing content, and locale-specific inconsistencies)\n- Switched icon loading to extract images from local WAD files instead of relying on online sources (improves reliability)"
 }
