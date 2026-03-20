@@ -1133,12 +1133,28 @@ fn is_tooltip_locale_payload_valid(data_json: &str) -> bool {
                 .and_then(|x| x.as_str())
                 .map(|s| !s.trim().is_empty())
                 .unwrap_or(false);
-            let has_bonus_vars = aphelios
-                .get("Extra_ApheliosRWeaponBonusVars")
-                .and_then(|x| x.as_str())
-                .map(|s| !s.trim().is_empty())
-                .unwrap_or(false);
-            has_summary || has_bonus_vars
+            let has_weapon_detail = (1..=5).any(|idx| {
+                let q_key = format!("Extra_ApheliosWeapon{}Q", idx);
+                let e_key = format!("Extra_ApheliosWeapon{}E", idx);
+                let offhand_key = format!("Extra_ApheliosWeapon{}Offhand", idx);
+                let q_ok = aphelios
+                    .get(&q_key)
+                    .and_then(|x| x.as_str())
+                    .map(|s| !s.trim().is_empty())
+                    .unwrap_or(false);
+                let e_ok = aphelios
+                    .get(&e_key)
+                    .and_then(|x| x.as_str())
+                    .map(|s| !s.trim().is_empty())
+                    .unwrap_or(false);
+                let offhand_ok = aphelios
+                    .get(&offhand_key)
+                    .and_then(|x| x.as_str())
+                    .map(|s| !s.trim().is_empty())
+                    .unwrap_or(false);
+                q_ok || e_ok || offhand_ok
+            });
+            has_summary && has_weapon_detail
         })
         .unwrap_or(true);
 

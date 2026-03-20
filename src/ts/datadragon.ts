@@ -426,10 +426,36 @@ export async function getLocalChampionTooltips(championId: number, langStr: stri
 
     if (!allChampionsLocalTooltipCache) {
         try {
+            const mergeExtraKeysFromFallbackJson = async () => {
+                try {
+                    const filePath = `tooltip_cache/all_champions_${locale}.json`;
+                    if (!(await exists(filePath, { baseDir: BaseDirectory.AppLocalData }))) return;
+                    const data = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
+                    const jsonStr = new TextDecoder().decode(data);
+                    const fallbackAll = JSON.parse(jsonStr);
+                    if (!fallbackAll || typeof fallbackAll !== "object" || !allChampionsLocalTooltipCache) return;
+
+                    for (const [champNameKey, fallbackChamp] of Object.entries(fallbackAll as Record<string, any>)) {
+                        if (!fallbackChamp || typeof fallbackChamp !== "object") continue;
+                        const currentChamp = (allChampionsLocalTooltipCache as any)[champNameKey];
+                        if (!currentChamp || typeof currentChamp !== "object") continue;
+                        for (const [k, v] of Object.entries(fallbackChamp as Record<string, any>)) {
+                            if (!k.startsWith("Extra_")) continue;
+                            if (typeof v !== "string" || !v.trim()) continue;
+                            (currentChamp as any)[k] = v;
+                        }
+                    }
+                } catch (e) {
+                    // Keep DB payload usable even when optional local fallback merge fails.
+                    console.warn("mergeExtraKeysFromFallbackJson failed:", e);
+                }
+            };
+
             // Preferred source: bundled SQLite DB copied to AppData (survives AppLocalData cache cleanup).
             const dbJson = await invoke<string | null>("load_tooltip_locale_db", { locale });
             if (dbJson) {
                 allChampionsLocalTooltipCache = JSON.parse(dbJson);
+                await mergeExtraKeysFromFallbackJson();
                 allChampionsLocalTooltipLocale = locale;
             } else {
                 // Backward-compatible fallback: old JSON cache file in AppLocalData.
