@@ -55,7 +55,7 @@
         "https://github.com/arasan95/League_Record_custom/releases/latest/download/latest.json"
       ],
       "windows": {
-        "installMode": "quiet"
+        "installMode": "passive"
       }
     }
   }
