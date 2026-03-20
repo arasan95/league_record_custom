@@ -52,6 +52,8 @@ raw_input_example.py
 scripts
 tmp
 docs
+TOOLTIP_HANDOVER_JA.md
+tools
 .markdownlint.json
 tooltip_exports
 
