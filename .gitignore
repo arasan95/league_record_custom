@@ -30,6 +30,8 @@ dist-ssr
 # Rust / Tauri
 src-tauri/target
 src-tauri/target_alt_clean*
+src-tauri/target_vt*
+src-tauri/target_no_ext*
 target
 
 # Custom Dev Scripts

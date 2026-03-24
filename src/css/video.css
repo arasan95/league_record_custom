@@ -212,6 +212,16 @@ body:has(.vjs-fullscreen) {
     width: 3px !important;
     margin-left: -1px !important; /* Center the thinner marker */
     opacity: 0.4 !important;
+    position: absolute !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    height: 100% !important;
+    z-index: 40 !important;
+    pointer-events: auto !important;
+}
+
+.video-js .vjs-progress-holder {
+    position: relative !important;
 }
 
 .vjs-marker.kill { background-color: rgb(43, 255, 0) !important; z-index: 12; }

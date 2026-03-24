@@ -1,7 +1,4 @@
-// 'windows_subsystem = "windows/console"' decides if the executable should launch in a console window or not
-// but only add this for release builds (debug_assertions disabled)
-// gets ignored on all other targets
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Keep the default subsystem to avoid "hidden background process" heuristics in AV engines.
 
 use intprocess_recorder::InpRecorder;
 use ipc_link::{IpcCommand, IpcLinkSlave, IpcResponse};

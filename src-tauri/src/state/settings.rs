@@ -120,7 +120,7 @@ impl SettingsWrapper {
 
         // reload settings from settings.json
         self.load_from_file(settings_file, &app_handle);
-        log::info!("Settings updated: {:?}", self.inner());
+        log::info!("settings updated");
 
         // check and update autostart if necessary
         app_handle.sync_autostart();

@@ -1,19 +1,13 @@
 use std::sync::OnceLock;
 use tauri::{AppHandle, Emitter, Manager};
 use windows_sys::Win32::{
-    Foundation::{HWND, LPARAM, LRESULT, WPARAM},
-    System::LibraryLoader::GetModuleHandleW,
+    Foundation::{HWND, WPARAM},
     UI::{
-        Input::{
-            GetRawInputData,
-            KeyboardAndMouse::{VK_F1, VK_F10, VK_F11, VK_F12, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6, VK_F7, VK_F8, VK_F9},
-            RegisterRawInputDevices, RAWINPUT, RAWINPUTDEVICE, RAWINPUTHEADER, RIDEV_INPUTSINK, RID_INPUT,
-            RIM_TYPEKEYBOARD,
+        Input::KeyboardAndMouse::{
+            RegisterHotKey, UnregisterHotKey, MOD_NOREPEAT, VK_F1, VK_F10, VK_F11, VK_F12, VK_F2, VK_F3, VK_F4, VK_F5,
+            VK_F6, VK_F7, VK_F8, VK_F9,
         },
-        WindowsAndMessaging::{
-            CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, RegisterClassExW, TranslateMessage,
-            CS_HREDRAW, CS_VREDRAW, HWND_MESSAGE, MSG, WM_INPUT, WNDCLASSEXW, WS_POPUP,
-        },
+        WindowsAndMessaging::{GetMessageW, MSG, WM_HOTKEY},
     },
 };
 
@@ -24,7 +18,8 @@ static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
 pub struct RawInputListener;
 
-const RI_KEY_BREAK: u32 = 1; // Manually defined as it's missing in windows-sys imports sometimes
+const HOTKEY_VKEYS: [u16; 12] = [VK_F1, VK_F2, VK_F3, VK_F4, VK_F5, VK_F6, VK_F7, VK_F8, VK_F9, VK_F10, VK_F11, VK_F12];
+const HOTKEY_ID_BASE: i32 = 1000;
 
 impl RawInputListener {
     pub fn start(app_handle: AppHandle) {
@@ -34,117 +29,52 @@ impl RawInputListener {
         }
 
         std::thread::spawn(move || {
-            log::info!("Starting Raw Input Listener thread");
+            log::info!("Starting global hotkey listener thread");
             unsafe {
-                let instance = GetModuleHandleW(std::ptr::null());
-                // Use explicit wide string construction for windows-sys
-                let class_name_str: Vec<u16> = "LeagueRecordHotkeyListener"
-                    .encode_utf16()
-                    .chain(std::iter::once(0))
-                    .collect();
-                let class_name = class_name_str.as_ptr();
+                let mut registered_ids = Vec::new();
+                for (idx, vkey) in HOTKEY_VKEYS.iter().enumerate() {
+                    let hotkey_id = HOTKEY_ID_BASE + idx as i32;
+                    let ok = RegisterHotKey(std::ptr::null_mut() as HWND, hotkey_id, MOD_NOREPEAT, *vkey as u32);
+                    if ok == 0 {
+                        log::warn!("Failed to register global hotkey: F{}", idx + 1);
+                    } else {
+                        registered_ids.push(hotkey_id);
+                    }
+                }
 
-                let wc = WNDCLASSEXW {
-                    cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
-                    style: CS_HREDRAW | CS_VREDRAW,
-                    lpfnWndProc: Some(wnd_proc),
-                    hInstance: instance,
-                    lpszClassName: class_name,
-                    ..Default::default()
-                };
-
-                if RegisterClassExW(&wc) == 0 {
-                    log::error!("Failed to register window class for Raw Input");
+                if registered_ids.is_empty() {
+                    log::error!("No global hotkeys registered. Hotkey listener will not run.");
                     return;
                 }
 
-                let hwnd = CreateWindowExW(
-                    0,
-                    class_name,
-                    class_name, // Title doesn't matter
-                    WS_POPUP,
-                    0,
-                    0,
-                    0,
-                    0,
-                    HWND_MESSAGE,         // Constants might need casting or null reference check
-                    std::ptr::null_mut(), // hMenu
-                    instance,
-                    std::ptr::null_mut(),
-                );
-
-                // In windows-sys 0.61, HWND is likely *mut c_void, so check against null_mut()
-                if hwnd.is_null() {
-                    log::error!("Failed to create message-only window");
-                    return;
-                }
-
-                let rid = RAWINPUTDEVICE {
-                    usUsagePage: 0x01,
-                    usUsage: 0x06,
-                    dwFlags: RIDEV_INPUTSINK,
-                    hwndTarget: hwnd,
-                };
-
-                // RegisterRawInputDevices takes pointer to array
-                if RegisterRawInputDevices(&rid, 1, std::mem::size_of::<RAWINPUTDEVICE>() as u32) == 0 {
-                    log::error!("Failed to register raw input devices");
-                    return;
-                }
-
-                log::info!("Raw Input Listener registered successfully");
+                log::info!("Global hotkeys registered successfully");
 
                 let mut msg: MSG = std::mem::zeroed();
-                // GetMessageW second arg is HWND (can be null for all)
                 while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) != 0 {
-                    TranslateMessage(&msg);
-                    DispatchMessageW(&msg);
+                    if msg.message == WM_HOTKEY {
+                        if let Some(app) = APP_HANDLE.get() {
+                            let hotkey_id = msg.wParam as i32;
+                            if let Some(vkey) = vkey_from_hotkey_id(hotkey_id) {
+                                handle_hotkey(app, vkey as u16);
+                            }
+                        }
+                    }
+                }
+
+                for id in registered_ids {
+                    let _ = UnregisterHotKey(std::ptr::null_mut() as HWND, id);
                 }
             }
         });
     }
 }
 
-unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if msg == WM_INPUT {
-        let mut size: u32 = 0;
-        GetRawInputData(
-            lparam as _,
-            RID_INPUT,
-            std::ptr::null_mut(),
-            &mut size,
-            std::mem::size_of::<RAWINPUTHEADER>() as u32,
-        );
-
-        if size > 0 {
-            let mut buffer = vec![0u8; size as usize];
-            let bytes_read = GetRawInputData(
-                lparam as _,
-                RID_INPUT,
-                buffer.as_mut_ptr() as _,
-                &mut size,
-                std::mem::size_of::<RAWINPUTHEADER>() as u32,
-            );
-
-            if bytes_read == size {
-                let raw: &RAWINPUT = &*(buffer.as_ptr() as *const RAWINPUT);
-                if raw.header.dwType == RIM_TYPEKEYBOARD {
-                    let kb = &raw.data.keyboard;
-
-                    // RI_KEY_BREAK = 1 (Key Up).
-                    // Make = 0.
-                    let is_key_down = (kb.Flags & RI_KEY_BREAK as u16) == 0;
-
-                    if is_key_down {
-                        if let Some(app) = APP_HANDLE.get() {
-                            handle_hotkey(app, kb.VKey);
-                        }
-                    }
-                }
-            }
-        }
+fn vkey_from_hotkey_id(hotkey_id: i32) -> Option<WPARAM> {
+    let idx = hotkey_id - HOTKEY_ID_BASE;
+    if idx < 0 || idx as usize >= HOTKEY_VKEYS.len() {
+        return None;
     }
-    DefWindowProcW(hwnd, msg, wparam, lparam)
+    Some(HOTKEY_VKEYS[idx as usize] as WPARAM)
 }
 
 fn handle_hotkey(app: &AppHandle, vkey: u16) {

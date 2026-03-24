@@ -1,0 +1,106 @@
+type VideoPlayerLike = {
+    currentTime(): number | undefined;
+    duration(): number | undefined;
+};
+
+export function initializeProgressTooltips(input: {
+    player: VideoPlayerLike;
+    playerElement: HTMLElement | null;
+    getRecordingOffset: () => number;
+}): void {
+    const { player, playerElement, getRecordingOffset } = input;
+    const progressControl = document.querySelector(".vjs-progress-control");
+    let customTooltip = document.getElementById("custom-tooltip");
+    let customPlayTooltip = document.getElementById("custom-play-tooltip");
+
+    if (playerElement) {
+        if (!customTooltip && progressControl) {
+            customTooltip = document.createElement("div");
+            customTooltip.id = "custom-tooltip";
+            playerElement.appendChild(customTooltip);
+        }
+        if (!customPlayTooltip) {
+            customPlayTooltip = document.createElement("div");
+            customPlayTooltip.id = "custom-play-tooltip";
+            playerElement.appendChild(customPlayTooltip);
+        }
+    }
+
+    let isProgressHovered = false;
+    if (progressControl) {
+        progressControl.addEventListener("mouseenter", () => {
+            isProgressHovered = true;
+        });
+        progressControl.addEventListener("mouseleave", () => {
+            isProgressHovered = false;
+        });
+    }
+
+    const updatePlayTooltipLoop = () => {
+        if (customPlayTooltip) {
+            const isDragging = playerElement?.classList.contains("vjs-scrubbing") ||
+                progressControl?.classList.contains("vjs-sliding");
+
+            if (isProgressHovered || isDragging) {
+                const offset = getRecordingOffset();
+                const current = player.currentTime() || 0;
+                const gameTime = current + offset;
+
+                const mins = Math.floor(gameTime / 60);
+                const secs = Math.floor(gameTime % 60);
+                const timeStr = `${mins}:${secs.toString().padStart(2, "0")}`;
+
+                if (customPlayTooltip.textContent !== timeStr) {
+                    customPlayTooltip.textContent = timeStr;
+                }
+                customPlayTooltip.style.display = "block";
+
+                const playProgressBar = document.querySelector(".vjs-play-progress");
+                if (playProgressBar && playerElement) {
+                    const barRect = playProgressBar.getBoundingClientRect();
+                    const playerRect = playerElement.getBoundingClientRect();
+                    const relX = barRect.right - playerRect.left;
+                    customPlayTooltip.style.left = `${relX}px`;
+                }
+            } else {
+                customPlayTooltip.style.display = "none";
+            }
+        }
+        requestAnimationFrame(updatePlayTooltipLoop);
+    };
+
+    requestAnimationFrame(updatePlayTooltipLoop);
+
+    if (progressControl && customTooltip) {
+        progressControl.addEventListener("mousemove", (e) => {
+            const offset = getRecordingOffset();
+            const rect = progressControl.getBoundingClientRect();
+            const mouseX = (e as MouseEvent).clientX;
+
+            const x = mouseX - rect.left;
+            const width = rect.width;
+            const percent = Math.max(0, Math.min(1, x / width));
+            const duration = player.duration() || 0;
+            const videoTime = percent * duration;
+            const gameTime = videoTime + offset;
+
+            const mins = Math.floor(gameTime / 60);
+            const secs = Math.floor(gameTime % 60);
+            const timeStr = `${mins}:${secs.toString().padStart(2, "0")}`;
+
+            customTooltip.textContent = timeStr;
+            customTooltip.style.display = "block";
+
+            const playerRect = playerElement?.getBoundingClientRect();
+            if (playerRect) {
+                const relX = mouseX - playerRect.left;
+                customTooltip.style.left = `${relX}px`;
+            }
+        });
+
+        progressControl.addEventListener("mouseleave", () => {
+            customTooltip.style.display = "none";
+        });
+    }
+}
+
