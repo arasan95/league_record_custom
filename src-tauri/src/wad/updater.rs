@@ -7,6 +7,39 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[cfg(target_os = "windows")]
+fn query_registry_value(key: &str, value: &str) -> Option<String> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
+
+    let (root, subkey) = if let Some(rest) = key.strip_prefix("HKCU\\") {
+        (HKEY_CURRENT_USER, rest)
+    } else if let Some(rest) = key.strip_prefix("HKLM\\") {
+        (HKEY_LOCAL_MACHINE, rest)
+    } else {
+        return None;
+    };
+
+    let root = RegKey::predef(root);
+    let key = root.open_subkey(subkey).ok()?;
+    key.get_value::<String, _>(value).ok().filter(|v| !v.is_empty())
+}
+
+#[cfg(target_os = "windows")]
+fn find_lol_install_from_registry() -> Option<PathBuf> {
+    let keys = [
+        r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Riot Game league_of_legends.live",
+        r"HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\Riot Game league_of_legends.live",
+        r"HKLM\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Riot Game league_of_legends.live",
+    ];
+    for key in keys {
+        if let Some(path) = query_registry_value(key, "InstallLocation") {
+            return Some(PathBuf::from(path));
+        }
+    }
+    None
+}
+
 /// Attempt to find League of Legends installation directory
 pub fn get_league_install_dir() -> Option<PathBuf> {
     let is_valid_lol_dir = |p: &Path| p.exists() && p.join("LeagueClient.exe").exists();
@@ -15,6 +48,13 @@ pub fn get_league_install_dir() -> Option<PathBuf> {
         let p = PathBuf::from(env_path);
         if is_valid_lol_dir(&p) {
             return Some(p);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    if let Some(path) = find_lol_install_from_registry() {
+        if is_valid_lol_dir(&path) {
+            return Some(path);
         }
     }
 
