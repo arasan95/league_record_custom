@@ -64,10 +64,23 @@ fn build(path: Option<&path::Path>, version: &str) -> Result<(), Error> {
         println!("cargo:warning=Non-fatal error copying libobs resources: {}", e);
     }
 
+    if env::var("SKIP_EXTPROCESS_RECORDER").as_deref() == Ok("1") {
+        let extprocess_path = consumer_crate_output_dir.join("libobs/extprocess_recorder.exe");
+        if extprocess_path.exists() {
+            fs::remove_file(&extprocess_path)?;
+            println!("cargo:warning=Removed extprocess_recorder from copied libobs resources");
+        }
+    }
+
     Ok(())
 }
 
 fn copy_artifact_dependencies(path: Option<&path::Path>) -> Result<(), Error> {
+    if env::var("SKIP_EXTPROCESS_RECORDER").as_deref() == Ok("1") {
+        println!("cargo:warning=Skipping extprocess_recorder copy by SKIP_EXTPROCESS_RECORDER=1");
+        return Ok(());
+    }
+
     let consumer_crate_output_dir = match path {
         Some(path) => path::PathBuf::from(path),
         None => get_cargo_target_dir()?,

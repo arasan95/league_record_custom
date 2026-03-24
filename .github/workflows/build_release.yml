@@ -1,4 +1,4 @@
-name: Build Release Artifacts
+﻿name: Build Release Artifacts
 
 on:
   push:
@@ -98,7 +98,7 @@ jobs:
 
           $notes = "Update v$version"
           if (Test-Path "release_notes.json") {
-              $rn = Get-Content "release_notes.json" -Raw | ConvertFrom-Json
+              $rn = Get-Content "release_notes.json" -Raw -Encoding UTF8 | ConvertFrom-Json
               if ($null -ne $rn.notes) { $notes = $rn.notes }
           }
 
@@ -114,7 +114,27 @@ jobs:
                 }
             }
           }
-          $json | ConvertTo-Json -Depth 10 | Out-File latest.json -Encoding utf8
+          $jsonText = $json | ConvertTo-Json -Depth 10
+          Set-Content -Path latest.json -Value $jsonText -Encoding utf8NoBOM
+
+      - name: Validate latest.json
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "latest.json")) {
+            Write-Error "latest.json not found"
+            exit 1
+          }
+
+          $latest = Get-Content "latest.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+          if ($latest.version -notmatch '^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$') {
+            Write-Error "latest.json version must be semver without a leading 'v'. got: $($latest.version)"
+            exit 1
+          }
+
+          if ($latest.notes.Contains([char]0xFFFD)) {
+            Write-Error "latest.json notes appear to contain mojibake/replacement characters."
+            exit 1
+          }
 
       - name: Build release body from release_notes.json
         id: release_body
@@ -123,7 +143,7 @@ jobs:
           $body = "Windows-x64 installer and portable version.`nVersion: ${{ github.ref_name }}"
           if (Test-Path "release_notes.json") {
             try {
-              $rn = Get-Content "release_notes.json" -Raw | ConvertFrom-Json
+              $rn = Get-Content "release_notes.json" -Raw -Encoding UTF8 | ConvertFrom-Json
               if ($null -ne $rn.notes -and [string]::IsNullOrWhiteSpace([string]$rn.notes) -eq $false) {
                 $body = [string]$rn.notes
               }
@@ -141,3 +161,4 @@ jobs:
           artifacts: "./src-tauri/target/release/*.zip, ./src-tauri/target/release/bundle/nsis/*, latest.json"
           prerelease: false
           body: ${{ steps.release_body.outputs.body }}
+

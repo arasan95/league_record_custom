@@ -37,4 +37,6 @@ jobs:
             -SourceName "Chocolatey ffmpeg package" `
             -SourceUrl "https://community.chocolatey.org/packages/ffmpeg"
       - run: bun install --linker=isolated
+      - name: Responsibility Coverage Check
+        run: bun run check:responsibility
       - run: bun run --bun tauri build

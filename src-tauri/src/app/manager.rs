@@ -50,7 +50,9 @@ impl AppManager for AppHandle {
         log::info!("{APP_NAME} v{CURRENT_VERSION}");
         log::info!("{}", chrono::Local::now().format("%d-%m-%Y %H:%M"));
         log::info!("debug_log: {}", if debug_log { "enabled" } else { "disabled" });
-        log::info!("Settings: {}", settings.inner());
+        if debug_log {
+            log::info!("settings loaded");
+        }
 
         // create system tray-icon
         self.init_tray_menu();
@@ -68,7 +70,9 @@ impl AppManager for AppHandle {
 
         // start watching recordings folder for changes
         let recordings_path = settings.get_recordings_path();
-        log::info!("recordings folder: {recordings_path:?}");
+        if debug_log {
+            log::info!("recordings watcher initialized");
+        }
         filewatcher::replace(self, &recordings_path);
 
         // start checking for LoL games to record

@@ -1,20 +1,36 @@
 import videojs from "video.js";
 import type Player from "video.js/dist/types/player";
-import { type MarkerOptions, MarkersPlugin, type Settings } from "@fffffffxxxxxxx/videojs-markers";
+import { MarkersPlugin, type Settings } from "@fffffffxxxxxxx/videojs-markers";
 import "@fffffffxxxxxxx/videojs-markers";
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { join, sep } from "@tauri-apps/api/path";
 
-import { commands, type GameEvent, type MarkerFlags } from "./bindings";
+import { commands, type GameEvent, type Recording } from "./bindings";
 import ListenerManager from "./listeners";
 import UI from "./ui";
-import { splitRight, UnreachableError, playNotificationSound } from "./util";
+import { splitRight, playNotificationSound } from "./util";
 import { DEFAULT_KEYBINDS, isAction, loadKeybinds, loadMouseConfig, type KeybindMap, type MouseConfig } from "./keybinds";
 import { TitleBar } from "./titlebar";
 import { initPatchVersion } from "./version";
 import { initTooltipFallback } from "./tooltip";
 import { ensureDataLoaded } from "./datadragon";
+import { buildMetadataCandidates, normalizeVideoId, toAssetPath, videoIdsMatch } from "./main_video_id_usecase";
+import { getLatestRetryVideoId, getRetryState } from "./main_sidebar_usecase";
+import { getMetadataFromRecordingsList, getMetadataWithFallback } from "./main_metadata_usecase";
+import { renderMetadataState } from "./main_metadata_render_usecase";
+import { buildMarkers, markerEventName, type HighlightEvents, type RecordingEvents } from "./main_markers_usecase";
+import { initializeProgressTooltips } from "./main_progress_tooltip_usecase";
+import { createKeyboardHandlers } from "./main_keyboard_usecase";
+import { refreshSidebar, retrySidebarUpdateLoop } from "./main_recordings_usecase";
+import { buildTimelineRows } from "./main_timeline_usecase";
+import {
+    deleteVideoFlow,
+    deleteVideoOnlyWithConfirm,
+    openRenameModal,
+    renameVideoFlow,
+    showDeleteWithConfirm,
+} from "./main_video_management_usecase";
 
 // initDebug();
 
@@ -34,39 +50,9 @@ export function reloadKeybinds() {
     currentMouseConfig = loadMouseConfig();
 }
 
-type RecordingEvents = {
-    participantId: number;
-    recordingOffset: number;
-    events: Array<GameEvent>;
-};
-
-type HighlightEvents = {
-    recordingOffset: number;
-    events: Array<number>;
-};
-
 let currentEvents: RecordingEvents | null = null;
 let highlightEvents: HighlightEvents | null = null;
 const metadataRetryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
-
-function normalizeVideoId(videoId: string): string {
-    return videoId
-        .replace(/\.(mp4|webm|json)$/i, "")
-        .replace(/\\/g, "/")
-        .toLowerCase();
-}
-
-function getVideoBaseName(videoId: string): string {
-    const normalized = normalizeVideoId(videoId);
-    const parts = normalized.split("/");
-    return parts[parts.length - 1] ?? normalized;
-}
-
-function videoIdsMatch(a: string, b: string): boolean {
-    const na = normalizeVideoId(a);
-    const nb = normalizeVideoId(b);
-    return na === nb || getVideoBaseName(na) === getVideoBaseName(nb);
-}
 
 function clearMetadataRetry(videoId: string) {
     const key = normalizeVideoId(videoId);
@@ -239,6 +225,23 @@ if (createClipBtn) {
 }
 // ---------------------
 
+const keyboardHandlers = createKeyboardHandlers({
+    player,
+    ui,
+    matchesAction: (event, action) => isAction(event, action as any, currentKeybinds),
+    getLoopState: () => ({ loopStart, loopEnd, isLooping }),
+    setLoopState: (patch) => {
+        if (patch.loopStart !== undefined) loopStart = patch.loopStart;
+        if (patch.loopEnd !== undefined) loopEnd = patch.loopEnd;
+        if (patch.isLooping !== undefined) isLooping = patch.isLooping;
+    },
+    loopStartInput,
+    loopEndInput,
+    loopEnabledCheckbox,
+    formatLoopTime,
+    updateClipBtnState,
+});
+
 console.log(MarkersPlugin);
 
 await main();
@@ -350,119 +353,11 @@ async function main() {
         }
     });
 
-    // Tooltip Override Logic using MutationObserver
-    // This ensures we catch Video.js updates and correct them immediately based on offset.
-    // Tooltip Override Logic using MutationObserver
-    // Custom Tooltip Logic - Replaces default Video.js tooltips containing internal video time
-    const progressControl = document.querySelector(".vjs-progress-control");
-    let customTooltip = document.getElementById("custom-tooltip");
-    let customPlayTooltip = document.getElementById("custom-play-tooltip");
-    
-    // Create tooltips if not exist
-    if (playerElement) {
-        if (!customTooltip && progressControl) {
-            customTooltip = document.createElement("div");
-            customTooltip.id = "custom-tooltip";
-            playerElement.appendChild(customTooltip);
-        }
-        if (!customPlayTooltip) {
-            customPlayTooltip = document.createElement("div");
-            customPlayTooltip.id = "custom-play-tooltip";
-            playerElement.appendChild(customPlayTooltip);
-        }
-    }
-
-    // State for tooltip visibility
-    let isProgressHovered = false;
-    
-    if (progressControl) {
-        progressControl.addEventListener("mouseenter", () => { isProgressHovered = true; });
-        progressControl.addEventListener("mouseleave", () => { isProgressHovered = false; });
-    }
-
-    // Smooth Update Loop for Play Tooltip
-    // Fixes "choppy" movement by updating every frame, but keeps resource usage low by checking visibility first.
-    const updatePlayTooltipLoop = () => {
-         if (customPlayTooltip) {
-             // Check if user is scrubbing (dragging) the seek bar. Video.js adds 'vjs-scrubbing' class to the player or control.
-             // Usually on the player element or the progress control. Checking playerElement is safest.
-             const isDragging = playerElement?.classList.contains("vjs-scrubbing") || 
-                                progressControl?.classList.contains("vjs-sliding"); // vjs-sliding is sometimes used
-
-             if (isProgressHovered || isDragging) {
-                 const offset = currentEvents?.recordingOffset ?? highlightEvents?.recordingOffset ?? 0;
-                 const current = player.currentTime() || 0;
-                 const gameTime = current + offset;
-                 
-                 const mins = Math.floor(gameTime / 60);
-                 const secs = Math.floor(gameTime % 60);
-                 const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
-                 
-                 // Update text only if changed to minimize layout thrashing
-                 if (customPlayTooltip.textContent !== timeStr) {
-                    customPlayTooltip.textContent = timeStr;
-                 }
-                 customPlayTooltip.style.display = "block";
-                 
-                 // Sync position with play progress bar end
-                 const playProgressBar = document.querySelector(".vjs-play-progress");
-                 if (playProgressBar && playerElement) {
-                     const barRect = playProgressBar.getBoundingClientRect();
-                     const playerRect = playerElement.getBoundingClientRect();
-                     // Position at the right edge of the progress bar
-                     const relX = barRect.right - playerRect.left;
-                     customPlayTooltip.style.left = `${relX}px`;
-                 }
-             } else {
-                 customPlayTooltip.style.display = "none";
-             }
-         }
-         
-         requestAnimationFrame(updatePlayTooltipLoop);
-    };
-    
-    // Start the loop
-    requestAnimationFrame(updatePlayTooltipLoop);
-
-    if (progressControl && customTooltip) {
-        // Mouse Move (Hover Tooltip)
-        progressControl.addEventListener("mousemove", (e) => {
-             const offset = currentEvents?.recordingOffset ?? highlightEvents?.recordingOffset ?? 0;
-             
-             const rect = progressControl.getBoundingClientRect();
-             const mouseX = (e as MouseEvent).clientX;
-             
-             // Calculate time
-             const x = mouseX - rect.left;
-             const width = rect.width;
-             const percent = Math.max(0, Math.min(1, x / width));
-             const duration = player.duration() || 0;
-             const videoTime = percent * duration;
-             const gameTime = videoTime + offset;
-             
-             const mins = Math.floor(gameTime / 60);
-             const secs = Math.floor(gameTime % 60);
-             const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
-             
-             if (customTooltip) {
-                 customTooltip.textContent = timeStr;
-                 customTooltip.style.display = "block";
-                 
-                 const playerRect = playerElement?.getBoundingClientRect();
-                 if (playerRect) {
-                     const relX = mouseX - playerRect.left;
-                     customTooltip.style.left = `${relX}px`;
-                 }
-             }
-        });
-
-        // Mouse Leave
-        progressControl.addEventListener("mouseleave", () => {
-             if (customTooltip) {
-                 customTooltip.style.display = "none";
-             }
-        });
-    }
+    initializeProgressTooltips({
+        player,
+        playerElement,
+        getRecordingOffset: () => currentEvents?.recordingOffset ?? highlightEvents?.recordingOffset ?? 0,
+    });
 
     // add events to html elements
     ui.setRefreshBtnOnClickHandler(() => {
@@ -510,8 +405,8 @@ async function main() {
 
     // handle keybord shortcuts
     // handle keybord shortcuts
-    addEventListener("keydown", handleKeyboardEvents);
-    addEventListener("keyup", handleKeyUpEvents);
+    addEventListener("keydown", keyboardHandlers.handleKeyDown);
+    addEventListener("keyup", keyboardHandlers.handleKeyUp);
 
     // Mouse Controls (Wheel & Middle Click)
     const playerEl = document.getElementById("video_player");
@@ -766,7 +661,7 @@ async function main() {
 
     const videoIds = await updateSidebar();
     checkLatestAndRetry(videoIds);
-    const firstVideo = videoIds.find(v => v.videoExists);
+    const firstVideo = videoIds.find((v: Recording) => v.videoExists);
     if (firstVideo) {
         void setVideo(firstVideo.videoId, false);
         player.one("canplay", ui.showWindow);
@@ -779,98 +674,36 @@ async function main() {
 // --- SIDEBAR, VIDEO PLAYER, DESCRIPTION  ---
 
 // use this function to update the sidebar
-async function updateSidebar(forceUpdateIds: string[] = []) {
-    const activeVideoId = ui.getActiveVideoId();
-
-    const [recordings, recordingsSize] = await Promise.all([
-        commands.getRecordingsList(),
-        commands.getRecordingsSize(),
-    ]);
-    ui.updateSideBar(recordingsSize, recordings, setVideo, commands.toggleFavorite, showRenameModal, showDeleteModal, handleDeleteVideoOnly, forceUpdateIds);
-
-    if (!ui.setActiveVideoId(activeVideoId)) {
-        void setVideo(null);
-    }
-
-    // Check latest recording for Unknown status and retry if needed
-    // Logic moved to checkLatestAndRetry called by consumers
-    return recordings;
+async function updateSidebar(forceUpdateIds: string[] = []): Promise<Recording[]> {
+    return refreshSidebar({
+        ui,
+        forceUpdateIds,
+        getRecordingsList: commands.getRecordingsList,
+        getRecordingsSize: commands.getRecordingsSize,
+        setVideo,
+        toggleFavorite: commands.toggleFavorite,
+        showRenameModal,
+        showDeleteModal,
+        handleDeleteVideoOnly,
+    });
 }
 
-function checkLatestAndRetry(recordings: any[]) {
-    if (recordings.length > 0) {
-        const latest = recordings[0];
-        // Clips never have metadata, so don't retry for them
-        if (latest.videoId.includes("_clip_")) {
-            return;
-        }
-
-        let isUnknown = !latest.metadata || ("NoData" in latest.metadata);
-        
-        if (!isUnknown && latest.metadata && "Metadata" in latest.metadata) {
-             const m = latest.metadata.Metadata;
-             // Check if queue is missing OR named Unknown Queue (or contains Unknown)
-             // Also check if gameMode is missing or Unknown
-             // Some AI games might have queueId but data isn't fully ready?
-             const qName = m.queue?.name?.toLowerCase() ?? "";
-             // Check strict "unknown" or empty
-             if (!m.queue || !m.queue.name || qName.includes("unknown") || qName === "") {
-                 isUnknown = true;
-             }
-        }
-
-        if (isUnknown) {
-            console.log(`Latest recording ${latest.videoId} is Unknown. Scheduling retries...`);
-            retrySidebarUpdate(3, latest.videoId);
-        }
+function checkLatestAndRetry(recordings: Recording[]) {
+    const retryId = getLatestRetryVideoId(recordings);
+    if (retryId) {
+        console.log(`Latest recording ${retryId} is Unknown. Scheduling retries...`);
+        retrySidebarUpdate(3, retryId);
     }
 }
 
 async function retrySidebarUpdate(attemptsLeft: number, targetId: string) {
-    if (attemptsLeft <= 0) return;
-
-    setTimeout(async () => {
-        try {
-            console.log(`Retrying Sidebar Update for ${targetId}... Attempts left: ${attemptsLeft}`);
-            // Force update the specific item to bypass cache, ensuring F5-like behavior
-            const recordings = await updateSidebar([targetId]);
-            
-            if (recordings.length > 0) {
-                // 1. Try to find the original target
-                let latest = recordings.find(r => r.videoId === targetId);
-                let currentTargetId = targetId;
-
-                // 2. If lost (renamed?), switch tracking to the ACTUAL latest recording
-                if (!latest) {
-                    console.log(`Target ID ${targetId} lost. Switching focus to latest recording.`);
-                    latest = recordings[0];
-                    currentTargetId = latest.videoId;
-                }
-                
-                if (latest) {
-                    let isUnknown = !latest.metadata || ("NoData" in latest.metadata);
-                    
-                    if (!isUnknown && latest.metadata && "Metadata" in latest.metadata) {
-                        const m = latest.metadata.Metadata;
-                        const qName = m.queue?.name?.toLowerCase() ?? "";
-                        // Same strict check
-                        if (!m.queue || !m.queue.name || qName.includes("unknown") || qName === "") {
-                            isUnknown = true;
-                        }
-                    }
-
-                    if (isUnknown) {
-                        retrySidebarUpdate(attemptsLeft - 1, currentTargetId);
-                    } else {
-                        console.log("Retry successful: Data is valid.");
-                    }
-                }
-            }
-        } catch (e) {
-            console.error("Error in retry loop:", e);
-            retrySidebarUpdate(attemptsLeft - 1, targetId);
-        }
-    }, 1000); // 1 second interval
+    retrySidebarUpdateLoop({
+        attemptsLeft,
+        targetId,
+        updateSidebar,
+        resolveRetryState: getRetryState,
+        delayMs: 1000,
+    });
 }
 
 
@@ -895,7 +728,14 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
         if (!completed) {
             scheduleMetadataRetry(cleanVideoId);
         }
-        player.src({ type: "video/mp4", src: convertFileSrc(cleanVideoId + ".mp4") });
+        const normalizedVideoPath = toAssetPath(cleanVideoId + ".mp4");
+        const videoSrc = convertFileSrc(normalizedVideoPath);
+        console.log(`[diagnose] setVideo clean=${cleanVideoId} normalized=${normalizedVideoPath} src=${videoSrc}`);
+        player.src({ type: "video/mp4", src: videoSrc });
+        // Re-apply markers after source swap to avoid plugin/source timing clears.
+        player.one("loadedmetadata", () => {
+            changeMarkers();
+        });
         if (settings.autoplayVideo && allowAutoplay) {
             void player.play()?.catch(() => {});
         }
@@ -903,544 +743,145 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
 }
 
 async function setMetadata(videoId: string): Promise<boolean> {
-    const data = await commands.getMetadata(videoId);
-    if (data && "Metadata" in data) {
-        clearMetadataRetry(videoId);
-        ui.showMarkerFlags(true);
-        ui.setVideoDescriptionMetadata(data.Metadata);
-        // Ensure UI offset is set (redundant but safe)
-        ui.setRecordingOffset(data.Metadata.ingameTimeRecStartOffset);
+    let { data, resolvedVideoId } = await getMetadataWithFallback(
+        videoId,
+        commands.getMetadata,
+        buildMetadataCandidates,
+    );
+    let kind = !data ? "null" : "Metadata" in data ? "Metadata" : "Deferred" in data ? "Deferred" : "NoData";
+    console.log(`[diagnose] setMetadata kind=${kind} requested=${videoId} resolved=${resolvedVideoId}`);
 
-        currentEvents = {
-            participantId: data.Metadata.participantId,
-            recordingOffset: data.Metadata.ingameTimeRecStartOffset,
-            events: data.Metadata.events,
-        };
-        highlightEvents = {
-            recordingOffset: data.Metadata.ingameTimeRecStartOffset,
-            events: data.Metadata.highlights ?? [],
-        };
-        changeMarkers();
-        return true;
-    } else if (data && "Deferred" in data) {
-        const def = data.Deferred;
-        // Explicitly set offset for UI
-        ui.setRecordingOffset(def.ingameTimeRecStartOffset);
-        
-        // Immediate Scoreboard Update Logic (Fallback)
-        if (def.participants && def.participants.length > 0) {
-             const synthesizedMeta = {
-                 favorite: def.favorite,
-                 matchId: def.matchId,
-                 ingameTimeRecStartOffset: def.ingameTimeRecStartOffset,
-                 highlights: def.highlights ?? [],
-                 queue: { id: 0, name: "Deferred", isRanked: false }, 
-                 player: { gameName: "Unknown", tagLine: "LOC", summonerId: 0 },
-                 championName: "Unknown",
-                 stats: { 
-                     kills: 0, deaths: 0, assists: 0,
-                     largestMultiKill: 0, neutralMinionsKilled: 0,
-                     neutralMinionsKilledEnemyJungle: 0, neutralMinionsKilledTeamJungle: 0,
-                     totalMinionsKilled: 0, visionScore: 0,
-                     visionWardsBoughtInGame: 0, wardsPlaced: 0, wardsKilled: 0,
-                     gameEndedInEarlySurrender: false, gameEndedInSurrender: false, win: false,
-                     item0:0, item1:0, item2:0, item3:0, item4:0, item5:0, item6:0,
-                     perk0:0, perk1:0, perk2:0, perk3:0, perk4:0, perk5:0,
-                     perkPrimaryStyle:0, perkSubStyle:0, goldEarned:0
-                 },
-                 participantId: 0, 
-                 participants: def.participants,
-                 teams: [
-                     { teamId: 100, win: "Fail", towerKills: 0, inhibitorKills: 0, baronKills: 0, dragonKills: 0, vilemawKills: 0, riftHeraldKills: 0, dominionVictoryScore: 0, bans: [] as any[] },
-                     { teamId: 200, win: "Fail", towerKills: 0, inhibitorKills: 0, baronKills: 0, dragonKills: 0, vilemawKills: 0, riftHeraldKills: 0, dominionVictoryScore: 0, bans: [] as any[] }
-                 ],
-                 events: def.events ?? [],
-                 goldTimeline: [], 
-                 // @ts-ignore
-                 gameVersion: undefined 
-             } as any; // Cast as any to bypass strict GameMetadata requirements if minor fields missing
-             
-             ui.setVideoDescriptionMetadata(synthesizedMeta);
+    if (!data || "NoData" in data) {
+        const listFallback = await getMetadataFromRecordingsList(
+            videoId,
+            commands.getRecordingsList,
+            videoIdsMatch,
+        );
+        if (listFallback?.data && ("Metadata" in listFallback.data || "Deferred" in listFallback.data)) {
+            data = listFallback.data;
+            resolvedVideoId = listFallback.resolvedVideoId;
+            kind = "Metadata" in data ? "Metadata" : "Deferred";
+            console.log(`[diagnose] setMetadata upgraded-by-list kind=${kind} requested=${videoId} resolved=${resolvedVideoId}`);
         }
-
-        if (def.events && def.events.length > 0) {
-             currentEvents = {
-                 participantId: 0,
-                 recordingOffset: def.ingameTimeRecStartOffset,
-                 events: def.events
-             };
-             ui.showMarkerFlags(true);
-        } else {
-             currentEvents = null;
-             ui.showMarkerFlags(false);
-        }
-
-        highlightEvents = {
-            recordingOffset: def.ingameTimeRecStartOffset,
-            events: def.highlights ?? [],
-        };
-        changeMarkers();
-        return false;
-    } else {
-        ui.clearVideoMetadata();
-        ui.showMarkerFlags(false);
-        ui.setRecordingOffset(0);
-        currentEvents = null;
-        highlightEvents = null;
-        changeMarkers();
-        return false;
     }
+    const rendered = await renderMetadataState({
+        data,
+        requestedVideoId: videoId,
+        resolvedVideoId,
+        ui,
+    });
+    if (rendered.clearRetry) {
+        clearMetadataRetry(videoId);
+    }
+    currentEvents = rendered.currentEvents;
+    highlightEvents = rendered.highlightEvents;
+    changeMarkers();
+    return rendered.completed;
 }
 
 function changeMarkers() {
-    const markers = new Array<MarkerOptions>();
-
-    if (highlightEvents !== null) {
-        for (const event of highlightEvents.events) {
-            markers.push(createMarker(event, highlightEvents.recordingOffset, "Highlight"));
-        }
-    }
-
-    if (currentEvents !== null) {
-        const checkbox = ui.getMarkerFlags();
-        const { participantId, recordingOffset } = currentEvents;
-
-        for (const event of currentEvents.events) {
-            const name = eventName(event, participantId, checkbox);
-            if (name === null) {
-                continue;
-            }
-            markers.push(createMarker(event.timestamp, recordingOffset, name));
-        }
-    }
+    const markers = buildMarkers(currentEvents, highlightEvents, ui.getMarkerFlags(), EVENT_DELAY);
 
     player.markers().removeAll();
     player.markers().add(markers);
-}
-
-type EventType =
-    | "Kill"
-    | "Death"
-    | "Assist"
-    | "Turret"
-    | "Inhibitor"
-    | "Voidgrub"
-    | "Herald"
-
-    | "Baron"
-    | "Infernal-Dragon"
-    | "Ocean-Dragon"
-    | "Mountain-Dragon"
-    | "Cloud-Dragon"
-    | "Hextech-Dragon"
-    | "Chemtech-Dragon"
-    | "Elder-Dragon"
-    | "Highlight";
-
-function eventName(gameEvent: GameEvent, participantId: number, checkbox: MarkerFlags | null): EventType | null {
-    if ("ChampionKill" in gameEvent) {
-        if ((checkbox?.kill ?? true) && gameEvent.ChampionKill.killer_id === participantId) {
-            return "Kill";
-        }
-        if ((checkbox?.assist ?? true) && gameEvent.ChampionKill.assisting_participant_ids.includes(participantId)) {
-            return "Assist";
-        }
-        if ((checkbox?.death ?? true) && gameEvent.ChampionKill.victim_id === participantId) {
-            return "Death";
-        }
-    } else if ("BuildingKill" in gameEvent) {
-        if ((checkbox?.structure ?? true) && gameEvent.BuildingKill.building_type.buildingType === "TOWER_BUILDING") {
-            return "Turret";
-        }
-        if ((checkbox?.structure ?? true) && gameEvent.BuildingKill.building_type.buildingType === "INHIBITOR_BUILDING") {
-            return "Inhibitor";
-        }
-    } else if ("EliteMonsterKill" in gameEvent) {
-        const monsterType = gameEvent.EliteMonsterKill.monster_type;
-        if ((checkbox?.voidgrub ?? true) && monsterType.monsterType === "HORDE" && gameEvent.EliteMonsterKill.killer_id > 0) {
-            return "Voidgrub";
-        }
-        if ((checkbox?.herald ?? true) && monsterType.monsterType === "RIFTHERALD") {
-            return "Herald";
-        }
-
-        if ((checkbox?.baron ?? true) && monsterType.monsterType === "BARON_NASHOR") {
-            return "Baron";
-        }
-        if ((checkbox?.dragon ?? true) && monsterType.monsterType === "DRAGON") {
-            switch (monsterType.monsterSubType) {
-                case "FIRE_DRAGON":
-                    return "Infernal-Dragon";
-                case "EARTH_DRAGON":
-                    return "Mountain-Dragon";
-                case "WATER_DRAGON":
-                    return "Ocean-Dragon";
-                case "AIR_DRAGON":
-                    return "Cloud-Dragon";
-                case "HEXTECH_DRAGON":
-                    return "Hextech-Dragon";
-                case "CHEMTECH_DRAGON":
-                    return "Chemtech-Dragon";
-                case "ELDER_DRAGON":
-                    return "Elder-Dragon";
-                default:
-                    throw new UnreachableError(monsterType.monsterSubType);
-            }
-        }
+    console.log("[diagnose] changeMarkers", {
+        markers: markers.length,
+        currentEvents: currentEvents?.events.length ?? 0,
+        highlightEvents: highlightEvents?.events.length ?? 0,
+        markerFlags: ui.getMarkerFlags(),
+    });
+    if (currentEvents !== null && currentEvents.events.length > 0 && markers.length === 0) {
+        console.warn("[markers] No markers generated. Check marker flags / participant mapping.", {
+            participantId: currentEvents.participantId,
+            markerFlags: ui.getMarkerFlags(),
+            events: currentEvents.events.length,
+        });
     }
-
-    return null;
-}
-
-function createMarker(timestamp: number, recordingOffset: number, eventType: EventType): MarkerOptions {
-    return {
-        time: timestamp / 1000 - recordingOffset - EVENT_DELAY,
-        text: eventType,
-        class: eventType.toLowerCase(),
-        duration: 2 * EVENT_DELAY,
-    };
 }
 
 // --- MODAL ---
 
-async function showRenameModal(videoId: string) {
-    ui.showRenameModal(
+async function showRenameModal(videoId: string): Promise<void> {
+    return openRenameModal({
         videoId,
-        (await commands.getRecordingsList()).map((r) => r.videoId),
-        renameVideo,
-    );
+        getRecordingsList: commands.getRecordingsList,
+        showRenameModal: ui.showRenameModal,
+        onRename: renameVideo,
+    });
 }
 
-async function renameVideo(videoId: string, newVideoId: string) {
-    const activeVideoId = ui.getActiveVideoId();
-
-    const ok = await commands.renameVideo(videoId, newVideoId);
-    if (ok) {
-        if (videoId === activeVideoId) {
-            const time = player.currentTime()!;
-            void updateSidebar();
-            setVideo(newVideoId).then(() => player.currentTime(time));
-        }
-    } else {
-        ui.showErrorModal("Error renaming video!");
-    }
+async function renameVideo(videoId: string, newVideoId: string): Promise<void> {
+    return renameVideoFlow({
+        videoId,
+        newVideoId,
+        getActiveVideoId: ui.getActiveVideoId,
+        renameVideo: commands.renameVideo,
+        getCurrentTime: () => player.currentTime() || 0,
+        setCurrentTime: (seconds) => {
+            player.currentTime(seconds);
+        },
+        updateSidebar: () => updateSidebar(),
+        setVideo: async (id) => {
+            await setVideo(id);
+        },
+        showErrorModal: ui.showErrorModal,
+    });
 }
 
 function showDeleteModal(videoId: string, isFavorite: boolean = false) {
-    // eslint-disable-next-line always-return
-    commands.confirmDelete().then((confirmDelete) => {
-        if (confirmDelete || isFavorite) {
-            ui.showDeleteModal(videoId, deleteVideo, isFavorite);
-        } else {
-            deleteVideo(videoId);
-        }
+    showDeleteWithConfirm({
+        videoId,
+        isFavorite,
+        confirmDelete: commands.confirmDelete,
+        showDeleteModal: ui.showDeleteModal,
+        deleteVideo,
     });
 }
 
 function handleDeleteVideoOnly(videoId: string, isFavorite: boolean = false) {
-    commands.confirmDelete().then((confirmDelete) => {
-        if (confirmDelete || isFavorite) {
-            ui.showDeleteVideoOnlyModal(videoId, (vId: string) => {
-                // Optimistic UI Update
-                ui.markRecordingAsVideoDeleted(vId);
-                // Background task
-                commands.deleteVideoOnly(vId).then(ok => {
-                    if (!ok) {
-                        ui.showErrorModal("Error deleting video file!");
-                        void updateSidebar(); // Rollback if failed
-                    }
-                });
-            }, isFavorite);
-        } else {
-            // Optimistic UI Update
-            ui.markRecordingAsVideoDeleted(videoId);
-            // Background task
-            commands.deleteVideoOnly(videoId).then(ok => {
-                if (!ok) {
-                    ui.showErrorModal("Error deleting video file!");
-                    void updateSidebar(); // Rollback if failed
-                }
-            });
-        }
+    deleteVideoOnlyWithConfirm({
+        videoId,
+        isFavorite,
+        confirmDelete: commands.confirmDelete,
+        showDeleteVideoOnlyModal: ui.showDeleteVideoOnlyModal,
+        markRecordingAsVideoDeleted: ui.markRecordingAsVideoDeleted,
+        deleteVideoOnly: commands.deleteVideoOnly,
+        showErrorModal: ui.showErrorModal,
+        updateSidebar: () => updateSidebar(),
     });
 }
 
-async function deleteVideo(videoId: string) {
-    if (videoId === ui.getActiveVideoId()) {
-        player.src(null);
-    }
-    
-    // Optimistic UI update: Remove immediately
-    ui.removeRecordingItem(videoId);
-
-    // Run deletion in background
-    const ok = await commands.deleteVideo(videoId);
-    if (!ok) {
-        ui.showErrorModal("Error deleting video!");
-        // If failed, refresh sidebar to restore the item
-        void updateSidebar(); 
-    }
+async function deleteVideo(videoId: string): Promise<void> {
+    return deleteVideoFlow({
+        videoId,
+        getActiveVideoId: ui.getActiveVideoId,
+        clearPlayerSource: () => {
+            player.src(null);
+        },
+        removeRecordingItem: ui.removeRecordingItem,
+        deleteVideo: commands.deleteVideo,
+        updateSidebar: () => updateSidebar(),
+        showErrorModal: ui.showErrorModal,
+    });
 }
 
 async function showTimestamps() {
-    const timelineEvents = new Array<{ timestamp: number; text: string }>();
-
-    if (highlightEvents !== null) {
-        for (const event of highlightEvents.events) {
-            timelineEvents.push({ timestamp: event, text: `${formatTimestamp(event)} Highlight` });
-        }
-    }
-
-    if (currentEvents !== null) {
-        for (const event of currentEvents.events) {
-            const name = eventName(event, currentEvents.participantId, null);
-            if (name !== null) {
-                const text = `${formatTimestamp(event.timestamp)} ${name}`;
-                const timestamp = event.timestamp;
-                timelineEvents.push({ timestamp, text });
-            }
-        }
-    }
+    const markerEventNameForTimeline = (event: GameEvent, participantId: number, _teamId: number | null): string | null => {
+        return markerEventName(event, participantId, ui.getMarkerFlags());
+    };
+    const timelineEvents = buildTimelineRows({
+        currentEvents,
+        highlightEvents,
+        markerEventName: markerEventNameForTimeline,
+    });
 
     const settings = await commands.getSettings();
     ui.showTimelineModal(
-        timelineEvents.toSorted((a, b) => a.timestamp - b.timestamp),
+        timelineEvents,
         (secs) => player.currentTime(secs / 1000 - EVENT_DELAY),
     );
 }
 
-function formatTimestamp(timestamp: number): string {
-    let secs = timestamp / 1000;
-
-    let minutes = Math.floor(secs / 60);
-    secs -= minutes * 60;
-
-    const hours = Math.floor(minutes / 60);
-    minutes -= hours * 60;
-
-    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${Math.floor(secs).toString().padStart(2, "0")}`;
-}
-
-// --- KEYBOARD SHORTCUTS ---
-
-let isSteppingForward = false;
-let isSteppingBackward = false;
-let activeStepBackwardInterval: number | null = null;
-let originalPlaybackRate = 1.0;
-
-function handleKeyUpEvents(event: KeyboardEvent) {
-    const target = event.target as HTMLElement;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
-        return;
-    }
-
-    // Since we don't have preventDefault in keyup usually, we just check our states
-    if (isSteppingForward && isAction(event, "stepForward", currentKeybinds)) {
-        isSteppingForward = false;
-        player.pause();
-        player.playbackRate(originalPlaybackRate);
-        event.preventDefault();
-        event.stopPropagation();
-    }
-    
-    if (isSteppingBackward && isAction(event, "stepBackward", currentKeybinds)) {
-        isSteppingBackward = false;
-        if (activeStepBackwardInterval) {
-            clearInterval(activeStepBackwardInterval);
-            activeStepBackwardInterval = null;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-    }
-}
-
-async function handleKeyboardEvents(event: KeyboardEvent) {
-    const target = event.target as HTMLElement;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
-        return;
-    }
-
-    if (ui.modalIsOpen()) {
-        // Allow Escape to close modal, unless captured by rebind logic (which should stop prop before here)
-        if (event.key === "Escape") {
-             ui.hideModal();
-        }
-        return;
-    } 
-
-    if (ui.getActiveVideoId() === null) return;
-
-    let handled = false;
-    const binds = currentKeybinds;
-
-    // Check actions
-    if (isAction(event, "playPause", binds)) {
-            player.paused() ? player.play() : player.pause();
-            handled = true;
-    }
-    // Shift checks must come before non-shift if they share keys? 
-    // No, isAction checks exact modifier match. So Shift+Right won't trigger Right (shift=false).
-    else if (isAction(event, "nextEvent", binds)) {
-        player.markers().next();
-        handled = true;
-    }
-    else if (isAction(event, "prevEvent", binds)) {
-        // Custom logic for prevEvent with tolerance
-        // If we are close to a marker (e.g. within 4 seconds), jump to the prev-prev marker.
-        // Copy array because getMarkers might return readonly
-        const markers = [...player.markers().getMarkers()];
-        const currentTime = player.currentTime() || 0;
-        const tolerance = 4; // seconds
-
-        // Sort markers by time to be safe
-        markers.sort((a: any, b: any) => a.time - b.time);
-
-        let targetMarkerIndex = -1;
-
-        // Find the index of the marker immediately preceding the current time
-        // We use a small epsilon (0.1) to handle cases where we are exactly ON the marker
-        for (let i = markers.length - 1; i >= 0; i--) {
-            if (markers[i].time < currentTime - 0.1) {
-                targetMarkerIndex = i;
-                break;
-            }
-        }
-
-        if (targetMarkerIndex !== -1) {
-            const currentPrevMarker = markers[targetMarkerIndex];
-            
-            // Check if we are within the tolerance window of this marker
-            if (currentTime - currentPrevMarker.time < tolerance) {
-                // We are "just after" this marker. The user likely wants to go to the one BEFORE it.
-                if (targetMarkerIndex > 0) {
-                    player.currentTime(markers[targetMarkerIndex - 1].time);
-                } else {
-                    // Start of video or first marker
-                    player.currentTime(currentPrevMarker.time); 
-                }
-            } else {
-                // We are far enough away, just go to this marker
-                player.currentTime(currentPrevMarker.time);
-            }
-        } else {
-            // No markers before us. Go to start.
-            player.currentTime(0);
-        }
-        
-        handled = true;
-    }
-    else if (isAction(event, "seekForward", binds)) {
-        player.currentTime(player.currentTime()! + 5);
-        handled = true;
-    }
-    else if (isAction(event, "seekBackward", binds)) {
-        player.currentTime(player.currentTime()! - 5);
-        handled = true;
-    }
-    else if (isAction(event, "volUp", binds)) {
-            player.volume(player.volume()! + 0.1);
-            handled = true;
-    }
-    else if (isAction(event, "volDown", binds)) {
-            player.volume(player.volume()! - 0.1);
-            handled = true;
-    }
-    else if (isAction(event, "fullscreen", binds)) {
-            player.isFullscreen() ? player.exitFullscreen() : player.requestFullscreen();
-            handled = true;
-    }
-    else if (isAction(event, "mute", binds)) {
-            player.muted(!player.muted());
-            handled = true;
-    }
-    else if (isAction(event, "speedUp", binds)) {
-            if (player.playbackRate()! < 3) player.playbackRate(player.playbackRate()! + 0.25);
-            handled = true;
-    }
-    else if (isAction(event, "speedDown", binds)) {
-            if (player.playbackRate()! > 0.25) player.playbackRate(player.playbackRate()! - 0.25);
-            handled = true;
-    }
-    else if (isAction(event, "exitFullscreen", binds)) {
-        if (player.isFullscreen()) player.exitFullscreen();
-        handled = true;
-    }
-    else if (isAction(event, "setLoopA", binds)) {
-        const now = player.currentTime();
-        if (now !== undefined) {
-            loopStart = now;
-            if (loopStartInput) loopStartInput.value = formatLoopTime(now);
-            updateClipBtnState();
-        }
-        handled = true;
-    }
-    else if (isAction(event, "setLoopB", binds)) {
-        const now = player.currentTime();
-         if (now !== undefined) {
-            loopEnd = now;
-            if (loopEndInput) loopEndInput.value = formatLoopTime(now);
-            updateClipBtnState();
-            
-            // Auto-enable if valid
-            if (loopStart !== null && loopEnd > loopStart) {
-                isLooping = true;
-                if (loopEnabledCheckbox) loopEnabledCheckbox.checked = true;
-            }
-        }
-        handled = true;
-    }
-    else if (isAction(event, "toggleLoop", binds)) {
-        if (loopEnabledCheckbox) {
-            loopEnabledCheckbox.checked = !loopEnabledCheckbox.checked;
-            isLooping = loopEnabledCheckbox.checked;
-        }
-        handled = true;
-    }
-    else if (isAction(event, "stepForward", binds)) {
-        if (!event.repeat && !isSteppingForward) {
-            isSteppingForward = true;
-            originalPlaybackRate = player.playbackRate() || 1.0;
-            player.playbackRate(0.25); // Slow motion (0.25x)
-            player.play();
-        }
-        handled = true;
-    }
-    else if (isAction(event, "stepBackward", binds)) {
-        if (!event.repeat && !isSteppingBackward) {
-            isSteppingBackward = true;
-            player.pause(); // Enable manual seeking by pausing
-
-            // Backward logic: Slower interval for stability
-            if (activeStepBackwardInterval) clearInterval(activeStepBackwardInterval);
-            
-            // Initial step - 200ms interval with 0.1s steps for reliability
-            const stepAmount = 0.1; // 0.5x speed (0.1s per 200ms)
-            player.currentTime(Math.max(0, (player.currentTime() || 0) - stepAmount));
-
-            activeStepBackwardInterval = setInterval(() => {
-                const t = player.currentTime() || 0;
-                player.currentTime(Math.max(0, t - stepAmount));
-            }, 200) as any;
-        }
-        handled = true;
-    }
-    else if (isAction(event, "resetSpeed", binds)) {
-        player.playbackRate(1.0);
-        handled = true;
-    }
-    else if (isAction(event, "nextVideo", binds)) {
-        ui.playNextVideo();
-        handled = true;
-    }
-    else if (isAction(event, "prevVideo", binds)) {
-        ui.playPrevVideo();
-        handled = true;
-    }
-    
-    // Legacy support for Enter on play/pause if desired? 
-    // User requested specifically Space. If they want Enter they can rebind it.
-
-    if (handled) {
-        event.preventDefault();
-    }
+if (import.meta.hot) {
+    import.meta.hot.accept();
 }

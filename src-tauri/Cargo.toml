@@ -52,22 +52,6 @@ default-run = "LeagueRecord"
 name = "LeagueRecord"
 path = "src/main.rs"
 
-[[bin]]
-name = "find_wad_object"
-path = "src/bin/find_wad_object.rs"
-
-[[bin]]
-name = "dump_aphelios_wad_tooltips"
-path = "src/bin/dump_aphelios_wad_tooltips.rs"
-
-[[bin]]
-name = "rebuild_tooltip_cache"
-path = "src/bin/rebuild_tooltip_cache.rs"
-
-[[bin]]
-name = "extract_rcp_asset"
-path = "src/bin/extract_rcp_asset.rs"
-
 [dependencies]
 tauri = { version = "2.10", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-updater = "2.10"
@@ -100,7 +84,6 @@ notify = { version = "6.1.1", default-features = false, features = [
     "macos_kqueue",
 ] }
 semver = "1.0.23"
-windows-key-listener = "0.2.0"
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
@@ -131,6 +114,7 @@ windows = { version = "0.61.3", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
 ] }
+winreg = "0.55.0"
 [target.'cfg(target_os = "macos")'.dependencies]
 
 [build-dependencies]
@@ -152,6 +136,30 @@ default = ["custom-protocol"]
 # DO NOT remove this
 custom-protocol = ["tauri/custom-protocol"]
 tokio-console = ["dep:console-subscriber", "tokio/full", "tokio/tracing"]
+av-minimal = []
+av-no-plugins = []
+av-no-invoke = []
+av-no-setup = []
+av-safe-plugins = []
+av-disable-clipboard = []
+av-disable-single-instance = []
+av-disable-dialog = []
+av-disable-fs = []
+av-disable-process = []
+av-disable-autostart = []
+av-disable-shell = []
+av-disable-updater = []
+av-safe-invoke = []
+av-empty-invoke = []
+av-invoke-one = []
+av-invoke-group-a = []
+av-invoke-group-b = []
+av-invoke-mix-small = []
+av-invoke-mix-medium = []
+av-invoke-pair = []
+av-invoke-triple-settings = []
+av-invoke-triple-tooltip = []
+av-disable-tooltip-db = []
 
 [profile.dev]
 debug = 0
