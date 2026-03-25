@@ -24,12 +24,13 @@ export function renderTimeRuler(duration: number): void {
             number.className = "vjs-ruler-number";
             number.innerText = `${currentSeconds / 60}`;
             tick.appendChild(number);
-        } else {
+        } else if (currentSeconds % 30 === 0) {
             tick.classList.add("medium");
+        } else {
+            tick.classList.add("small");
         }
         container.appendChild(tick);
     }
 
     progressControl.appendChild(container);
 }
-

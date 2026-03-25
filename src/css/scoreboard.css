@@ -334,10 +334,11 @@
     bottom: auto !important;
     left: 0 !important;
     width: 100% !important;
-    height: 50px!important; /* Keep generous height */
+    min-height: var(--lr-control-bar-height) !important;
+    height: auto !important;
     background: #1a1a1a !important; /* Match Controls 2 background */
     display: flex !important;
-    align-items: center !important; /* Center items vertically */
+    align-items: stretch !important;
     justify-content: flex-start;
     padding: 0 15px; /* Comfortable padding */
     box-sizing: border-box;
@@ -369,18 +370,26 @@
 }
 
 .video-js .vjs-progress-control .vjs-progress-holder {
-    height: 70% !important; /* User preference */
+    height: calc(var(--lr-control-bar-height) - 30px) !important;
     margin: 0 !important;
-    background: rgba(67, 67, 67, 0.3) !important;
+    background: linear-gradient(
+        to bottom,
+        rgba(66, 123, 255, 0.28) 0%,
+        rgba(66, 123, 255, 0.28) 25%,
+        rgba(223, 64, 64, 0.26) 25%,
+        rgba(223, 64, 64, 0.26) 50%,
+        rgba(115, 133, 159, 0.3) 50%,
+        rgba(115, 133, 159, 0.3) 100%
+    ) !important;
     position: relative !important;
     overflow: visible !important; /* Visible to show Triangle */
     width: 100% !important;
-    border-radius: 5px !important;
+    border-radius: 4px !important;
 }
 
 .video-js .vjs-play-progress {
     height: 100% !important;
-    background-color: #394f7161 !important;
+    background-color: #424c6762 !important;
     position: absolute !important;
     top: 0 !important;
     border-radius: 5px !important; /* Round all to fit container at 100% */
@@ -427,6 +436,71 @@
     justify-content: center;
     flex: 0 0 auto !important;
     visibility: visible !important;
+}
+
+/* Align main action buttons to the vertical center of the seek bar itself */
+.video-js .vjs-control-bar .vjs-play-control,
+.video-js .vjs-control-bar .vjs-volume-panel,
+.video-js .vjs-control-bar .vjs-playback-rate,
+.video-js .vjs-control-bar .vjs-fullscreen-control {
+    height: calc(var(--lr-control-bar-height) - 30px) !important;
+    align-self: center !important;
+}
+
+/* Normalize icon centering across main control buttons */
+.video-js .vjs-control-bar .vjs-play-control .vjs-icon-placeholder,
+.video-js .vjs-control-bar .vjs-volume-panel .vjs-mute-control .vjs-icon-placeholder,
+.video-js .vjs-control-bar .vjs-fullscreen-control .vjs-icon-placeholder {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.video-js .vjs-control-bar .vjs-play-control .vjs-icon-placeholder:before,
+.video-js .vjs-control-bar .vjs-volume-panel .vjs-mute-control .vjs-icon-placeholder:before,
+.video-js .vjs-control-bar .vjs-fullscreen-control .vjs-icon-placeholder:before {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: calc(var(--lr-control-bar-height) - 30px) !important;
+    transform: none !important;
+}
+
+/* Force identical centering for the actual clickable buttons */
+.video-js .vjs-control-bar .vjs-play-control,
+.video-js .vjs-control-bar .vjs-volume-panel .vjs-mute-control,
+.video-js .vjs-control-bar .vjs-fullscreen-control {
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* Video.js v8 uses SVG icons by default; normalize them too */
+.video-js .vjs-control-bar .vjs-play-control .vjs-svg-icon,
+.video-js .vjs-control-bar .vjs-volume-panel .vjs-mute-control .vjs-svg-icon,
+.video-js .vjs-control-bar .vjs-fullscreen-control .vjs-svg-icon {
+    position: static !important;
+    transform: none !important;
+    margin: 0 !important;
+}
+
+/* Fine-tune: play/fullscreen were still visually 1px high */
+.video-js .vjs-control-bar .vjs-play-control .vjs-icon-placeholder,
+.video-js .vjs-control-bar .vjs-fullscreen-control .vjs-icon-placeholder {
+    transform: translateY(1px) !important;
+}
+
+.video-js .vjs-control-bar .vjs-play-control .vjs-svg-icon,
+.video-js .vjs-control-bar .vjs-fullscreen-control .vjs-svg-icon {
+    transform: translateY(1px) !important;
 }
 
 .video-js.vjs-has-started .vjs-big-play-button {
