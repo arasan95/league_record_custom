@@ -7,6 +7,13 @@ body {
     overflow: hidden;
 }
 
+:root {
+    --lr-control-bar-height: 96px;
+    --lr-lane-blue-height: 25%;
+    --lr-lane-red-height: 25%;
+    --lr-lane-self-height: 50%;
+}
+
 /* hide videojs player outline when focused */
 video {
     outline: none !important;
@@ -121,7 +128,7 @@ body:has(.vjs-fullscreen) {
 
 /* Allow video to grow fully in fullscreen but reserve space for controls */
 .video-js.vjs-fullscreen .vjs-tech {
-    max-height: calc(100% - 70px) !important; /* Reserve 70px for control bar */
+    max-height: calc(100% - var(--lr-control-bar-height)) !important; /* Reserve space for taller control bar */
     flex: 0 1 auto !important; /* Do NOT grow to fill space, just fit content */
 }
 
@@ -213,11 +220,24 @@ body:has(.vjs-fullscreen) {
     margin-left: -1px !important; /* Center the thinner marker */
     opacity: 0.4 !important;
     position: absolute !important;
-    top: 0 !important;
-    bottom: 0 !important;
-    height: 100% !important;
+    top: auto !important;
+    bottom: auto !important;
+    height: var(--lr-lane-self-height) !important;
     z-index: 40 !important;
     pointer-events: auto !important;
+}
+
+.vjs-marker.lane-blue {
+    top: 0 !important;
+    height: var(--lr-lane-blue-height) !important;
+}
+.vjs-marker.lane-red {
+    top: var(--lr-lane-blue-height) !important;
+    height: var(--lr-lane-red-height) !important;
+}
+.vjs-marker.lane-self {
+    top: calc(var(--lr-lane-blue-height) + var(--lr-lane-red-height)) !important;
+    height: var(--lr-lane-self-height) !important;
 }
 
 .video-js .vjs-progress-holder {
@@ -263,9 +283,10 @@ body:has(.vjs-fullscreen) {
     z-index: 20000 !important; /* Ensure high priority */
     overflow: visible !important;
     padding-bottom: 3px !important; /* Make room for ruler numbers below */
+    min-height: var(--lr-control-bar-height) !important;
     height: auto !important; /* Allow growth automatically */
     display: flex !important; /* Use Flexbox */
-    align-items: center !important; /* Center vertically */
+    align-items: stretch !important;
 }
 
 /* Ensure control bar is always visible */
@@ -351,7 +372,7 @@ body:has(.vjs-fullscreen) {
 }
 
 .video-js .vjs-playback-rate-value {
-    line-height: 70px !important; /* Match control bar height */
+    line-height: calc(var(--lr-control-bar-height) - 18px) !important;
     font-size: 1.25em !important;
     display: flex !important;
     align-items: center;
@@ -372,7 +393,7 @@ body:has(.vjs-fullscreen) {
 
 /* 3. NORMALIZE LAYOUT for Visible Controls */
 .video-js .vjs-control-bar > .vjs-control {
-    height: 50px !important; /* Match parent height dynamically */
+    height: calc(var(--lr-control-bar-height) - 18px) !important;
     top: 0 !important;
     margin-top: 0 !important;
     display: flex !important;
@@ -390,15 +411,17 @@ body:has(.vjs-fullscreen) {
 
 /* Icon Alignment */
 .video-js .vjs-control-bar .vjs-icon-placeholder:before {
-    line-height: 50px !important;
+    line-height: calc(var(--lr-control-bar-height) - 30px) !important;
     top: 0 !important;
+    height: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     font-size: 2.2em; /* Adjusted size slightly larger */
 }
 .video-js .vjs-control:before,
 .video-js .vjs-button:before {
     line-height: 1 !important;
-    position: relative !important;
-    top: 0 !important;
     vertical-align: middle !important;
 }
 
@@ -442,10 +465,18 @@ body:has(.vjs-fullscreen) {
 
 /* Seek Bar Holder */
 .video-js .vjs-progress-holder {
-    height: 100% !important; /* Fill parent height */
+    height: calc(var(--lr-control-bar-height) - 30px) !important;
     border-radius: 4px; 
     margin: 0 15px; 
-    background: rgba(115, 133, 159, 0.3) !important; 
+    background: linear-gradient(
+        to bottom,
+        rgba(66, 123, 255, 0.28) 0%,
+        rgba(66, 123, 255, 0.28) 25%,
+        rgba(223, 64, 64, 0.26) 25%,
+        rgba(223, 64, 64, 0.26) 50%,
+        rgba(115, 133, 159, 0.3) 50%,
+        rgba(115, 133, 159, 0.3) 100%
+    ) !important;
     position: relative !important; 
     overflow: visible !important; /* Allow ticks/pointer */
 }
@@ -480,7 +511,7 @@ body:has(.vjs-fullscreen) {
     width: 100%;
     height: 100%;
     pointer-events: none;
-    z-index: 20;
+    z-index: 14;
     display: block !important;
 }
 
@@ -488,28 +519,40 @@ body:has(.vjs-fullscreen) {
 .vjs-ruler-tick {
     position: absolute;
     bottom: 0;
-    width: 2px !important;
-    background-color: rgba(255, 255, 255, 0.7);
-    transform: translateX(-50%) scaleX(0.5);
+    width: 1px !important;
+    background: rgba(245, 248, 255, 0.7);
+    border-radius: 1px;
+    transform: translateX(-50%);
     transform-origin: center bottom;
 }
-.vjs-ruler-tick.large { height: 50% !important; }
-.vjs-ruler-tick.medium { height: 35% !important; }
-.vjs-ruler-tick.small { height: 20% !important; }
+.vjs-ruler-tick.large {
+    height: 24% !important;
+    width: 2px !important;
+    background: rgba(250, 252, 255, 0.92);
+}
+.vjs-ruler-tick.medium {
+    height: 15% !important;
+    width: 1px !important;
+    opacity: 0.72;
+}
+.vjs-ruler-tick.small {
+    display: none !important;
+}
 
 /* Ruler Numbers */
 .vjs-ruler-number {
     position: absolute;
     top: 100%;
     left: 50%;
-    transform: translateX(-50%) scaleX(2);
-    padding-top: 6px; 
-    padding-bottom: 6px; 
-    font-size: 11px;
-    color: #eee;
-    font-weight: 500;
+    transform: translateX(-50%);
+    margin-top: 3px;
+    padding: 0;
+    font-size: 10px;
+    color: #f2f6ff;
+    font-weight: 600;
+    letter-spacing: 0.02em;
     pointer-events: none;
-    text-shadow: 1px 1px 1px #000;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
     bottom: auto;
 }
 
@@ -526,7 +569,7 @@ body:has(.vjs-fullscreen) {
     white-space: nowrap;
     display: none;
     transform: translateX(-50%);
-    bottom: 68px;
+    bottom: calc(var(--lr-control-bar-height) - 2px);
 }
 #custom-play-tooltip {
     position: absolute;
@@ -541,7 +584,7 @@ body:has(.vjs-fullscreen) {
     white-space: nowrap;
     display: none; 
     transform: translateX(-50%);
-    bottom: 68px;
+    bottom: calc(var(--lr-control-bar-height) - 2px);
 }
 .video-js .vjs-time-tooltip { display: none !important; }
 .video-js .vjs-mouse-display { z-index: 10000 !important; }
