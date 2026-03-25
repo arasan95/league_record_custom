@@ -52,7 +52,12 @@ pub struct RecordingTask {
 
 impl RecordingTask {
     pub fn new(ctx: GameCtx) -> Self {
-        let join_handle = async_runtime::spawn(Self::record(ctx.clone()));
+        let join_handle = async_runtime::spawn(Self::record(ctx.clone(), false));
+        Self { join_handle, ctx }
+    }
+
+    pub fn new_manual(ctx: GameCtx) -> Self {
+        let join_handle = async_runtime::spawn(Self::record(ctx.clone(), true));
         Self { join_handle, ctx }
     }
 
@@ -94,35 +99,43 @@ impl RecordingTask {
         }
     }
 
-    async fn record(ctx: GameCtx) -> Result<(Recorder, Metadata)> {
+    async fn record(ctx: GameCtx, manual_mode: bool) -> Result<(Recorder, Metadata)> {
         let (mut recorder, output_filepath) = cancellable!(Self::setup_recorder(&ctx), ctx.cancel_token, Result)?;
-
-        // ingame_client timeout is 200ms, so no need to make cancellable with token
-        let ingame_client = IngameClient::new();
-
-        log::info!("waiting for game to start");
-        let mut timer = interval(Duration::from_millis(500));
-        while !ingame_client.active_game().await {
-            let cancelled = cancellable!(timer.tick(), ctx.cancel_token, ());
-            if cancelled {
-                let shutdown = recorder.shutdown();
-                bail!("waiting for game cancelled - recorder shutdown: {shutdown:?}");
-            }
-        }
 
         // Game Mode check removed: Trusting GameListener's decision.
         // The GameListener already validated the QueueID/GameMode before starting this task.
         // Double-checking here caused issues due to string naming inconsistencies (e.g. PRACTICETOOL vs PRACTICE_TOOL).
+
+        if !manual_mode {
+            // ingame_client timeout is 200ms, so no need to make cancellable with token
+            let ingame_client = IngameClient::new();
+
+            log::info!("waiting for game to start");
+            let mut timer = interval(Duration::from_millis(500));
+            while !ingame_client.active_game().await {
+                let cancelled = cancellable!(timer.tick(), ctx.cancel_token, ());
+                if cancelled {
+                    let shutdown = recorder.shutdown();
+                    bail!("waiting for game cancelled - recorder shutdown: {shutdown:?}");
+                }
+            }
+        } else {
+            log::info!("manual recording mode: skipping in-game active check");
+        }
 
         ctx.app_handle
             .state::<CurrentlyRecording>()
             .set(Some(output_filepath.clone()));
         ctx.app_handle.set_tray_menu_recording(true);
 
-        // Fetch game stats BEFORE starting recording to get a baseline for fallback
-        let ingame_client = IngameClient::new();
-        let pre_start_stats = ingame_client.game_stats().await.ok();
-        let pre_start_instant = std::time::Instant::now();
+        let mut pre_start_stats = None;
+        let mut pre_start_instant = std::time::Instant::now();
+        if !manual_mode {
+            // Fetch game stats BEFORE starting recording to get a baseline for fallback
+            let ingame_client = IngameClient::new();
+            pre_start_stats = ingame_client.game_stats().await.ok();
+            pre_start_instant = std::time::Instant::now();
+        }
 
         // if initial game_data is successful => start recording
         if let Err(e) = recorder.start_recording() {
@@ -139,20 +152,25 @@ impl RecordingTask {
 
         log::info!("Recorder started. Calculating sync offset...");
 
-        // Calculate final offset immediately after start_recording returns.
-        let final_stats = ingame_client.game_stats().await.ok();
-
-        // Robust offset calculation with fallback
-        let ingame_time_rec_start_offset = if let Some(stats) = final_stats {
-            stats.game_time
+        let ingame_time_rec_start_offset = if manual_mode {
+            0.0
         } else {
-            // Fallback: Use pre-start stats + total elapsed time since then
-            let total_elapsed = pre_start_instant.elapsed().as_secs_f64();
-            log::warn!(
-                "Failed to fetch final game stats. Using fallback estimate (elapsed: {:.3}s)",
-                total_elapsed
-            );
-            pre_start_stats.map(|s| s.game_time + total_elapsed).unwrap_or(0.0)
+            // Calculate final offset immediately after start_recording returns.
+            let ingame_client = IngameClient::new();
+            let final_stats = ingame_client.game_stats().await.ok();
+
+            // Robust offset calculation with fallback
+            if let Some(stats) = final_stats {
+                stats.game_time
+            } else {
+                // Fallback: Use pre-start stats + total elapsed time since then
+                let total_elapsed = pre_start_instant.elapsed().as_secs_f64();
+                log::warn!(
+                    "Failed to fetch final game stats. Using fallback estimate (elapsed: {:.3}s)",
+                    total_elapsed
+                );
+                pre_start_stats.map(|s| s.game_time + total_elapsed).unwrap_or(0.0)
+            }
         };
 
         log::info!(

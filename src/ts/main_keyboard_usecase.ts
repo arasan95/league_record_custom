@@ -11,7 +11,7 @@ type PlayerLike = {
     muted(value?: boolean): boolean | undefined;
     markers(): {
         next(): void;
-        getMarkers(): ReadonlyArray<{ time: number }>;
+        getMarkers(): ReadonlyArray<{ time: number; class?: string; text?: string }>;
     };
 };
 
@@ -59,6 +59,16 @@ export function createKeyboardHandlers(input: {
     let activeStepBackwardInterval: number | null = null;
     let originalPlaybackRate = 1.0;
 
+    const getSelfMarkersSorted = () => {
+        const markers = [...player.markers().getMarkers()];
+        return markers
+            .filter((marker) => {
+                const markerClass = marker.class ?? "";
+                return markerClass.includes("lane-self") || markerClass.includes("self-marker");
+            })
+            .sort((a, b) => a.time - b.time);
+    };
+
     const handleKeyUp = (event: KeyboardEvent) => {
         const target = event.target as HTMLElement;
         if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
@@ -104,13 +114,17 @@ export function createKeyboardHandlers(input: {
             player.paused() ? player.play() : player.pause();
             handled = true;
         } else if (matchesAction(event, "nextEvent")) {
-            player.markers().next();
+            const markers = getSelfMarkersSorted();
+            const currentTime = player.currentTime() || 0;
+            const target = markers.find((marker) => marker.time > currentTime + 0.05);
+            if (target) {
+                player.currentTime(target.time);
+            }
             handled = true;
         } else if (matchesAction(event, "prevEvent")) {
-            const markers = [...player.markers().getMarkers()];
+            const markers = getSelfMarkersSorted();
             const currentTime = player.currentTime() || 0;
             const tolerance = 4;
-            markers.sort((a, b) => a.time - b.time);
 
             let targetMarkerIndex = -1;
             for (let i = markers.length - 1; i >= 0; i--) {

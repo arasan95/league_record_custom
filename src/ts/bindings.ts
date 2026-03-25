@@ -121,7 +121,7 @@ appEvent: "app-event"
 
 /** user-defined types **/
 
-export type AppEvent = { type: "RecordingsChanged"; payload: null } | { type: "MetadataChanged"; payload: string[] } | { type: "MarkerflagsChanged"; payload: null } | { type: "RecordingStarted" } | { type: "GameDetected" } | { type: "GameStarted" } | { type: "RecordingFinished"; payload: [string, boolean] }
+export type AppEvent = { type: "RecordingsChanged"; payload: null } | { type: "MetadataChanged"; payload: string[] } | { type: "MarkerflagsChanged"; payload: null } | { type: "RecordingStarted" } | { type: "ManualRecordingStarted" } | { type: "ManualRecordingStopped" } | { type: "GameDetected" } | { type: "GameStarted" } | { type: "RecordingFinished"; payload: [string, boolean] }
 export type AudioSource = 
 /**
  * no audio
@@ -162,7 +162,7 @@ export type Player = { gameName: string; tagLine: string; summonerId?: number | 
 export type Position = { x: number; y: number }
 export type Queue = { id: number; name: string; isRanked: boolean }
 export type Recording = { videoId: string; metadata: MetadataFile | null; videoExists: boolean }
-export type Settings = { markerFlags: MarkerFlags; debugLog: boolean; recordingsFolder: string; clipsFolder: string; filenameFormat: string; encodingQuality: number; outputResolution: StdResolution | null; framerate: Framerate; recordAudio: AudioSource; autostart: boolean; maxRecordingAgeDays: number | null; maxRecordingsSizeGb: number | null; confirmDelete: boolean; hightlightHotkey: string | null; startRecordingHotkey: string | null; stopRecordingHotkey: string | null; gameModes: string[] | null; autoplayVideo: boolean; autoStopPlayback: boolean; autoSelectRecording: boolean; autoPopupOnEnd: boolean; ffmpegPath: string | null; developerMode: boolean; matchHistoryBaseUrl: string | null; scrollFrameStepModifier: string | null; scoreboardScale: number | null; playRecordingSounds: boolean; language: string; championWikiBaseUrl: string | null; championMatchupUrl: string | null; championBuildUrl: string | null; checkUpdatesOnStartup: boolean; keepVideoJsonOnAutoDelete: boolean; autoDeleteClips: boolean }
+export type Settings = { markerFlags: MarkerFlags; debugLog: boolean; recordingsFolder: string; clipsFolder: string; filenameFormat: string; encodingQuality: number; outputResolution: StdResolution | null; framerate: Framerate; recordAudio: AudioSource; autostart: boolean; maxRecordingAgeDays: number | null; maxRecordingsSizeGb: number | null; confirmDelete: boolean; hightlightHotkey: string | null; startRecordingHotkey: string | null; stopRecordingHotkey: string | null; gameModes: string[] | null; autoplayVideo: boolean; autoStopPlayback: boolean; autoSelectRecording: boolean; autoPopupOnEnd: boolean; ffmpegPath: string | null; developerMode: boolean; matchHistoryBaseUrl: string | null; scrollFrameStepModifier: string | null; scoreboardScale: number | null; playRecordingSounds: boolean; autoAcceptGame: boolean; language: string; championWikiBaseUrl: string | null; championMatchupUrl: string | null; championBuildUrl: string | null; checkUpdatesOnStartup: boolean; keepVideoJsonOnAutoDelete: boolean; autoDeleteClips: boolean }
 export type Stats = { kills: number; deaths: number; assists: number; largestMultiKill: number; neutralMinionsKilled: number; neutralMinionsKilledEnemyJungle: number; neutralMinionsKilledTeamJungle: number; totalMinionsKilled: number; visionScore: number; visionWardsBoughtInGame: number; wardsPlaced: number; wardsKilled: number; 
 /**
  * remake
