@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::fmt::Display;
 
 use anyhow::Result;
+use chrono::Utc;
 use futures_util::StreamExt;
 use riot_datatypes::lcu::{GameData, GamePhase, SessionEventData, SubscriptionResponse};
 use riot_datatypes::{GameId, MatchId, Queue};
@@ -24,7 +25,7 @@ use super::metadata;
 use super::recording_task::{GameCtx, Metadata, RecordingTask};
 use crate::app::{action, AppEvent, EventManager};
 use crate::recorder::MetadataFile;
-use crate::state::SettingsWrapper;
+use crate::state::{Settings, SettingsWrapper};
 
 use super::lp_helper::fetch_current_lp;
 
@@ -290,6 +291,11 @@ impl GameListener {
                 }
                 Ok(_) = self.manual_stop_rx.recv() => {
                     log::info!("Manual stop triggered via hotkey");
+                    if let State::Recording(..) = self.state {
+                        if let Err(e) = self.ctx.app_handle.send_event(AppEvent::ManualRecordingStopped) {
+                            log::error!("failed to emit ManualRecordingStopped event: {e}");
+                        }
+                    }
                     self.state_transition(SubscriptionResponse::Session(SessionEventData {
                         phase: GamePhase::PreEndOfGame,
                         game_data: GameData {
@@ -303,50 +309,91 @@ impl GameListener {
                     log::info!("Manual start triggered via hotkey");
                     match lcu_rest_client.get::<SessionEventData>(Self::GAMEFLOW_SESSION).await {
                         Ok(data) => {
-                            match data.phase {
-                                GamePhase::GameStart | GamePhase::InProgress => {
-                                    // Allow manual start from Idle AND EndOfGame states.
-                                    // If currently recording, we ignore to prevent duplicates (or could implement restart).
-                                    let should_start = match self.state {
-                                        State::Idle | State::EndOfGame(..) => true,
-                                        State::Recording(..) => false,
-                                    };
+                            // Allow manual start from Idle AND EndOfGame states regardless of gameflow phase.
+                            // This enables replay-window recording where Gameflow may not be InProgress.
+                            let should_start = match self.state {
+                                State::Idle | State::EndOfGame(..) => true,
+                                State::Recording(..) => false,
+                            };
 
-                                    if should_start {
-                                        log::info!("Manual start: Game detected (ID: {}). Forcing start.", data.game_data.game_id);
-                                         let live_events = Arc::new(Mutex::new(Vec::new()));
-                                         let player_map = Arc::new(Mutex::new(HashMap::new()));
-                                         let live_events_clone = live_events.clone();
-                                         let player_map_clone = player_map.clone();
-                                        let last_game_data = Arc::new(Mutex::new(None));
-                                        let live_task = async_runtime::spawn(Self::run_info_poller(
-                                            live_events_clone,
-                                            player_map_clone,
-                                            last_game_data.clone(),
-                                            self.ctx.app_handle.clone(),
-                                        ));
+                            if should_start {
+                                let game_id = if data.game_data.game_id > 0 {
+                                    data.game_data.game_id
+                                } else {
+                                    Utc::now().timestamp_millis()
+                                };
 
-                                        self.state = State::Recording(
-                                            RecordingTask::new(self.ctx.game_ctx(data.game_data.game_id)),
-                                            HighlightTask::new(self.ctx.app_handle.clone()),
-                                            live_task,
-                                            live_events,
-                                            player_map,
-                                            None, // start_lp
-                                            last_game_data,
-                                            HashMap::new(), // pid_to_cid (empty for manual start)
-                                        );
-                                        log::info!("recorder state: {}", self.state);
-                                    } else {
-                                        log::info!("Manual start ignored: Already recording.");
-                                    }
+                                log::info!(
+                                    "Manual start accepted (phase: {:?}, game_id: {}). Starting manual recorder.",
+                                    data.phase,
+                                    game_id
+                                );
+                                if let Err(e) = self.ctx.app_handle.send_event(AppEvent::ManualRecordingStarted) {
+                                    log::error!("failed to emit ManualRecordingStarted event: {e}");
                                 }
-                                _ => {
-                                     log::info!("Manual start ignored: Not in game (Phase: {:?})", data.phase);
-                                }
+                                let live_events = Arc::new(Mutex::new(Vec::new()));
+                                let player_map = Arc::new(Mutex::new(HashMap::new()));
+                                let live_events_clone = live_events.clone();
+                                let player_map_clone = player_map.clone();
+                                let last_game_data = Arc::new(Mutex::new(None));
+                                let live_task = async_runtime::spawn(Self::run_info_poller(
+                                    live_events_clone,
+                                    player_map_clone,
+                                    last_game_data.clone(),
+                                    self.ctx.app_handle.clone(),
+                                ));
+
+                                self.state = State::Recording(
+                                    RecordingTask::new_manual(self.ctx.game_ctx(game_id)),
+                                    HighlightTask::new(self.ctx.app_handle.clone()),
+                                    live_task,
+                                    live_events,
+                                    player_map,
+                                    None, // start_lp
+                                    last_game_data,
+                                    HashMap::new(), // pid_to_cid (empty for manual start)
+                                );
+                                log::info!("recorder state: {}", self.state);
+                            } else {
+                                log::info!("Manual start ignored: Already recording.");
                             }
                         }
-                        Err(e) => log::error!("Manual start failed to get session data: {e}"),
+                        Err(e) => {
+                            log::warn!("Manual start: failed to get session data ({e}). Falling back to manual mode.");
+                            let should_start = match self.state {
+                                State::Idle | State::EndOfGame(..) => true,
+                                State::Recording(..) => false,
+                            };
+                            if should_start {
+                                let game_id = Utc::now().timestamp_millis();
+                                if let Err(ev_err) = self.ctx.app_handle.send_event(AppEvent::ManualRecordingStarted) {
+                                    log::error!("failed to emit ManualRecordingStarted event: {ev_err}");
+                                }
+                                let live_events = Arc::new(Mutex::new(Vec::new()));
+                                let player_map = Arc::new(Mutex::new(HashMap::new()));
+                                let live_events_clone = live_events.clone();
+                                let player_map_clone = player_map.clone();
+                                let last_game_data = Arc::new(Mutex::new(None));
+                                let live_task = async_runtime::spawn(Self::run_info_poller(
+                                    live_events_clone,
+                                    player_map_clone,
+                                    last_game_data.clone(),
+                                    self.ctx.app_handle.clone(),
+                                ));
+
+                                self.state = State::Recording(
+                                    RecordingTask::new_manual(self.ctx.game_ctx(game_id)),
+                                    HighlightTask::new(self.ctx.app_handle.clone()),
+                                    live_task,
+                                    live_events,
+                                    player_map,
+                                    None,
+                                    last_game_data,
+                                    HashMap::new(),
+                                );
+                                log::info!("recorder state: {}", self.state);
+                            }
+                        },
                     }
                 }
                 _ = self.ctx.cancel_token.cancelled() => break,
@@ -523,6 +570,33 @@ impl GameListener {
                         });
                         State::Idle
                     }
+                }
+                SubscriptionResponse::Session(SessionEventData {
+                    phase: GamePhase::ReadyCheck, ..
+                }) => {
+                    let settings_wrapper: tauri::State<SettingsWrapper> =
+                        self.ctx.app_handle.state::<SettingsWrapper>();
+                    let settings: Settings = (*settings_wrapper).inner();
+                    if settings.auto_accept_game {
+                        log::info!("Auto-Accepting Match...");
+                        let client = LcuRestClient::from(&self.ctx.credentials);
+                        // don't await the result to keep the listener responsive
+                        async_runtime::spawn(async move {
+                            // Delay for 1 second to avoid anti-cheat detection
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                            match client
+                                .post::<_, serde_json::Value>(
+                                    "/lol-matchmaking/v1/ready-check/accept",
+                                    serde_json::Value::Null,
+                                )
+                                .await
+                            {
+                                Ok(_) => log::info!("Match Accepted!"),
+                                Err(e) => log::error!("Failed to accept match: {e}"),
+                            }
+                        });
+                    }
+                    State::Idle
                 }
                 _ => State::Idle,
             },
