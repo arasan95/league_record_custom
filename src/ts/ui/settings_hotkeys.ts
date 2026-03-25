@@ -67,6 +67,14 @@ export function createSettingsHotkeysTabContent({
         prevVideo: getText(lang, "prevVideo"),
     };
 
+    const resolveCapturedKey = (kEvent: KeyboardEvent): string | null => {
+        if (kEvent.key === "Unidentified" && /^F\d{1,2}$/i.test(kEvent.code)) {
+            return kEvent.code.toUpperCase();
+        }
+        return kEvent.key || null;
+    };
+
+
     const createKeybindRow = (action: ActionName): HTMLDivElement => {
         const labelText = labels[action];
         const container = createEl("div", {}, {
@@ -80,13 +88,19 @@ export function createSettingsHotkeysTabContent({
             style: "text-align: center; cursor: pointer; width: 140px; padding: 6px 10px; background-color: #202225; border: 1px solid #202225; color: #dcddde; border-radius: 3px; font-size: 0.9em;",
         }, formatKeyCombo(pendingBinds[action])) as HTMLButtonElement;
 
+        const detachBindingListener = () => {
+            if (keydownHandler) {
+                btn.removeEventListener("keydown", keydownHandler);
+                keydownHandler = null;
+            }
+        };
+
         btn.onclick = (e: MouseEvent) => {
             e.preventDefault();
             e.stopPropagation();
 
             if (btn.classList.contains("binding")) {
-                if (keydownHandler) window.removeEventListener("keydown", keydownHandler, true);
-                keydownHandler = null;
+                detachBindingListener();
                 pendingBinds[action] = null;
                 btn.textContent = "None";
                 btn.classList.remove("binding");
@@ -95,13 +109,15 @@ export function createSettingsHotkeysTabContent({
 
             btn.textContent = "Press any key...";
             btn.classList.add("binding");
+            btn.focus();
             keydownHandler = (kEvent: KeyboardEvent) => {
                 kEvent.preventDefault();
                 kEvent.stopPropagation();
-                if (["Shift", "Control", "Alt", "Meta"].includes(kEvent.key)) return;
+                const resolvedKey = resolveCapturedKey(kEvent);
+                if (!resolvedKey || ["Shift", "Control", "Alt", "Meta"].includes(resolvedKey)) return;
 
                 const newCombo: KeyCombo = {
-                    key: kEvent.key,
+                    key: resolvedKey,
                     shift: kEvent.shiftKey,
                     ctrl: kEvent.ctrlKey,
                     alt: kEvent.altKey,
@@ -110,10 +126,9 @@ export function createSettingsHotkeysTabContent({
                 pendingBinds[action] = newCombo;
                 btn.textContent = formatKeyCombo(newCombo);
                 btn.classList.remove("binding");
-                if (keydownHandler) window.removeEventListener("keydown", keydownHandler, true);
-                keydownHandler = null;
+                detachBindingListener();
             };
-            window.addEventListener("keydown", keydownHandler, { capture: true });
+            btn.addEventListener("keydown", keydownHandler);
         };
 
         container.append(label, btn);
@@ -148,8 +163,10 @@ export function createSettingsHotkeysTabContent({
             e.preventDefault();
             e.stopPropagation();
             if (btn.classList.contains("binding")) {
-                if (keydownHandler) window.removeEventListener("keydown", keydownHandler, true);
-                keydownHandler = null;
+                if (keydownHandler) {
+                    btn.removeEventListener("keydown", keydownHandler);
+                    keydownHandler = null;
+                }
                 onUpdate(null);
                 btn.textContent = "None";
                 btn.classList.remove("binding");
@@ -158,13 +175,15 @@ export function createSettingsHotkeysTabContent({
 
             btn.textContent = "Press any key...";
             btn.classList.add("binding");
+            btn.focus();
             keydownHandler = (kEvent: KeyboardEvent) => {
                 kEvent.preventDefault();
                 kEvent.stopPropagation();
-                if (["Shift", "Control", "Alt", "Meta"].includes(kEvent.key)) return;
+                const resolvedKey = resolveCapturedKey(kEvent);
+                if (!resolvedKey || ["Shift", "Control", "Alt", "Meta"].includes(resolvedKey)) return;
 
                 const newCombo: KeyCombo = {
-                    key: kEvent.key,
+                    key: resolvedKey,
                     shift: kEvent.shiftKey,
                     ctrl: kEvent.ctrlKey,
                     alt: kEvent.altKey,
@@ -175,10 +194,12 @@ export function createSettingsHotkeysTabContent({
                 btn.textContent = displayStr;
                 btn.classList.remove("binding");
                 onUpdate(backendStr);
-                if (keydownHandler) window.removeEventListener("keydown", keydownHandler, true);
-                keydownHandler = null;
+                if (keydownHandler) {
+                    btn.removeEventListener("keydown", keydownHandler);
+                    keydownHandler = null;
+                }
             };
-            window.addEventListener("keydown", keydownHandler, { capture: true });
+            btn.addEventListener("keydown", keydownHandler);
         };
 
         container.append(labelEl, btn);

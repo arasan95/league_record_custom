@@ -25,6 +25,8 @@ fn handle_system_tray_event(tray_icon: &TrayIcon, event: TrayIconEvent) {
 
 fn handle_system_tray_menu_event(app_handle: &AppHandle, event: MenuEvent) {
     match event.id().as_ref() {
+        menu_item::START_RECORDING => app_handle.state::<LeagueRecorder>().manual_start(),
+        menu_item::STOP_RECORDING => app_handle.state::<LeagueRecorder>().manual_stop(),
         menu_item::SETTINGS => SettingsWrapper::let_user_edit_settings(app_handle),
         menu_item::OPEN => app_handle.open_window(AppWindow::Main),
         menu_item::QUIT => {
@@ -118,6 +120,14 @@ fn create_tray_menu(app_handle: &AppHandle) -> Menu<Wry> {
         .id(menu_item::SETTINGS)
         .build(app_handle)
         .unwrap();
+    let start_recording = MenuItemBuilder::new("Start Recording")
+        .id(menu_item::START_RECORDING)
+        .build(app_handle)
+        .unwrap();
+    let stop_recording = MenuItemBuilder::new("Stop Recording")
+        .id(menu_item::STOP_RECORDING)
+        .build(app_handle)
+        .unwrap();
     let open = MenuItemBuilder::new("Open")
         .id(menu_item::OPEN)
         .build(app_handle)
@@ -135,6 +145,9 @@ fn create_tray_menu(app_handle: &AppHandle) -> Menu<Wry> {
         MenuBuilder::new(app_handle)
             .check(menu_item::RECORDING, "Recording")
             .separator()
+            .item(&start_recording)
+            .item(&stop_recording)
+            .separator()
             .item(&settings)
             .item(&open)
             .item(&quit)
@@ -143,6 +156,9 @@ fn create_tray_menu(app_handle: &AppHandle) -> Menu<Wry> {
     } else {
         MenuBuilder::new(app_handle)
             .check(menu_item::RECORDING, "Recording")
+            .separator()
+            .item(&start_recording)
+            .item(&stop_recording)
             .separator()
             .item(&settings)
             .item(&open)
@@ -158,6 +174,8 @@ fn create_tray_menu(app_handle: &AppHandle) -> Menu<Wry> {
         .set_checked(recording)
         .unwrap();
     recording_item.as_check_menuitem().unwrap().set_enabled(false).unwrap();
+    tray_menu.get(menu_item::START_RECORDING).unwrap().as_menuitem().unwrap().set_enabled(!recording).unwrap();
+    tray_menu.get(menu_item::STOP_RECORDING).unwrap().as_menuitem().unwrap().set_enabled(recording).unwrap();
 
     tray_menu
 }

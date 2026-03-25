@@ -8,6 +8,8 @@ pub const EXIT_SUCCESS: i32 = 0;
 
 pub mod menu_item {
     pub const RECORDING: &str = "recording";
+    pub const START_RECORDING: &str = "start_recording";
+    pub const STOP_RECORDING: &str = "stop_recording";
     pub const SETTINGS: &str = "settings";
     pub const OPEN: &str = "open";
     pub const QUIT: &str = "quit";

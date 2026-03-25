@@ -43,6 +43,7 @@ export function showSettingsModalView(input: {
     } = input;
 
     const lang = ((settings as any).language || "en") as Language;
+    const closeSettingsModal = () => hideModal();
     const generalControls = createSettingsGeneralControls({
         createEl,
         settings,
@@ -196,6 +197,7 @@ export function showSettingsModalView(input: {
                     autoplayVideo: settingsOptions.refs.otherSwitches.autoplayVideo.input.checked,
                     autoStopPlayback: settingsOptions.refs.otherSwitches.autoStopPlayback.input.checked,
                     autoSelectRecording: settingsOptions.refs.otherSwitches.autoSelectRecording.input.checked,
+                    autoAcceptGame: settingsOptions.refs.otherSwitches.autoAcceptGame.input.checked,
                     confirmDelete: settingsOptions.refs.otherSwitches.confirmDelete.input.checked,
                     developerMode: settingsOptions.refs.otherSwitches.developerMode.input.checked,
                     playRecordingSounds: settingsOptions.refs.otherSwitches.playRecordingSounds.input.checked,
@@ -209,13 +211,13 @@ export function showSettingsModalView(input: {
             onReloadKeybinds();
             updateAutoButtons(newSettings);
             void saveCallback(newSettings).then(() => {
-                hideModal();
+                closeSettingsModal();
                 (window as any)._developerModeEnabled = newSettings.developerMode;
             });
         },
     }, { class: "btn-save" }, getText(lang, "save"));
 
-    const cancelBtn = createEl("button", { onclick: hideModal }, { class: "btn-cancel" }, getText(lang, "cancel"));
+    const cancelBtn = createEl("button", { onclick: closeSettingsModal }, { class: "btn-cancel" }, getText(lang, "cancel"));
     const actions = createEl("div", {}, { class: "settings-actions" }, [cancelBtn, saveBtn]);
     const content = createEl("div", {}, { id: "settings-modal-content" }, [
         createEl("h2", {}, { style: "text-align: center; margin-top: 5px; margin-bottom: 0px; font-size: 1.2em;" }, getText(lang, "settingsTitle")),

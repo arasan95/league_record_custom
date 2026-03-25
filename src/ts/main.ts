@@ -475,6 +475,18 @@ async function main() {
         });
     });
 
+    listenerManager.listen_app("ManualRecordingStarted", () => {
+        commands.getSettings().then(settings => {
+            if (settings.playRecordingSounds) playNotificationSound('start');
+        });
+    });
+
+    listenerManager.listen_app("ManualRecordingStopped", () => {
+        commands.getSettings().then(settings => {
+            if (settings.playRecordingSounds) playNotificationSound('stop');
+        });
+    });
+
     listenerManager.listen_app("GameDetected", () => {
         // GameDetected fires at loading screen start – no action needed for auto stop here.
         console.log("GameDetected: loading screen started.");
@@ -490,11 +502,10 @@ async function main() {
     });
 
     listenerManager.listen_app("RecordingFinished", ({ payload }) => {
-        commands.getSettings().then(settings => {
-            if (settings.playRecordingSounds) playNotificationSound('stop');
-        });
-
         const [videoId, isManualStop] = payload;
+        commands.getSettings().then(settings => {
+            if (settings.playRecordingSounds && !isManualStop) playNotificationSound('stop');
+        });
         
         // Check if we are currently viewing this video (e.g. user clicked it while recording)
         const activeId = ui.getActiveVideoId();
@@ -572,6 +583,7 @@ async function main() {
         ui.updateAutoStopBtn(settings.autoStopPlayback);
         ui.updateAutoPlayBtn(settings.autoplayVideo);
         ui.updateAutoSelectBtn(settings.autoSelectRecording);
+        ui.updateAutoAcceptBtn(settings.autoAcceptGame);
         ui.setAutoPopupState(settings.autoPopupOnEnd);
         (window as any)._developerModeEnabled = settings.developerMode;
         
@@ -636,6 +648,16 @@ async function main() {
             const newSettings = { ...settings, autoPopupOnEnd: checked };
             commands.saveSettings(newSettings).then(() => {
                 ui.setAutoPopupState(newSettings.autoPopupOnEnd);
+            });
+        });
+    });
+
+    ui.setAutoAcceptBtnOnClickHandler((e) => {
+        const checked = (e.target as HTMLInputElement).checked;
+        commands.getSettings().then(settings => {
+            const newSettings = { ...settings, autoAcceptGame: checked };
+            commands.saveSettings(newSettings).then(() => {
+                 ui.updateAutoAcceptBtn(newSettings.autoAcceptGame);
             });
         });
     });
