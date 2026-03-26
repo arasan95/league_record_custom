@@ -197,7 +197,6 @@ export function showSettingsModalView(input: {
                     autoplayVideo: settingsOptions.refs.otherSwitches.autoplayVideo.input.checked,
                     autoStopPlayback: settingsOptions.refs.otherSwitches.autoStopPlayback.input.checked,
                     autoSelectRecording: settingsOptions.refs.otherSwitches.autoSelectRecording.input.checked,
-                    autoAcceptGame: settingsOptions.refs.otherSwitches.autoAcceptGame.input.checked,
                     confirmDelete: settingsOptions.refs.otherSwitches.confirmDelete.input.checked,
                     developerMode: settingsOptions.refs.otherSwitches.developerMode.input.checked,
                     playRecordingSounds: settingsOptions.refs.otherSwitches.playRecordingSounds.input.checked,
