@@ -99,7 +99,13 @@ jobs:
           $notes = "Update v$version"
           if (Test-Path "release_notes.json") {
               $rn = Get-Content "release_notes.json" -Raw -Encoding UTF8 | ConvertFrom-Json
-              if ($null -ne $rn.notes) { $notes = $rn.notes }
+              if ($null -ne $rn.notes) {
+                  if ($rn.notes -is [System.Array]) {
+                      $notes = ($rn.notes -join "`n")
+                  } else {
+                      $notes = [string]$rn.notes
+                  }
+              }
           }
 
           $json = @{
@@ -144,8 +150,18 @@ jobs:
           if (Test-Path "release_notes.json") {
             try {
               $rn = Get-Content "release_notes.json" -Raw -Encoding UTF8 | ConvertFrom-Json
-              if ($null -ne $rn.notes -and [string]::IsNullOrWhiteSpace([string]$rn.notes) -eq $false) {
-                $body = [string]$rn.notes
+              if ($null -ne $rn.notes) {
+                if ($rn.notes -is [System.Array]) {
+                  $joined = ($rn.notes -join "`n")
+                  if ([string]::IsNullOrWhiteSpace($joined) -eq $false) {
+                    $body = $joined
+                  }
+                } else {
+                  $notesText = [string]$rn.notes
+                  if ([string]::IsNullOrWhiteSpace($notesText) -eq $false) {
+                    $body = $notesText
+                  }
+                }
               }
             } catch {
               Write-Warning "release_notes.json parse failed. Fallback to default body."
@@ -159,6 +175,6 @@ jobs:
       - uses: ncipollo/release-action@v1
         with:
           artifacts: "./src-tauri/target/release/*.zip, ./src-tauri/target/release/bundle/nsis/*, latest.json"
-          prerelease: false
+          prerelease: true
           body: ${{ steps.release_body.outputs.body }}
 
