@@ -583,7 +583,6 @@ async function main() {
         ui.updateAutoStopBtn(settings.autoStopPlayback);
         ui.updateAutoPlayBtn(settings.autoplayVideo);
         ui.updateAutoSelectBtn(settings.autoSelectRecording);
-        ui.updateAutoAcceptBtn(settings.autoAcceptGame);
         ui.setAutoPopupState(settings.autoPopupOnEnd);
         (window as any)._developerModeEnabled = settings.developerMode;
         
@@ -648,16 +647,6 @@ async function main() {
             const newSettings = { ...settings, autoPopupOnEnd: checked };
             commands.saveSettings(newSettings).then(() => {
                 ui.setAutoPopupState(newSettings.autoPopupOnEnd);
-            });
-        });
-    });
-
-    ui.setAutoAcceptBtnOnClickHandler((e) => {
-        const checked = (e.target as HTMLInputElement).checked;
-        commands.getSettings().then(settings => {
-            const newSettings = { ...settings, autoAcceptGame: checked };
-            commands.saveSettings(newSettings).then(() => {
-                 ui.updateAutoAcceptBtn(newSettings.autoAcceptGame);
             });
         });
     });
