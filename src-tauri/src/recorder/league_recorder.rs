@@ -11,7 +11,7 @@ use crate::cancellable;
 
 pub struct LeagueRecorder {
     cancel_token: CancellationToken,
-    task: Mutex<JoinHandle<()>>,
+    task: Mutex<Option<JoinHandle<()>>>,
     manual_stop_tx: tokio::sync::broadcast::Sender<()>,
     manual_start_tx: tokio::sync::broadcast::Sender<()>,
 }
@@ -65,7 +65,7 @@ impl LeagueRecorder {
 
         Self {
             cancel_token,
-            task: Mutex::new(task),
+            task: Mutex::new(Some(task)),
             manual_stop_tx,
             manual_start_tx,
         }
@@ -74,10 +74,13 @@ impl LeagueRecorder {
     pub async fn stop(&self) {
         self.cancel_token.cancel();
 
-        let Ok(mut task) = self.task.try_lock() else { return };
-        if timeout(Duration::from_secs(2), &mut *task).await.is_err() {
+        let Ok(mut task_slot) = self.task.try_lock() else { return };
+        let Some(mut task) = task_slot.take() else { return };
+
+        if timeout(Duration::from_secs(2), &mut task).await.is_err() {
             log::warn!("RecordingTask stop() ran into timeout - aborting task");
             task.abort();
+            let _ = task.await;
         }
     }
 
