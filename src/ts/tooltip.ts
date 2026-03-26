@@ -1243,6 +1243,14 @@ export async function buildLocalChampionTooltipHtml(
         
         let descriptionHtml = rawHtml;
 
+        // Some locale payloads (e.g. ja_JP Jax) store placeholders as "{{ var }}"
+        // instead of "@var@". Convert them up-front so the existing resolver path
+        // can resolve values consistently across locales.
+        descriptionHtml = descriptionHtml.replace(
+            /\{\{\s*([a-zA-Z0-9_\.:\*\-\+]+)\s*\}\}/g,
+            "@$1@",
+        );
+
         const extractTag = (tag: string) => {
             const re = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "i");
             const m = descriptionHtml.match(re);
