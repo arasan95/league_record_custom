@@ -8,10 +8,15 @@ body {
 }
 
 :root {
-    --lr-control-bar-height: 96px;
-    --lr-lane-blue-height: 25%;
-    --lr-lane-red-height: 25%;
-    --lr-lane-self-height: 50%;
+    --lr-control-bar-height: 92px;
+    --lr-team-bar-height: 30px;
+    --lr-seekbar-gap: 4px;
+    --lr-self-bar-height: 34px;
+    --lr-seekbar-height: calc(var(--lr-team-bar-height) + var(--lr-seekbar-gap) + var(--lr-self-bar-height));
+    --lr-lane-blue-height: calc(var(--lr-team-bar-height) / 2);
+    --lr-lane-red-height: calc(var(--lr-team-bar-height) / 2);
+    --lr-lane-self-height: var(--lr-self-bar-height);
+    --lr-lane-self-top: calc(var(--lr-team-bar-height) + var(--lr-seekbar-gap));
 }
 
 /* hide videojs player outline when focused */
@@ -128,7 +133,7 @@ body:has(.vjs-fullscreen) {
 
 /* Allow video to grow fully in fullscreen but reserve space for controls */
 .video-js.vjs-fullscreen .vjs-tech {
-    max-height: calc(100% - var(--lr-control-bar-height)) !important; /* Reserve space for taller control bar */
+    max-height: calc(100% - var(--lr-control-bar-height)) !important; /* Reserve space for control bar */
     flex: 0 1 auto !important; /* Do NOT grow to fill space, just fit content */
 }
 
@@ -216,8 +221,10 @@ body:has(.vjs-fullscreen) {
    5. EVENT MARKERS
    ========================================================================= */
 .vjs-marker {
-    width: 3px !important;
-    margin-left: -1px !important; /* Center the thinner marker */
+    --marker-core-width: 4px;
+    --marker-fade-width: 8px;
+    width: calc(var(--marker-core-width) + (var(--marker-fade-width) * 2)) !important;
+    margin-left: calc(-1 * ((var(--marker-core-width) / 2) + var(--marker-fade-width))) !important;
     opacity: 0.4 !important;
     position: absolute !important;
     top: auto !important;
@@ -225,30 +232,51 @@ body:has(.vjs-fullscreen) {
     height: var(--lr-lane-self-height) !important;
     z-index: 40 !important;
     pointer-events: auto !important;
+    overflow: visible !important;
+    background: transparent !important;
+    clip-path: polygon(0 0, 100% 0, 52% 100%, 48% 100%);
 }
 
 .vjs-marker.lane-blue {
     top: 0 !important;
     height: var(--lr-lane-blue-height) !important;
 }
+
 .vjs-marker.lane-red {
     top: var(--lr-lane-blue-height) !important;
     height: var(--lr-lane-red-height) !important;
 }
+
 .vjs-marker.lane-self {
-    top: calc(var(--lr-lane-blue-height) + var(--lr-lane-red-height)) !important;
+    top: var(--lr-lane-self-top) !important;
     height: var(--lr-lane-self-height) !important;
+}
+
+.vjs-marker::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+.vjs-marker::after {
+    left: 50%;
+    width: var(--marker-core-width);
+    transform: translateX(-50%);
+    background: currentColor;
+    pointer-events: none;
 }
 
 .video-js .vjs-progress-holder {
     position: relative !important;
 }
 
-.vjs-marker.kill { background-color: rgb(43, 255, 0) !important; z-index: 12; }
-.vjs-marker.assist { background-color: rgb(251, 255, 0) !important; z-index: 12; }
-.vjs-marker.death { background-color: red !important; z-index: 12; }
+.vjs-marker.kill { color: rgb(43, 255, 0); z-index: 12; }
+.vjs-marker.assist { color: rgb(251, 255, 0); z-index: 12; }
+.vjs-marker.death { color: red; z-index: 12; }
 .vjs-marker.turret,
-.vjs-marker.inhibitor { background-color: mediumblue !important; z-index: 12; }
+.vjs-marker.inhibitor { color: rgb(255, 255, 255); z-index: 12; }
 
 .vjs-marker.infernal-dragon,
 .vjs-marker.ocean-dragon,
@@ -258,16 +286,16 @@ body:has(.vjs-fullscreen) {
 .vjs-marker.chemtech-dragon,
 .vjs-marker.elder-dragon,
 .vjs-marker.dragon {
-    background-color: rgb(0, 234, 255) !important;
+    color: rgb(0, 234, 255);
     z-index: 13;
-    width: 5px !important;
+    --marker-core-width: 6px;
     opacity: 0.7 !important;
 }
 
-.vjs-marker.voidgrub { background-color: deeppink !important; z-index: 13 !important; width: 3px !important; }
-.vjs-marker.herald { background-color: rgb(234, 0, 255) !important; z-index: 13 !important; width: 5px !important; }
-.vjs-marker.baron { background-color: rgb(123, 0, 255) !important; z-index: 13; width: 5px !important; opacity: 0.7 !important; }
-.vjs-marker.highlight { background-color: rgb(255, 170, 0) !important; z-index: 12; }
+.vjs-marker.voidgrub { color: deeppink; z-index: 13 !important; --marker-core-width: 4px; }
+.vjs-marker.herald { color: rgb(234, 0, 255); z-index: 13 !important; --marker-core-width: 6px; }
+.vjs-marker.baron { color: rgb(123, 0, 255); z-index: 13; --marker-core-width: 6px; opacity: 0.7 !important; }
+.vjs-marker.highlight { color: rgb(255, 170, 0); z-index: 12; }
 
 /* =========================================================================
    6. VIDEO.JS CONTROL BAR
@@ -283,10 +311,9 @@ body:has(.vjs-fullscreen) {
     z-index: 20000 !important; /* Ensure high priority */
     overflow: visible !important;
     padding-bottom: 3px !important; /* Make room for ruler numbers below */
-    min-height: var(--lr-control-bar-height) !important;
     height: auto !important; /* Allow growth automatically */
     display: flex !important; /* Use Flexbox */
-    align-items: stretch !important;
+    align-items: center !important; /* Center vertically */
 }
 
 /* Ensure control bar is always visible */
@@ -359,7 +386,9 @@ body:has(.vjs-fullscreen) {
     width: auto !important;
     min-width: 100px !important; 
     margin: 0 10px !important;
-    height: 100% !important; /* Full height alignment */
+    height: var(--lr-seekbar-height) !important;
+    max-height: var(--lr-seekbar-height) !important;
+    overflow: visible !important;
 }
 
 /* Playback Rate */
@@ -372,7 +401,7 @@ body:has(.vjs-fullscreen) {
 }
 
 .video-js .vjs-playback-rate-value {
-    line-height: calc(var(--lr-control-bar-height) - 18px) !important;
+    line-height: 70px !important; /* Match control bar height */
     font-size: 1.25em !important;
     display: flex !important;
     align-items: center;
@@ -393,7 +422,7 @@ body:has(.vjs-fullscreen) {
 
 /* 3. NORMALIZE LAYOUT for Visible Controls */
 .video-js .vjs-control-bar > .vjs-control {
-    height: calc(var(--lr-control-bar-height) - 18px) !important;
+    height: 50px !important; /* Match parent height dynamically */
     top: 0 !important;
     margin-top: 0 !important;
     display: flex !important;
@@ -411,17 +440,15 @@ body:has(.vjs-fullscreen) {
 
 /* Icon Alignment */
 .video-js .vjs-control-bar .vjs-icon-placeholder:before {
-    line-height: calc(var(--lr-control-bar-height) - 30px) !important;
+    line-height: 50px !important;
     top: 0 !important;
-    height: 100% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
     font-size: 2.2em; /* Adjusted size slightly larger */
 }
 .video-js .vjs-control:before,
 .video-js .vjs-button:before {
     line-height: 1 !important;
+    position: relative !important;
+    top: 0 !important;
     vertical-align: middle !important;
 }
 
@@ -465,40 +492,113 @@ body:has(.vjs-fullscreen) {
 
 /* Seek Bar Holder */
 .video-js .vjs-progress-holder {
-    height: calc(var(--lr-control-bar-height) - 30px) !important;
+    height: var(--lr-seekbar-height) !important;
+    max-height: var(--lr-seekbar-height) !important;
     border-radius: 4px; 
     margin: 0 15px; 
+    background: #1a1a1a !important;
+    position: relative !important; 
+    overflow: visible !important;
+}
+
+.video-js .vjs-progress-holder::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: var(--lr-team-bar-height);
+    border-radius: 4px;
     background: linear-gradient(
         to bottom,
-        rgba(66, 123, 255, 0.28) 0%,
-        rgba(66, 123, 255, 0.28) 25%,
-        rgba(223, 64, 64, 0.26) 25%,
-        rgba(223, 64, 64, 0.26) 50%,
-        rgba(115, 133, 159, 0.3) 50%,
-        rgba(115, 133, 159, 0.3) 100%
-    ) !important;
-    position: relative !important; 
-    overflow: visible !important; /* Allow ticks/pointer */
+        rgba(66, 123, 255, 0.22) 0,
+        rgba(66, 123, 255, 0.22) var(--lr-lane-blue-height),
+        rgba(223, 64, 64, 0.2) var(--lr-lane-blue-height),
+        rgba(223, 64, 64, 0.2) 100%
+    );
+    pointer-events: none;
+    z-index: 0;
+}
+
+.video-js .vjs-progress-holder::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: var(--lr-lane-self-top);
+    height: var(--lr-lane-self-height);
+    border-radius: 4px;
+    background: rgba(115, 133, 159, 0.3);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.video-js .vjs-control-bar .vjs-progress-control .vjs-progress-holder {
+    height: var(--lr-seekbar-height) !important;
 }
 
 /* Play Progress */
 .video-js .vjs-play-progress {
     height: 100% !important; 
-    background-color: #424c6762 !important; 
-    border-radius: 4px 0 0 4px;
+    background: transparent !important;
+    border-radius: 4px !important;
     z-index: 10 !important;
 }
 /* Play Head (Triangle) */
 .video-js .vjs-play-progress:before {
-    content: "\25BC" !important; 
-    font-family: sans-serif !important; 
-    font-size: 10px !important; 
-    color: white !important;
-    top: -9px !important; 
-    background: none !important;
-    box-shadow: none !important;
-    border: none !important;
-    line-height: 1 !important;
+    content: "" !important;
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: 0 !important;
+    height: var(--lr-team-bar-height) !important;
+    border-radius: 4px !important;
+    background: rgba(125, 125, 125, 0.208) !important;
+    z-index: 10;
+}
+
+.video-js .vjs-play-progress:after {
+    content: "" !important;
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: var(--lr-lane-self-top) !important;
+    height: var(--lr-lane-self-height) !important;
+    border-radius: 4px !important;
+    background: rgba(104, 104, 104, 0.221) !important;
+    z-index: 15;
+}
+
+.video-js .vjs-play-progress .lr-playhead-indicator {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    pointer-events: none;
+    z-index: 30;
+    background: linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.95) 0,
+        rgba(255, 255, 255, 0.95) var(--lr-team-bar-height),
+        transparent var(--lr-team-bar-height),
+        transparent var(--lr-lane-self-top),
+        rgba(255, 255, 255, 0.95) var(--lr-lane-self-top),
+        rgba(255, 255, 255, 0.95) 100%
+    );
+}
+
+.video-js .vjs-play-progress .lr-playhead-indicator::before {
+    content: "\25BC";
+    position: absolute;
+    top: -9px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: sans-serif;
+    font-size: 10px;
+    line-height: 1;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 /* 5. EXTRA ELEMENTS (Rulers, Tooltips) */
@@ -511,7 +611,7 @@ body:has(.vjs-fullscreen) {
     width: 100%;
     height: 100%;
     pointer-events: none;
-    z-index: 14;
+    z-index: 20;
     display: block !important;
 }
 
@@ -519,40 +619,28 @@ body:has(.vjs-fullscreen) {
 .vjs-ruler-tick {
     position: absolute;
     bottom: 0;
-    width: 1px !important;
-    background: rgba(245, 248, 255, 0.7);
-    border-radius: 1px;
-    transform: translateX(-50%);
+    width: 2px !important;
+    background-color: rgba(255, 255, 255, 0.7);
+    transform: translateX(-50%) scaleX(0.5);
     transform-origin: center bottom;
 }
-.vjs-ruler-tick.large {
-    height: 24% !important;
-    width: 2px !important;
-    background: rgba(250, 252, 255, 0.92);
-}
-.vjs-ruler-tick.medium {
-    height: 15% !important;
-    width: 1px !important;
-    opacity: 0.72;
-}
-.vjs-ruler-tick.small {
-    display: none !important;
-}
+.vjs-ruler-tick.large { height: 19% !important; }
+.vjs-ruler-tick.medium { height: 13% !important; }
+.vjs-ruler-tick.small { height: 7% !important; }
 
 /* Ruler Numbers */
 .vjs-ruler-number {
     position: absolute;
     top: 100%;
     left: 50%;
-    transform: translateX(-50%);
-    margin-top: 3px;
-    padding: 0;
-    font-size: 10px;
-    color: #f2f6ff;
-    font-weight: 600;
-    letter-spacing: 0.02em;
+    transform: translateX(-50%) scaleX(2);
+    padding-top: 6px; 
+    padding-bottom: 6px; 
+    font-size: 11px;
+    color: #eee;
+    font-weight: 500;
     pointer-events: none;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+    text-shadow: 1px 1px 1px #000;
     bottom: auto;
 }
 
@@ -569,7 +657,8 @@ body:has(.vjs-fullscreen) {
     white-space: nowrap;
     display: none;
     transform: translateX(-50%);
-    bottom: calc(var(--lr-control-bar-height) - 2px);
+    bottom: auto;
+    top: 0;
 }
 #custom-play-tooltip {
     position: absolute;
@@ -584,9 +673,11 @@ body:has(.vjs-fullscreen) {
     white-space: nowrap;
     display: none; 
     transform: translateX(-50%);
-    bottom: calc(var(--lr-control-bar-height) - 2px);
+    bottom: auto;
+    top: 0;
 }
-.video-js .vjs-time-tooltip { display: none !important; }
+.video-js .vjs-mouse-display .vjs-time-tooltip { display: none !important; }
+.video-js .vjs-play-progress .vjs-time-tooltip { display: none !important; }
 .video-js .vjs-mouse-display { z-index: 10000 !important; }
 
 /* Fullscreen adjustments */
@@ -774,7 +865,7 @@ input[type="checkbox"]:checked::after {
 #kill:checked { background-color: #145214; border-color: #145214; }
 #assist:checked { background-color: #736e0d; border-color: #736e0d; }
 #death:checked { background-color: #661111; border-color: #661111; }
-#structure:checked { background-color: #0d246b; border-color: #0d246b; }
+#structure:checked { background-color: #9b9b9b; border-color: #9b9b9b; }
 #dragon:checked { background-color: #0d626e; border-color: #0d626e; }
 #voidgrub:checked { background-color: #730d4d; border-color: #730d4d; }
 #herald:checked { background-color: #660d66; border-color: #660d66; }
@@ -785,7 +876,9 @@ input[type="checkbox"]:not([id]):checked,
 #auto-stop-cb:checked,
 #auto-play-cb:checked,
 #auto-select-cb:checked,
-#auto-popup-cb:checked {
+#auto-popup-cb:checked,
+#auto-accept-cb:checked,
+.auto-checkbox input[type="checkbox"]:checked {
     background-color: #2d3e6b;
     border-color: #2d3e6b;
 }
