@@ -9,7 +9,7 @@ export function initializeProgressTooltips(input: {
     getRecordingOffset: () => number;
 }): void {
     const { player, playerElement, getRecordingOffset } = input;
-    const progressControl = document.querySelector(".vjs-progress-control");
+    const progressControl = document.querySelector(".vjs-progress-control") as HTMLElement | null;
     let customTooltip = document.getElementById("custom-tooltip");
     let customPlayTooltip = document.getElementById("custom-play-tooltip");
 
@@ -36,7 +36,34 @@ export function initializeProgressTooltips(input: {
         });
     }
 
+    const positionTooltipAboveSeekbar = (tooltipEl: HTMLElement, anchorClientX: number) => {
+        if (!playerElement || !progressControl) return;
+        const playerRect = playerElement.getBoundingClientRect();
+        const progressRect = progressControl.getBoundingClientRect();
+        const tooltipRect = tooltipEl.getBoundingClientRect();
+        const pointerHeight = 10;
+        const tooltipGap = 8;
+        const relX = anchorClientX - playerRect.left;
+        const top = progressRect.top - playerRect.top - tooltipRect.height - pointerHeight - tooltipGap;
+        tooltipEl.style.left = `${relX}px`;
+        tooltipEl.style.top = `${Math.max(0, top)}px`;
+    };
+
+    const ensurePlayheadIndicator = (playProgressBar: Element) => {
+        if (!(playProgressBar instanceof HTMLElement)) return;
+        const existing = playProgressBar.querySelector(".lr-playhead-indicator");
+        if (existing) return;
+        const indicator = document.createElement("div");
+        indicator.className = "lr-playhead-indicator";
+        playProgressBar.appendChild(indicator);
+    };
+
     const updatePlayTooltipLoop = () => {
+        const playProgressBar = document.querySelector(".vjs-play-progress");
+        if (playProgressBar) {
+            ensurePlayheadIndicator(playProgressBar);
+        }
+
         if (customPlayTooltip) {
             const isDragging = playerElement?.classList.contains("vjs-scrubbing") ||
                 progressControl?.classList.contains("vjs-sliding");
@@ -55,12 +82,9 @@ export function initializeProgressTooltips(input: {
                 }
                 customPlayTooltip.style.display = "block";
 
-                const playProgressBar = document.querySelector(".vjs-play-progress");
                 if (playProgressBar && playerElement) {
                     const barRect = playProgressBar.getBoundingClientRect();
-                    const playerRect = playerElement.getBoundingClientRect();
-                    const relX = barRect.right - playerRect.left;
-                    customPlayTooltip.style.left = `${relX}px`;
+                    positionTooltipAboveSeekbar(customPlayTooltip, barRect.right);
                 }
             } else {
                 customPlayTooltip.style.display = "none";
@@ -90,12 +114,7 @@ export function initializeProgressTooltips(input: {
 
             customTooltip.textContent = timeStr;
             customTooltip.style.display = "block";
-
-            const playerRect = playerElement?.getBoundingClientRect();
-            if (playerRect) {
-                const relX = mouseX - playerRect.left;
-                customTooltip.style.left = `${relX}px`;
-            }
+            positionTooltipAboveSeekbar(customTooltip, mouseX);
         });
 
         progressControl.addEventListener("mouseleave", () => {
@@ -103,4 +122,3 @@ export function initializeProgressTooltips(input: {
         });
     }
 }
-
