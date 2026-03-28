@@ -65,6 +65,74 @@ export async function renderScoreboardTeam(params: {
     if (!isRenderValid()) return null;
 
     const teamDiv = createEl("div", {}, { class: `team team-${teamId}` });
+    let draggedRow: HTMLElement | null = null;
+    let hoveredRow: HTMLElement | null = null;
+    let startX = 0;
+    let startY = 0;
+    let draggingActive = false;
+
+    const DRAG_START_THRESHOLD_PX = 4;
+    const isSameTeamRow = (row: HTMLElement | null): row is HTMLElement =>
+        !!row && row.classList.contains("player-row") && row.parentElement === teamDiv;
+    const clearDropIndicators = () => {
+        teamDiv.querySelectorAll(".dnd-drop-target").forEach((el) => {
+            el.classList.remove("dnd-drop-target");
+        });
+    };
+    const clearDraggingState = () => {
+        if (draggedRow) {
+            draggedRow.classList.remove("dragging");
+        }
+        clearDropIndicators();
+        draggedRow = null;
+        hoveredRow = null;
+        draggingActive = false;
+    };
+    const swapRows = (rowA: HTMLElement, rowB: HTMLElement) => {
+        if (rowA === rowB) return;
+        const parent = rowA.parentNode;
+        if (!parent || parent !== rowB.parentNode) return;
+
+        const placeholder = document.createComment("swap-placeholder");
+        parent.replaceChild(placeholder, rowA);
+        parent.replaceChild(rowA, rowB);
+        parent.replaceChild(rowB, placeholder);
+    };
+    const onPointerMove = (e: PointerEvent) => {
+        if (!isSameTeamRow(draggedRow)) return;
+
+        const movedEnough = Math.abs(e.clientX - startX) > DRAG_START_THRESHOLD_PX
+            || Math.abs(e.clientY - startY) > DRAG_START_THRESHOLD_PX;
+        if (!draggingActive && !movedEnough) return;
+
+        draggingActive = true;
+        draggedRow.classList.add("dragging");
+
+        clearDropIndicators();
+        hoveredRow = null;
+
+        const target = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest(".player-row") as
+            | HTMLElement
+            | null;
+        if (!isSameTeamRow(target) || target === draggedRow) {
+            return;
+        }
+
+        hoveredRow = target;
+        target.classList.add("dnd-drop-target");
+        e.preventDefault();
+    };
+    const onPointerUp = () => {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+
+        if (isSameTeamRow(draggedRow) && isSameTeamRow(hoveredRow) && hoveredRow !== draggedRow) {
+            swapRows(draggedRow, hoveredRow);
+        }
+
+        clearDraggingState();
+    };
 
     const rowPromises = participants.slice(0, 5).map(async (p) => {
         const cDragonUrl = `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/${p.championId}.png`;
@@ -434,6 +502,24 @@ export async function renderScoreboardTeam(params: {
 
         row.style.display = "flex";
         row.style.flexDirection = "row";
+
+        row.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0) return;
+            if (!isSameTeamRow(row)) return;
+            // Ignore resize handle drags and right-side controls.
+            const target = e.target as HTMLElement | null;
+            if (target?.closest(".scoreboard-resize-handle")) return;
+
+            draggedRow = row;
+            hoveredRow = null;
+            draggingActive = false;
+            startX = e.clientX;
+            startY = e.clientY;
+
+            window.addEventListener("pointermove", onPointerMove);
+            window.addEventListener("pointerup", onPointerUp);
+            window.addEventListener("pointercancel", onPointerUp);
+        });
 
         const metaDiv = createEl("div", {}, { class: "player-meta" }) as HTMLElement;
 
