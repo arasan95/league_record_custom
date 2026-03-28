@@ -7,6 +7,36 @@ import { applyTimelineCombatSummaryToRefs, buildTimelineCombatSummary } from "./
 import { getItemIconUrl, getItemPrice } from "../datadragon";
 import type { ScoreboardRefsMap } from "./scoreboard_team_usecase";
 
+function buildPairDiffsFromVisibleRowOrder(
+    goldDiffRefs: HTMLElement[],
+    itemGoldMap: Map<number, number>,
+): Array<number | null> | null {
+    const firstDiffRow = goldDiffRefs[0];
+    if (!firstDiffRow) return null;
+
+    const scoreboardEl = firstDiffRow.closest(".scoreboard");
+    if (!scoreboardEl) return null;
+
+    const blueRows = Array.from(scoreboardEl.querySelectorAll(".team-100 .player-row")) as HTMLElement[];
+    const redRows = Array.from(scoreboardEl.querySelectorAll(".team-200 .player-row")) as HTMLElement[];
+    if (blueRows.length < 5 || redRows.length < 5) return null;
+
+    const pairDiffs: Array<number | null> = [];
+    for (let i = 0; i < 5; i++) {
+        const leftPid = Number(blueRows[i].dataset.pid || "");
+        const rightPid = Number(redRows[i].dataset.pid || "");
+        if (!Number.isFinite(leftPid) || !Number.isFinite(rightPid)) {
+            pairDiffs.push(null);
+            continue;
+        }
+
+        const leftGold = itemGoldMap.get(leftPid) || 0;
+        const rightGold = itemGoldMap.get(rightPid) || 0;
+        pairDiffs.push(leftGold - rightGold);
+    }
+    return pairDiffs;
+}
+
 export function applyScoreboardLiveSnapshot(params: {
     timeline: { getStateAt: (participantId: number, timestampMs: number) => any };
     playerCurrentTimeSec: number;
@@ -98,7 +128,8 @@ export function applyScoreboardLiveSnapshot(params: {
             });
 
             const { team100Total: t100Total, team200Total: t200Total } = buildTeamItemGoldTotals(participants, itemGoldMap);
-            const pairDiffs = buildPairDiffs(participants, itemGoldMap);
+            const pairDiffs =
+                buildPairDiffsFromVisibleRowOrder(goldDiffRefs, itemGoldMap) ?? buildPairDiffs(participants, itemGoldMap);
 
             for (let i = 0; i < 5; i++) {
                 const row = goldDiffRefs[i];

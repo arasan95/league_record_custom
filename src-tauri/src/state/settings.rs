@@ -345,16 +345,18 @@ const DEFAULT_MAX_RECORDINGS_SIZE_GB: Option<u64> = None;
 const DEFAULT_CONFIRM_DELETE: bool = true;
 const DEFAULT_GAME_MODES: Option<Vec<String>> = None;
 const DEFAULT_AUTOPLAY_VIDEO: bool = false;
-const DEFAULT_AUTO_STOP_PLAYBACK: bool = false;
-const DEFAULT_AUTO_SELECT_RECORDING: bool = false;
+const DEFAULT_AUTO_STOP_PLAYBACK: bool = true;
+const DEFAULT_AUTO_SELECT_RECORDING: bool = true;
 const DEFAULT_AUTO_POPUP_ON_END: bool = false;
 const DEFAULT_FFMPEG_PATH: Option<String> = None;
-const DEFAULT_MATCH_HISTORY_BASE_URL: Option<String> = None;
+const DEFAULT_MATCH_HISTORY_BASE_URL: &str = "https://www.deeplol.gg/summoner/jp/{q}";
+const DEFAULT_CHAMPION_WIKI_BASE_URL: &str = "https://www.loljp-wiki.jp/wiki/?Champion%2F{nameEsc}";
 const DEFAULT_CHAMPION_MATCHUP_URL: &str = "https://dpm.lol/champions/{My}/matchups?opponent={Opponent}";
-const DEFAULT_CHAMPION_BUILD_URL: &str = "https://dpm.lol/champions/{q}/build";
+const DEFAULT_CHAMPION_BUILD_URL: &str = "https://lolalytics.com/lol/{q}/build/";
 const DEFAULT_CHECK_UPDATES_ON_STARTUP: bool = true;
-const DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE: bool = false;
+const DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE: bool = true;
 const DEFAULT_AUTO_DELETE_CLIPS: bool = false;
+const DEFAULT_PLAY_RECORDING_SOUNDS: bool = true;
 
 #[inline]
 fn default_recordings_folder() -> PathBuf {
@@ -395,7 +397,7 @@ impl Default for Settings {
             confirm_delete: DEFAULT_CONFIRM_DELETE,
             hightlight_hotkey: None,
             start_recording_hotkey: Some("F9".to_string()),
-            stop_recording_hotkey: Some("F12".to_string()),
+            stop_recording_hotkey: Some("F10".to_string()),
             game_modes: DEFAULT_GAME_MODES,
             autoplay_video: DEFAULT_AUTOPLAY_VIDEO,
             auto_stop_playback: DEFAULT_AUTO_STOP_PLAYBACK,
@@ -403,12 +405,12 @@ impl Default for Settings {
             auto_popup_on_end: DEFAULT_AUTO_POPUP_ON_END,
             ffmpeg_path: DEFAULT_FFMPEG_PATH,
             developer_mode: false,
-            match_history_base_url: DEFAULT_MATCH_HISTORY_BASE_URL,
+            match_history_base_url: Some(DEFAULT_MATCH_HISTORY_BASE_URL.to_string()),
             scroll_frame_step_modifier: Some("Shift".to_string()),
             scoreboard_scale: None,
-            play_recording_sounds: false,
+            play_recording_sounds: DEFAULT_PLAY_RECORDING_SOUNDS,
             language: "en".to_string(),
-            champion_wiki_base_url: Some("https://wiki.leagueoflegends.com/en-us/{q}".to_string()),
+            champion_wiki_base_url: Some(DEFAULT_CHAMPION_WIKI_BASE_URL.to_string()),
             champion_matchup_url: Some(DEFAULT_CHAMPION_MATCHUP_URL.to_string()),
             champion_build_url: Some(DEFAULT_CHAMPION_BUILD_URL.to_string()),
             check_updates_on_startup: DEFAULT_CHECK_UPDATES_ON_STARTUP,
@@ -511,7 +513,8 @@ impl<'de> Deserialize<'de> for Settings {
                             settings.developer_mode = map.next_value().unwrap_or(false);
                         }
                         "matchHistoryBaseUrl" => {
-                            settings.match_history_base_url = map.next_value().ok();
+                            settings.match_history_base_url =
+                                map.next_value().unwrap_or(Some(DEFAULT_MATCH_HISTORY_BASE_URL.to_string()));
                         }
                         "scrollFrameStepModifier" => {
                             settings.scroll_frame_step_modifier = map.next_value().ok();
@@ -520,20 +523,23 @@ impl<'de> Deserialize<'de> for Settings {
                             settings.scoreboard_scale = map.next_value().ok();
                         }
                         "playRecordingSounds" => {
-                            settings.play_recording_sounds = map.next_value().unwrap_or(false);
+                            settings.play_recording_sounds =
+                                map.next_value().unwrap_or(DEFAULT_PLAY_RECORDING_SOUNDS);
                         }
                         "language" => {
                             settings.language = map.next_value().unwrap_or_else(|_| "en".to_string());
                         }
                         "championWikiBaseUrl" => {
-                            settings.champion_wiki_base_url = map.next_value().ok();
-                            // Using .ok() handles Option<String> nicely
+                            settings.champion_wiki_base_url =
+                                map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_WIKI_BASE_URL.to_string()));
                         }
                         "championMatchupUrl" => {
-                            settings.champion_matchup_url = map.next_value().ok();
+                            settings.champion_matchup_url =
+                                map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_MATCHUP_URL.to_string()));
                         }
                         "championBuildUrl" => {
-                            settings.champion_build_url = map.next_value().ok();
+                            settings.champion_build_url =
+                                map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_BUILD_URL.to_string()));
                         }
                         "checkUpdatesOnStartup" => {
                             settings.check_updates_on_startup =

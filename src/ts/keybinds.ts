@@ -135,8 +135,8 @@ export type MouseConfig = {
 };
 
 export const DEFAULT_MOUSE_CONFIG: MouseConfig = {
-    wheelAction: "none",
-    middleClickAction: "none",
+    wheelAction: "speed",
+    middleClickAction: "resetSpeed",
     sideButtonSeek: true
 };
 
