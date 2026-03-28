@@ -11,7 +11,7 @@ body {
     --lr-control-bar-height: 92px;
     --lr-team-bar-height: 30px;
     --lr-seekbar-gap: 4px;
-    --lr-self-bar-height: 34px;
+    --lr-self-bar-height: 30px;
     --lr-seekbar-height: calc(var(--lr-team-bar-height) + var(--lr-seekbar-gap) + var(--lr-self-bar-height));
     --lr-lane-blue-height: calc(var(--lr-team-bar-height) / 2);
     --lr-lane-red-height: calc(var(--lr-team-bar-height) / 2);
