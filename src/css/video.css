@@ -624,9 +624,9 @@ body:has(.vjs-fullscreen) {
     transform: translateX(-50%) scaleX(0.5);
     transform-origin: center bottom;
 }
-.vjs-ruler-tick.large { height: 19% !important; }
-.vjs-ruler-tick.medium { height: 13% !important; }
-.vjs-ruler-tick.small { height: 7% !important; }
+.vjs-ruler-tick.large { height: 16% !important; }
+.vjs-ruler-tick.medium { height: 8% !important; }
+.vjs-ruler-tick.small { height: 4% !important; }
 
 /* Ruler Numbers */
 .vjs-ruler-number {

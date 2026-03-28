@@ -326,7 +326,6 @@ pub struct Settings {
     pub scroll_frame_step_modifier: Option<String>,
     pub scoreboard_scale: Option<f64>,
     pub play_recording_sounds: bool,
-    pub auto_accept_game: bool,
     pub language: String,
     pub champion_wiki_base_url: Option<String>,
     pub champion_matchup_url: Option<String>,
@@ -351,7 +350,6 @@ const DEFAULT_AUTO_SELECT_RECORDING: bool = false;
 const DEFAULT_AUTO_POPUP_ON_END: bool = false;
 const DEFAULT_FFMPEG_PATH: Option<String> = None;
 const DEFAULT_MATCH_HISTORY_BASE_URL: Option<String> = None;
-const DEFAULT_AUTO_ACCEPT_GAME: bool = false;
 const DEFAULT_CHAMPION_MATCHUP_URL: &str = "https://dpm.lol/champions/{My}/matchups?opponent={Opponent}";
 const DEFAULT_CHAMPION_BUILD_URL: &str = "https://dpm.lol/champions/{q}/build";
 const DEFAULT_CHECK_UPDATES_ON_STARTUP: bool = true;
@@ -409,7 +407,6 @@ impl Default for Settings {
             scroll_frame_step_modifier: Some("Shift".to_string()),
             scoreboard_scale: None,
             play_recording_sounds: false,
-            auto_accept_game: DEFAULT_AUTO_ACCEPT_GAME,
             language: "en".to_string(),
             champion_wiki_base_url: Some("https://wiki.leagueoflegends.com/en-us/{q}".to_string()),
             champion_matchup_url: Some(DEFAULT_CHAMPION_MATCHUP_URL.to_string()),
@@ -524,9 +521,6 @@ impl<'de> Deserialize<'de> for Settings {
                         }
                         "playRecordingSounds" => {
                             settings.play_recording_sounds = map.next_value().unwrap_or(false);
-                        }
-                        "autoAcceptGame" => {
-                            settings.auto_accept_game = map.next_value().unwrap_or(DEFAULT_AUTO_ACCEPT_GAME);
                         }
                         "language" => {
                             settings.language = map.next_value().unwrap_or_else(|_| "en".to_string());

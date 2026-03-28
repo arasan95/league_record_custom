@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 pub struct TrayState {
     update_available: AtomicBool,
     recording: AtomicBool,
+    preparing: AtomicBool,
 }
 
 impl TrayState {
@@ -21,5 +22,13 @@ impl TrayState {
 
     pub fn recording(&self) -> bool {
         self.recording.load(Ordering::Acquire)
+    }
+
+    pub fn set_preparing(&self, preparing: bool) {
+        self.preparing.store(preparing, Ordering::Release);
+    }
+
+    pub fn preparing(&self) -> bool {
+        self.preparing.load(Ordering::Acquire)
     }
 }
