@@ -52,6 +52,7 @@ export function reloadKeybinds() {
 
 let currentEvents: RecordingEvents | null = null;
 let highlightEvents: HighlightEvents | null = null;
+let preferredActiveVideoId: string | null = null;
 const metadataRetryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 let manualStartPending = false;
 let manualStartPendingTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -95,7 +96,7 @@ function scheduleMetadataRetry(videoId: string, attemptsLeft: number = 4, delayM
         metadataRetryTimeouts.delete(key);
 
         // Only retry for the currently selected recording.
-        const activeVideoId = ui.getActiveVideoId();
+        const activeVideoId = preferredActiveVideoId ?? ui.getActiveVideoId();
         if (!activeVideoId || !videoIdsMatch(activeVideoId, key)) {
             return;
         }
@@ -467,7 +468,7 @@ async function main() {
         commands.getMarkerFlags().then((flags) => ui.setMarkerFlags(flags)),
     );
     listenerManager.listen_app("MetadataChanged", async ({ payload }) => {
-        const activeVideoId = ui.getActiveVideoId();
+        const activeVideoId = preferredActiveVideoId ?? ui.getActiveVideoId();
 
         // Resolve payload IDs (which may be filename-only) to actual sidebar IDs (absolute path/base id).
         const recordings = await commands.getRecordingsList();
@@ -724,7 +725,7 @@ async function main() {
 
 // use this function to update the sidebar
 async function updateSidebar(forceUpdateIds: string[] = []): Promise<Recording[]> {
-    return refreshSidebar({
+    const recordings = await refreshSidebar({
         ui,
         forceUpdateIds,
         getRecordingsList: commands.getRecordingsList,
@@ -735,6 +736,14 @@ async function updateSidebar(forceUpdateIds: string[] = []): Promise<Recording[]
         showDeleteModal,
         handleDeleteVideoOnly,
     });
+    if (preferredActiveVideoId) {
+        const matched = recordings.find((r) => videoIdsMatch(r.videoId, preferredActiveVideoId!));
+        if (matched) {
+            preferredActiveVideoId = matched.videoId;
+            ui.setActiveVideoId(matched.videoId);
+        }
+    }
+    return recordings;
 }
 
 function checkLatestAndRetry(recordings: Recording[]) {
@@ -758,17 +767,20 @@ async function retrySidebarUpdate(attemptsLeft: number, targetId: string) {
 
 // use this function to set the video (null => no video)
 async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
-    if (videoId === ui.getActiveVideoId()) {
-        return;
-    }
-
     if (videoId === null) {
+        preferredActiveVideoId = null;
+        ui.setActiveVideoId(null);
         player.src("");
     } else {
         const settings = await commands.getSettings();
         
         // Strip out existing extensions (.mp4, .json, .webm) if present to prevent '.mp4.mp4' duplication
         const cleanVideoId = videoId.replace(/\.(mp4|json|webm)$/i, "");
+
+        if (preferredActiveVideoId && videoIdsMatch(preferredActiveVideoId, cleanVideoId)) {
+            return;
+        }
+        preferredActiveVideoId = cleanVideoId;
 
         // VideoId is now an absolute path (base path without extension), so we use it directly
         ui.setActiveVideoId(cleanVideoId);
