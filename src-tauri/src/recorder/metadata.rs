@@ -239,10 +239,13 @@ pub async fn process_data_with_retry(
     live_events: Vec<LiveGameEvent>,
 ) -> Result<GameMetadata> {
     let lcu_rest_client = LcuRestClient::from(credentials);
+    const MAX_ATTEMPTS: usize = 8;
+    const MAX_RETRY_DELAY: Duration = Duration::from_secs(3);
 
     let mut player_info = None;
     let mut timeline_data = None;
-    for _ in 0..60 {
+    let mut retry_delay = Duration::from_millis(500);
+    for attempt in 0..MAX_ATTEMPTS {
         player_info = try_join!(
             lcu_rest_client.get::<Player>("/lol-summoner/v1/current-summoner"),
             lcu_rest_client.get::<Game>(format!("/lol-match-history/v1/games/{}", match_id.game_id)),
@@ -268,9 +271,12 @@ pub async fn process_data_with_retry(
             }
         }
 
-        let cancelled = cancellable!(sleep(Duration::from_secs(1)), cancel_token, ());
-        if cancelled {
-            bail!("task cancelled (process_data)");
+        if attempt + 1 < MAX_ATTEMPTS {
+            let cancelled = cancellable!(sleep(retry_delay), cancel_token, ());
+            if cancelled {
+                bail!("task cancelled (process_data)");
+            }
+            retry_delay = std::cmp::min(retry_delay.saturating_mul(2), MAX_RETRY_DELAY);
         }
     }
 

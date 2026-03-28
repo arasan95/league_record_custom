@@ -18,6 +18,22 @@ export type TeamObjectiveCounts = {
 const SUPPORT_ITEMS = [3865, 3866, 3867, 3869, 3870, 3871, 3876, 3877];
 
 function isStandardMode(queueName: string, queueId: number): boolean {
+    // Prefer Queue ID over localized queue names.
+    // This avoids lane-sort regressions when queue name is mojibake or unavailable.
+    const STANDARD_QUEUE_IDS = new Set([
+        400, // Normal Draft
+        430, // Normal Blind
+        420, // Ranked Solo
+        440, // Ranked Flex
+        490, // Quickplay
+        480, // Swiftplay
+        700, // Clash
+        830, // Co-op vs AI Intro
+        840, // Co-op vs AI Beginner
+        850, // Co-op vs AI Intermediate
+    ]);
+    if (STANDARD_QUEUE_IDS.has(queueId)) return true;
+
     const qLower = queueName.toLowerCase();
     return (
         qLower.includes("ranked") ||
@@ -26,8 +42,7 @@ function isStandardMode(queueName: string, queueId: number): boolean {
         qLower.includes("draft") ||
         qLower.includes("blind") ||
         qLower.includes("swift") ||
-        qLower.includes("swiftplay") ||
-        queueId === 480
+        qLower.includes("swiftplay")
     );
 }
 
@@ -68,10 +83,21 @@ export function sortParticipantsForScoreboard(
     queueName: string,
     queueId: number,
 ): Participant[] {
+    const standardMode = isStandardMode(queueName, queueId);
     const slots: { [key: number]: Participant } = {};
     const remaining: Participant[] = [];
 
     for (const p of team) {
+        // In standard SR-like modes, native participant order is more stable than heuristics.
+        // Keep strict native ordering first, then apply role heuristics only for unresolved slots.
+        if (standardMode) {
+            const nativeSlot = ((p.participantId - 1) % 5) + 1;
+            if (!slots[nativeSlot]) {
+                slots[nativeSlot] = p;
+                continue;
+            }
+        }
+
         if (hasSmite(p)) {
             if (!slots[2]) slots[2] = p;
             else remaining.push(p);
@@ -83,7 +109,7 @@ export function sortParticipantsForScoreboard(
         }
     }
 
-    if (isStandardMode(queueName, queueId)) {
+    if (standardMode) {
         const currentRemaining = [...remaining];
         currentRemaining.forEach((p) => {
             const nativeSlot = ((p.participantId - 1) % 5) + 1;

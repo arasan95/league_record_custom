@@ -723,3 +723,17 @@
     font-weight: normal;
     text-shadow: 1px 1px 1px #000;
 }
+
+.player-row {
+    cursor: grab;
+}
+
+.player-row.dragging {
+    opacity: 0.6;
+    cursor: grabbing;
+}
+
+.player-row.dnd-drop-target {
+    box-shadow: 0 0 0 2px #4fb6ff inset, 0 0 8px rgba(79, 182, 255, 0.45);
+    background-color: rgba(79, 182, 255, 0.12);
+}
