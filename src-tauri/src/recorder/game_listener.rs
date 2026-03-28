@@ -88,6 +88,7 @@ pub struct GameListener {
     missing_window_ticks: u8,
     latest_session_game_id: Option<GameId>,
     end_of_game_since: Option<Instant>,
+    end_of_game_finalize_requested: bool,
 }
 
 impl GameListener {
@@ -105,7 +106,36 @@ impl GameListener {
             missing_window_ticks: 0,
             latest_session_game_id: None,
             end_of_game_since: None,
+            end_of_game_finalize_requested: false,
         }
+    }
+
+    async fn maybe_trigger_end_of_game_finalize(&mut self) {
+        if !self.end_of_game_finalize_requested {
+            return;
+        }
+        self.end_of_game_finalize_requested = false;
+        if !matches!(self.state, State::EndOfGame(..)) {
+            return;
+        }
+
+        log::info!("EndOfGame entered. Triggering immediate metadata finalization.");
+        self.state_transition(
+            SubscriptionResponse::Session(SessionEventData {
+                phase: GamePhase::GameStart,
+                game_data: GameData {
+                    game_id: 0,
+                    queue: Queue {
+                        id: 0,
+                        is_ranked: false,
+                        name: "".into(),
+                    },
+                    game_mode: None,
+                },
+            }),
+            false,
+        )
+        .await;
     }
 
     async fn run_info_poller(
@@ -280,10 +310,21 @@ impl GameListener {
                     self.latest_session_game_id = Some(init_event_data.game_data.game_id);
                 }
                 self.state_transition(SubscriptionResponse::Session(init_event_data), false)
-                    .await
+                    .await;
+                self.maybe_trigger_end_of_game_finalize().await;
             }
             Err(e) => log::info!("no initial event-data: {e}"),
         }
+
+        // Prime manual recorder once at startup so first manual hotkey press can start faster.
+        let prewarm_ctx = self
+            .ctx
+            .game_ctx(self.latest_session_game_id.unwrap_or_else(|| Utc::now().timestamp_millis()));
+        async_runtime::spawn(async move {
+            if let Err(e) = RecordingTask::prewarm(prewarm_ctx).await {
+                log::warn!("startup manual prewarm failed: {e}");
+            }
+        });
 
         let mut health_tick = tokio::time::interval(Duration::from_secs(1));
         loop {
@@ -301,7 +342,8 @@ impl GameListener {
                                     self.latest_session_game_id = Some(session.game_data.game_id);
                                 }
                             }
-                            self.state_transition(event_data, false).await
+                            self.state_transition(event_data, false).await;
+                            self.maybe_trigger_end_of_game_finalize().await;
                         }
                         Err(e) => {
                             log::error!("failed to deserialize event: {e}");
@@ -324,6 +366,7 @@ impl GameListener {
                             game_mode: None,
                         },
                     }), true).await;
+                    self.maybe_trigger_end_of_game_finalize().await;
                 }
                 Ok(_) = self.manual_start_rx.recv() => {
                     log::info!("Manual start triggered via hotkey");
@@ -399,6 +442,7 @@ impl GameListener {
                                         game_mode: None,
                                     },
                                 }), false).await;
+                                self.maybe_trigger_end_of_game_finalize().await;
                             }
                         } else {
                             self.missing_window_ticks = 0;
@@ -422,6 +466,7 @@ impl GameListener {
                                         game_mode: None,
                                     },
                                 }), false).await;
+                                self.maybe_trigger_end_of_game_finalize().await;
                             }
                         }
                     }
@@ -955,15 +1000,16 @@ impl GameListener {
             },
         };
 
-        match self.state {
-            State::EndOfGame(..) => {
-                if self.end_of_game_since.is_none() {
-                    self.end_of_game_since = Some(Instant::now());
-                }
-            }
-            _ => {
-                self.end_of_game_since = None;
-            }
+        let entered_end_of_game_now = matches!(self.state, State::EndOfGame(..)) && self.end_of_game_since.is_none();
+        if entered_end_of_game_now {
+            self.end_of_game_since = Some(Instant::now());
+            // Root-path fix: request immediate finalization without depending on extra LCU events.
+            // This is consumed in run() right after the current transition returns.
+            self.end_of_game_finalize_requested = true;
+        }
+
+        if !matches!(self.state, State::EndOfGame(..)) {
+            self.end_of_game_since = None;
         }
 
         log::info!("recorder state: {}", self.state);

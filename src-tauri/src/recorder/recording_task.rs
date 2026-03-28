@@ -1,3 +1,4 @@
+use std::sync::{Mutex as StdMutex, OnceLock};
 use std::{fmt::Display, path::PathBuf, time::Duration};
 
 use anyhow::{bail, Result};
@@ -48,20 +49,60 @@ impl Display for Metadata {
 pub struct RecordingTask {
     join_handle: JoinHandle<Result<(Recorder, Metadata)>>,
     pub ctx: GameCtx,
+    manual_mode: bool,
 }
 
 impl RecordingTask {
+    fn manual_warm_slot() -> &'static StdMutex<Option<Recorder>> {
+        static SLOT: OnceLock<StdMutex<Option<Recorder>>> = OnceLock::new();
+        SLOT.get_or_init(|| StdMutex::new(None))
+    }
+
+    fn take_manual_warm_recorder() -> Option<Recorder> {
+        Self::manual_warm_slot().lock().ok()?.take()
+    }
+
+    fn store_manual_warm_recorder(recorder: Recorder) {
+        if let Ok(mut slot) = Self::manual_warm_slot().lock() {
+            if slot.is_none() {
+                *slot = Some(recorder);
+                return;
+            }
+        }
+        // Slot already occupied (or lock poisoned): do not leak process.
+        let _ = recorder.shutdown();
+    }
+
+    fn has_manual_warm_recorder() -> bool {
+        Self::manual_warm_slot()
+            .lock()
+            .map(|slot| slot.is_some())
+            .unwrap_or(false)
+    }
+
     pub fn new(ctx: GameCtx) -> Self {
         let join_handle = async_runtime::spawn(Self::record(ctx.clone(), false));
-        Self { join_handle, ctx }
+        Self {
+            join_handle,
+            ctx,
+            manual_mode: false,
+        }
     }
 
     pub fn new_manual(ctx: GameCtx) -> Self {
         let join_handle = async_runtime::spawn(Self::record(ctx.clone(), true));
-        Self { join_handle, ctx }
+        Self {
+            join_handle,
+            ctx,
+            manual_mode: true,
+        }
     }
 
     pub async fn prewarm(ctx: GameCtx) -> Result<()> {
+        if Self::has_manual_warm_recorder() {
+            return Ok(());
+        }
+
         let started = std::time::Instant::now();
         let mode_label = "manual-prewarm";
         let (recorder, output_filepath) = Self::setup_recorder(&ctx, true).await?;
@@ -70,8 +111,9 @@ impl RecordingTask {
             started.elapsed().as_secs_f64()
         );
 
-        let shutdown = recorder.shutdown();
-        log::info!("[record-start][{mode_label}] recorder.shutdown: {shutdown:?}");
+        // Keep the initialized recorder process for instant manual starts.
+        Self::store_manual_warm_recorder(recorder);
+        log::info!("[record-start][{mode_label}] recorder cached for manual reuse");
 
         if output_filepath.exists() {
             if let Err(e) = std::fs::remove_file(&output_filepath) {
@@ -92,6 +134,7 @@ impl RecordingTask {
 
         match result {
             Ok((mut recorder, metadata)) => {
+                let manual_mode = self.manual_mode;
                 let ctx = self.ctx;
                 async_runtime::spawn_blocking(move || {
                     log::debug!("Stopping recorder process...");
@@ -102,8 +145,13 @@ impl RecordingTask {
                     ctx.app_handle.set_tray_menu_preparing(false);
 
                     let stopped = recorder.stop_recording();
-                    let shutdown = recorder.shutdown();
-                    log::info!("stopping recording: stopped={stopped:?}, shutdown={shutdown:?}");
+                    if manual_mode {
+                        log::info!("stopping recording: stopped={stopped:?}, recorder cached for manual reuse");
+                        RecordingTask::store_manual_warm_recorder(recorder);
+                    } else {
+                        let shutdown = recorder.shutdown();
+                        log::info!("stopping recording: stopped={stopped:?}, shutdown={shutdown:?}");
+                    }
 
                     ctx.app_handle.cleanup_recordings();
 
@@ -276,15 +324,32 @@ impl RecordingTask {
         settings.set_rate_control(RateControl::CQP(settings_state.get_encoding_quality()));
         settings.set_audio_source(settings_state.get_audio_source());
 
-        let mut recorder = Recorder::new_with_paths(
-            ctx.app_handle
-                .path()
-                .resolve("libobs/extprocess_recorder.exe", BaseDirectory::Executable)
-                .ok(),
-            None,
-            None,
-            None,
-        )?;
+        let mut recorder = if manual_mode {
+            if let Some(rec) = Self::take_manual_warm_recorder() {
+                log::info!("Using prewarmed manual recorder");
+                rec
+            } else {
+                Recorder::new_with_paths(
+                    ctx.app_handle
+                        .path()
+                        .resolve("libobs/extprocess_recorder.exe", BaseDirectory::Executable)
+                        .ok(),
+                    None,
+                    None,
+                    None,
+                )?
+            }
+        } else {
+            Recorder::new_with_paths(
+                ctx.app_handle
+                    .path()
+                    .resolve("libobs/extprocess_recorder.exe", BaseDirectory::Executable)
+                    .ok(),
+                None,
+                None,
+                None,
+            )?
+        };
 
         log::info!("recorder settings: {settings:?}");
         recorder.configure(&settings)?;
