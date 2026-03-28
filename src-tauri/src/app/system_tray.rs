@@ -14,6 +14,51 @@ pub trait SystemTrayManager {
     fn set_tray_menu_update_available(&self, update_button: bool);
 
     fn set_tray_menu_recording(&self, recording: bool);
+    fn set_tray_menu_preparing(&self, preparing: bool);
+}
+
+fn recording_icon_filled_rgba() -> (Vec<u8>, u32, u32) {
+    let width = 32;
+    let height = 32;
+    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+    let center = 15.5f32;
+    let radius_sq = 15.0f32 * 15.0f32;
+
+    for y in 0..height {
+        for x in 0..width {
+            let dx = x as f32 - center;
+            let dy = y as f32 - center;
+            if dx * dx + dy * dy <= radius_sq {
+                rgba.extend_from_slice(&[255, 0, 0, 255]);
+            } else {
+                rgba.extend_from_slice(&[0, 0, 0, 0]);
+            }
+        }
+    }
+    (rgba, width, height)
+}
+
+fn recording_icon_outline_rgba() -> (Vec<u8>, u32, u32) {
+    let width = 32;
+    let height = 32;
+    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+    let center = 15.5f32;
+    let outer = 15.0f32 * 15.0f32;
+    let inner = 11.0f32 * 11.0f32;
+
+    for y in 0..height {
+        for x in 0..width {
+            let dx = x as f32 - center;
+            let dy = y as f32 - center;
+            let d = dx * dx + dy * dy;
+            if d <= outer && d >= inner {
+                rgba.extend_from_slice(&[255, 0, 0, 255]);
+            } else {
+                rgba.extend_from_slice(&[0, 0, 0, 0]);
+            }
+        }
+    }
+    (rgba, width, height)
 }
 
 fn handle_system_tray_event(tray_icon: &TrayIcon, event: TrayIconEvent) {
@@ -77,28 +122,15 @@ impl SystemTrayManager for AppHandle {
 
     fn set_tray_menu_recording(&self, recording: bool) {
         self.state::<TrayState>().set_recording(recording);
+        if recording {
+            self.state::<TrayState>().set_preparing(false);
+        }
 
         let tray = self.tray_by_id(constants::TRAY_ID).unwrap();
         tray.set_menu(Some(create_tray_menu(self))).unwrap();
 
         if recording {
-            let width = 32;
-            let height = 32;
-            let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-            let center = 15.5f32;
-            let radius_sq = 15.0f32 * 15.0f32;
-
-            for y in 0..height {
-                for x in 0..width {
-                    let dx = x as f32 - center;
-                    let dy = y as f32 - center;
-                    if dx * dx + dy * dy <= radius_sq {
-                        rgba.extend_from_slice(&[255, 0, 0, 255]);
-                    } else {
-                        rgba.extend_from_slice(&[0, 0, 0, 0]);
-                    }
-                }
-            }
+            let (rgba, width, height) = recording_icon_filled_rgba();
             let icon = tauri::image::Image::new(&rgba, width, height);
             if let Err(e) = tray.set_icon(Some(icon)) {
                 log::error!("failed to set recording icon: {e}");
@@ -109,11 +141,36 @@ impl SystemTrayManager for AppHandle {
             }
         }
     }
+
+    fn set_tray_menu_preparing(&self, preparing: bool) {
+        self.state::<TrayState>().set_preparing(preparing);
+        if preparing {
+            self.state::<TrayState>().set_recording(false);
+        }
+
+        let tray = self.tray_by_id(constants::TRAY_ID).unwrap();
+        tray.set_menu(Some(create_tray_menu(self))).unwrap();
+
+        if preparing {
+            let (rgba, width, height) = recording_icon_outline_rgba();
+            let icon = tauri::image::Image::new(&rgba, width, height);
+            if let Err(e) = tray.set_icon(Some(icon)) {
+                log::error!("failed to set preparing icon: {e}");
+            }
+        } else if !self.state::<TrayState>().recording() {
+            if let Some(icon) = self.default_window_icon() {
+                if let Err(e) = tray.set_icon(Some(icon.clone())) {
+                    log::error!("failed to reset tray icon: {e}");
+                }
+            }
+        }
+    }
 }
 
 fn create_tray_menu(app_handle: &AppHandle) -> Menu<Wry> {
     let tray_state = app_handle.state::<TrayState>();
     let recording = tray_state.recording();
+    let preparing = tray_state.preparing();
     let update_available = tray_state.update_available();
 
     let settings = MenuItemBuilder::new("Settings")
@@ -171,11 +228,23 @@ fn create_tray_menu(app_handle: &AppHandle) -> Menu<Wry> {
     recording_item
         .as_check_menuitem()
         .unwrap()
-        .set_checked(recording)
+        .set_checked(recording || preparing)
         .unwrap();
     recording_item.as_check_menuitem().unwrap().set_enabled(false).unwrap();
-    tray_menu.get(menu_item::START_RECORDING).unwrap().as_menuitem().unwrap().set_enabled(!recording).unwrap();
-    tray_menu.get(menu_item::STOP_RECORDING).unwrap().as_menuitem().unwrap().set_enabled(recording).unwrap();
+    tray_menu
+        .get(menu_item::START_RECORDING)
+        .unwrap()
+        .as_menuitem()
+        .unwrap()
+        .set_enabled(!(recording || preparing))
+        .unwrap();
+    tray_menu
+        .get(menu_item::STOP_RECORDING)
+        .unwrap()
+        .as_menuitem()
+        .unwrap()
+        .set_enabled(recording || preparing)
+        .unwrap();
 
     tray_menu
 }

@@ -61,6 +61,30 @@ impl RecordingTask {
         Self { join_handle, ctx }
     }
 
+    pub async fn prewarm(ctx: GameCtx) -> Result<()> {
+        let started = std::time::Instant::now();
+        let mode_label = "manual-prewarm";
+        let (recorder, output_filepath) = Self::setup_recorder(&ctx, true).await?;
+        log::info!(
+            "[record-start][{mode_label}] setup_recorder completed in {:.3}s",
+            started.elapsed().as_secs_f64()
+        );
+
+        let shutdown = recorder.shutdown();
+        log::info!("[record-start][{mode_label}] recorder.shutdown: {shutdown:?}");
+
+        if output_filepath.exists() {
+            if let Err(e) = std::fs::remove_file(&output_filepath) {
+                log::warn!(
+                    "[record-start][{mode_label}] failed to remove warmup output '{}': {e}",
+                    output_filepath.display()
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn stop(self) -> Result<Metadata> {
         log::debug!("recording_task::stop called");
         self.ctx.cancel_token.cancel();
@@ -75,6 +99,7 @@ impl RecordingTask {
                     // Update state immediately to prevent UI hang if shutdown crashes
                     ctx.app_handle.state::<CurrentlyRecording>().set(None);
                     ctx.app_handle.set_tray_menu_recording(false);
+                    ctx.app_handle.set_tray_menu_preparing(false);
 
                     let stopped = recorder.stop_recording();
                     let shutdown = recorder.shutdown();
@@ -94,13 +119,21 @@ impl RecordingTask {
                 log::warn!("recording task failed/cancelled: {e}");
                 self.ctx.app_handle.state::<CurrentlyRecording>().set(None);
                 self.ctx.app_handle.set_tray_menu_recording(false);
+                self.ctx.app_handle.set_tray_menu_preparing(false);
                 Err(e)
             }
         }
     }
 
     async fn record(ctx: GameCtx, manual_mode: bool) -> Result<(Recorder, Metadata)> {
-        let (mut recorder, output_filepath) = cancellable!(Self::setup_recorder(&ctx), ctx.cancel_token, Result)?;
+        let mode_label = if manual_mode { "manual" } else { "auto" };
+        let setup_started = std::time::Instant::now();
+        let (mut recorder, output_filepath) =
+            cancellable!(Self::setup_recorder(&ctx, manual_mode), ctx.cancel_token, Result)?;
+        log::info!(
+            "[record-start][{mode_label}] setup_recorder completed in {:.3}s",
+            setup_started.elapsed().as_secs_f64()
+        );
 
         // Game Mode check removed: Trusting GameListener's decision.
         // The GameListener already validated the QueueID/GameMode before starting this task.
@@ -126,24 +159,28 @@ impl RecordingTask {
         ctx.app_handle
             .state::<CurrentlyRecording>()
             .set(Some(output_filepath.clone()));
-        ctx.app_handle.set_tray_menu_recording(true);
 
-        let mut pre_start_stats = None;
-        let mut pre_start_instant = std::time::Instant::now();
-        if !manual_mode {
-            // Fetch game stats BEFORE starting recording to get a baseline for fallback
-            let ingame_client = IngameClient::new();
-            pre_start_stats = ingame_client.game_stats().await.ok();
-            pre_start_instant = std::time::Instant::now();
-        }
+        // Fetch game stats BEFORE starting recording to get a baseline for fallback.
+        // This is also needed for manual mode so timeline starts from actual game time.
+        let ingame_client = IngameClient::new();
+        let pre_start_stats = ingame_client.game_stats().await.ok();
+        let pre_start_instant = std::time::Instant::now();
 
         // if initial game_data is successful => start recording
+        let obs_start = std::time::Instant::now();
         if let Err(e) = recorder.start_recording() {
             ctx.app_handle.state::<CurrentlyRecording>().set(None);
             ctx.app_handle.set_tray_menu_recording(false);
+            ctx.app_handle.set_tray_menu_preparing(false);
             let _ = recorder.stop_recording();
             bail!("failed to start recording: {e}");
         }
+        log::info!(
+            "[record-start][{mode_label}] recorder.start_recording completed in {:.3}s",
+            obs_start.elapsed().as_secs_f64()
+        );
+        ctx.app_handle.set_tray_menu_preparing(false);
+        ctx.app_handle.set_tray_menu_recording(true);
 
         // Emit RecordingStarted event immediately (UI feedback) - syncing happens below
         if let Err(e) = ctx.app_handle.send_event(AppEvent::RecordingStarted) {
@@ -152,25 +189,22 @@ impl RecordingTask {
 
         log::info!("Recorder started. Calculating sync offset...");
 
-        let ingame_time_rec_start_offset = if manual_mode {
-            0.0
-        } else {
-            // Calculate final offset immediately after start_recording returns.
-            let ingame_client = IngameClient::new();
-            let final_stats = ingame_client.game_stats().await.ok();
+        // Calculate offset immediately after start_recording returns.
+        // For manual mode, this ensures timeline starts from current in-game time (e.g. 00:27).
+        let ingame_client = IngameClient::new();
+        let final_stats = ingame_client.game_stats().await.ok();
 
-            // Robust offset calculation with fallback
-            if let Some(stats) = final_stats {
-                stats.game_time
-            } else {
-                // Fallback: Use pre-start stats + total elapsed time since then
-                let total_elapsed = pre_start_instant.elapsed().as_secs_f64();
-                log::warn!(
-                    "Failed to fetch final game stats. Using fallback estimate (elapsed: {:.3}s)",
-                    total_elapsed
-                );
-                pre_start_stats.map(|s| s.game_time + total_elapsed).unwrap_or(0.0)
-            }
+        // Robust offset calculation with fallback
+        let ingame_time_rec_start_offset = if let Some(stats) = final_stats {
+            stats.game_time
+        } else {
+            // Fallback: Use pre-start stats + total elapsed time since then
+            let total_elapsed = pre_start_instant.elapsed().as_secs_f64();
+            log::warn!(
+                "Failed to fetch final game stats. Using fallback estimate (elapsed: {:.3}s)",
+                total_elapsed
+            );
+            pre_start_stats.map(|s| s.game_time + total_elapsed).unwrap_or(0.0)
         };
 
         log::info!(
@@ -199,10 +233,22 @@ impl RecordingTask {
         Ok((recorder, metadata))
     }
 
-    async fn setup_recorder(ctx: &GameCtx) -> Result<(Recorder, PathBuf)> {
+    async fn setup_recorder(ctx: &GameCtx, manual_mode: bool) -> Result<(Recorder, PathBuf)> {
         let settings_state = ctx.app_handle.state::<SettingsWrapper>();
 
-        let window_size = Self::get_window_size().await?;
+        let window_size = if manual_mode {
+            // Manual start should be immediate. Don't block for long window discovery.
+            // If the LoL window isn't ready yet, use a sane fallback and continue.
+            match Self::get_window_size(2, Duration::from_millis(100)).await {
+                Ok(size) => size,
+                Err(_) => {
+                    log::warn!("Manual mode: LoL window size not ready. Using fallback 1920x1080.");
+                    Resolution::new(1920, 1080)
+                }
+            }
+        } else {
+            Self::get_window_size(60, Duration::from_millis(500)).await?
+        };
         let output_resolution = settings_state
             .get_output_resolution()
             .unwrap_or_else(|| StdResolution::closest_std_resolution(&window_size));
@@ -251,13 +297,13 @@ impl RecordingTask {
         Ok((recorder, filename_path))
     }
 
-    async fn get_window_size() -> Result<Resolution> {
-        for _ in 0..60 {
+    async fn get_window_size(max_attempts: usize, interval_duration: Duration) -> Result<Resolution> {
+        for _ in 0..max_attempts {
             if let Some(window_size) = window::get_lol_window().and_then(window::get_window_size) {
                 return Ok(window_size);
             }
 
-            sleep(Duration::from_millis(500)).await;
+            sleep(interval_duration).await;
         }
 
         bail!("unable to get window size");

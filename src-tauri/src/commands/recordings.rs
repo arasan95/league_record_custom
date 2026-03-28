@@ -71,7 +71,8 @@ pub fn get_recordings_list(app_handle: AppHandle) -> Vec<Recording> {
             mp4_path.set_extension("mp4");
             let video_exists = mp4_path.exists();
 
-            match action::get_recording_metadata(&path, true) {
+            // Keep list loading fast: do not trigger deferred metadata re-processing here.
+            match action::get_recording_metadata(&path, false) {
                 Ok(metadata) => {
                     ret.push(Recording {
                         video_id,
@@ -167,7 +168,7 @@ pub fn delete_video_only(video_id: String, state: State<SettingsWrapper>) -> boo
 #[tauri::command]
 pub fn get_metadata(video_id: String, state: State<SettingsWrapper>) -> Option<MetadataFile> {
     let path = resolve_existing_video_base(&video_id, &state).ok()?;
-    action::get_recording_metadata(&path, true).ok()
+    action::get_recording_metadata(&path, false).ok()
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -175,7 +176,7 @@ pub fn get_metadata(video_id: String, state: State<SettingsWrapper>) -> Option<M
 pub fn toggle_favorite(video_id: String, state: State<SettingsWrapper>) -> Option<bool> {
     let path = resolve_existing_video_base(&video_id, &state).ok()?;
 
-    let mut metadata = action::get_recording_metadata(&path, true).ok()?;
+    let mut metadata = action::get_recording_metadata(&path, false).ok()?;
     let favorite = !metadata.is_favorite();
     metadata.set_favorite(favorite);
     action::save_recording_metadata(&path, &metadata).ok()?;

@@ -53,6 +53,27 @@ export function reloadKeybinds() {
 let currentEvents: RecordingEvents | null = null;
 let highlightEvents: HighlightEvents | null = null;
 const metadataRetryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+let manualStartPending = false;
+let manualStartPendingTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function armManualStartPending() {
+    manualStartPending = true;
+    if (manualStartPendingTimeout) {
+        clearTimeout(manualStartPendingTimeout);
+    }
+    manualStartPendingTimeout = setTimeout(() => {
+        manualStartPending = false;
+        manualStartPendingTimeout = null;
+    }, 15000);
+}
+
+function clearManualStartPending() {
+    manualStartPending = false;
+    if (manualStartPendingTimeout) {
+        clearTimeout(manualStartPendingTimeout);
+        manualStartPendingTimeout = null;
+    }
+}
 
 function clearMetadataRetry(videoId: string) {
     const key = normalizeVideoId(videoId);
@@ -445,18 +466,29 @@ async function main() {
     listenerManager.listen_app("MarkerflagsChanged", () =>
         commands.getMarkerFlags().then((flags) => ui.setMarkerFlags(flags)),
     );
-    listenerManager.listen_app("MetadataChanged", ({ payload }) => {
+    listenerManager.listen_app("MetadataChanged", async ({ payload }) => {
         const activeVideoId = ui.getActiveVideoId();
-        
-        // 1. Partial Sidebar Update (Refresh List Items)
-        payload.forEach(videoId => {
-            commands.getMetadata(videoId).then(metadata => {
-                // Construct strictly typed Recording object. 
-                // MetadataChanged implies it's a new or updated recording, so the video likely exists and will be updated properly on the next full refresh.
-                const recording = { videoId, metadata, videoExists: true }; 
-                ui.updateRecordingItem(recording);
-            });
-        });
+
+        // Resolve payload IDs (which may be filename-only) to actual sidebar IDs (absolute path/base id).
+        const recordings = await commands.getRecordingsList();
+        const resolvedIds: string[] = [];
+
+        for (const changedId of payload) {
+            const matched = recordings.find((r) => videoIdsMatch(r.videoId, changedId));
+            if (matched) {
+                resolvedIds.push(matched.videoId);
+                ui.updateRecordingItem(matched);
+                continue;
+            }
+
+            // Fallback path when matching list item is not found yet.
+            const metadata = await commands.getMetadata(changedId);
+            ui.updateRecordingItem({ videoId: changedId, metadata, videoExists: true });
+        }
+
+        if (resolvedIds.length > 0) {
+            await updateSidebar(resolvedIds);
+        }
 
         // 2. Active Video Update (Refresh Detail View)
         // Backend sends filename (e.g. "video.mp4"), Frontend activeVideoId is Full Path.
@@ -469,6 +501,10 @@ async function main() {
     });
     
     listenerManager.listen_app("RecordingStarted", () => {
+        if (manualStartPending) {
+            clearManualStartPending();
+            return;
+        }
         commands.getSettings().then(settings => {
             if (settings.playRecordingSounds) playNotificationSound('start');
 
@@ -476,12 +512,14 @@ async function main() {
     });
 
     listenerManager.listen_app("ManualRecordingStarted", () => {
+        armManualStartPending();
         commands.getSettings().then(settings => {
             if (settings.playRecordingSounds) playNotificationSound('start');
         });
     });
 
     listenerManager.listen_app("ManualRecordingStopped", () => {
+        clearManualStartPending();
         commands.getSettings().then(settings => {
             if (settings.playRecordingSounds) playNotificationSound('stop');
         });
