@@ -68,6 +68,7 @@ async function applyMetadataBranch(ui: MetadataUiLike, metadata: GameMetadata): 
             participantId: metadata.participantId,
             recordingOffset: metadata.ingameTimeRecStartOffset,
             events: metadata.events,
+            participants: metadata.participants,
         },
         highlightEvents: {
             recordingOffset: metadata.ingameTimeRecStartOffset,
@@ -102,6 +103,7 @@ async function applyDeferredBranch(ui: MetadataUiLike, deferred: Deferred): Prom
                 participantId: 0,
                 recordingOffset: deferred.ingameTimeRecStartOffset,
                 events: deferred.events ?? [],
+                participants: deferred.participants,
             }
             : null,
         highlightEvents: {
@@ -136,4 +138,3 @@ export async function renderMetadataState(input: {
         highlightEvents: null,
     };
 }
-
