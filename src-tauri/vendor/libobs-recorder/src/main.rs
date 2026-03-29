@@ -1,4 +1,6 @@
-// Keep the default subsystem to avoid "hidden background process" heuristics in AV engines.
+// Build as a GUI subsystem executable in release so no console window pops up
+// when spawned by the parent recorder process.
+#![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 use intprocess_recorder::InpRecorder;
 use ipc_link::{IpcCommand, IpcLinkSlave, IpcResponse};
