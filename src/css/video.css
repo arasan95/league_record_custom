@@ -234,7 +234,8 @@ body:has(.vjs-fullscreen) {
     pointer-events: auto !important;
     overflow: visible !important;
     background: transparent !important;
-    clip-path: polygon(0 0, 100% 0, 52% 100%, 48% 100%);
+    /* Keep upper half as a straight bar, start tapering from 50% down */
+    clip-path: polygon(0 0, 100% 0, 100% 50%, 52% 100%, 48% 100%, 0 50%);
 }
 
 .vjs-marker.lane-blue {
