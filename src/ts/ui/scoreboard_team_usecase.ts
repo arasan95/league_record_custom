@@ -156,6 +156,11 @@ export async function renderScoreboardTeam(params: {
         const row = createEl("div", {}, { class: "player-row" }) as HTMLElement;
         const isMe = p.participantId === data.participantId;
         const img = createEl("img", { src: cachedChampIcon }, { class: "champ-icon" }) as HTMLImageElement;
+        let triedChampionRemote = false;
+        img.style.visibility = "hidden";
+        img.onload = () => {
+            img.style.visibility = "visible";
+        };
         const initialChampLevel = typeof p.champLevel === "number" && p.champLevel > 0 ? p.champLevel : 1;
         const champLevelEl = createEl("div", {}, { class: "champ-level-overlay" }, `${initialChampLevel}`) as HTMLElement;
         const champIconWrap = createEl("div", {}, { class: "champ-icon-wrap" }, [img, champLevelEl]) as HTMLElement;
@@ -174,10 +179,14 @@ export async function renderScoreboardTeam(params: {
             }, 30);
         };
         img.onerror = () => {
-            if (img.src !== cDragonUrl) {
+            if (!triedChampionRemote && img.src !== cDragonUrl) {
+                triedChampionRemote = true;
                 console.warn(`Local cache failed for champion ${p.championId}, retrying remote: ${cDragonUrl}`);
                 img.src = cDragonUrl;
+                return;
             }
+            img.style.visibility = "hidden";
+            img.removeAttribute("src");
         };
 
         let isHovered = false;
