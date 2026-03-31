@@ -221,7 +221,7 @@ body:has(.vjs-fullscreen) {
    5. EVENT MARKERS
    ========================================================================= */
 .vjs-marker {
-    --marker-core-width: 4px;
+    --marker-core-width: 5px;
     --marker-fade-width: 8px;
     width: calc(var(--marker-core-width) + (var(--marker-fade-width) * 2)) !important;
     margin-left: calc(-1 * ((var(--marker-core-width) / 2) + var(--marker-fade-width))) !important;
@@ -234,8 +234,6 @@ body:has(.vjs-fullscreen) {
     pointer-events: auto !important;
     overflow: visible !important;
     background: transparent !important;
-    /* Keep upper half as a straight bar, start tapering from 50% down */
-    clip-path: polygon(0 0, 100% 0, 100% 50%, 52% 100%, 48% 100%, 0 50%);
 }
 
 .vjs-marker.lane-blue {
@@ -266,6 +264,8 @@ body:has(.vjs-fullscreen) {
     width: var(--marker-core-width);
     transform: translateX(-50%);
     background: currentColor;
+    /* Apply taper to the actual painted bar: straight to 50%, tapered below */
+    clip-path: polygon(0 0, 100% 0, 100% 50%, 50% 100%, 50% 100%, 0 50%);
     pointer-events: none;
 }
 

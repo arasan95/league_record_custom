@@ -54,8 +54,45 @@ let currentEvents: RecordingEvents | null = null;
 let highlightEvents: HighlightEvents | null = null;
 let preferredActiveVideoId: string | null = null;
 const metadataRetryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+const metadataRenderSignatures = new Map<string, string>();
+let metadataRenderRequestSerial = 0;
+let lastRenderedMetadataVideoKey: string | null = null;
+let recordingsChangedRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let recordingsChangedRefreshInFlight = false;
+let recordingsChangedRefreshQueued = false;
+let suppressRecordingsChangedUntil = 0;
+let cachedRecordingsSizeGb = 0;
+let recordingsSizeCacheUpdatedAt = 0;
+let recordingsSizeFetchInFlight: Promise<number> | null = null;
 let manualStartPending = false;
 let manualStartPendingTimeout: ReturnType<typeof setTimeout> | null = null;
+const RECORDINGS_SIZE_CACHE_MS = 5000;
+
+function metadataDataSignature(data: any): string {
+    if (!data) return "null";
+    if ("NoData" in data) return "NoData";
+    if ("Metadata" in data) {
+        const m = data.Metadata;
+        const eventCount = Array.isArray(m.events) ? m.events.length : 0;
+        const lastEventTs = eventCount > 0 ? Number(m.events[eventCount - 1]?.timestamp ?? -1) : -1;
+        const participantKey = Array.isArray(m.participants)
+            ? m.participants.map((p: any) => `${p.participantId}:${p.championId}`).join("|")
+            : "";
+        const highlightsCount = Array.isArray(m.highlights) ? m.highlights.length : 0;
+        return `Metadata|pid=${m.participantId}|pc=${m.participants?.length ?? 0}|p=${participantKey}|ev=${eventCount}|last=${lastEventTs}|hi=${highlightsCount}|q=${m.queue?.id ?? 0}|gv=${m.gameVersion ?? ""}`;
+    }
+    if ("Deferred" in data) {
+        const d = data.Deferred;
+        const eventCount = Array.isArray(d.events) ? d.events.length : 0;
+        const lastEventTs = eventCount > 0 ? Number(d.events[eventCount - 1]?.timestamp ?? -1) : -1;
+        const participantKey = Array.isArray(d.participants)
+            ? d.participants.map((p: any) => `${p.participantId}:${p.championId}`).join("|")
+            : "";
+        const highlightsCount = Array.isArray(d.highlights) ? d.highlights.length : 0;
+        return `Deferred|pc=${d.participants?.length ?? 0}|p=${participantKey}|ev=${eventCount}|last=${lastEventTs}|hi=${highlightsCount}|off=${d.ingameTimeRecStartOffset ?? 0}`;
+    }
+    return "unknown";
+}
 
 function armManualStartPending() {
     manualStartPending = true;
@@ -83,6 +120,66 @@ function clearMetadataRetry(videoId: string) {
         clearTimeout(timeout);
         metadataRetryTimeouts.delete(key);
     }
+}
+
+async function flushRecordingsChangedRefresh() {
+    if (recordingsChangedRefreshInFlight) {
+        recordingsChangedRefreshQueued = true;
+        return;
+    }
+
+    recordingsChangedRefreshInFlight = true;
+    try {
+        do {
+            recordingsChangedRefreshQueued = false;
+            await updateSidebar();
+        } while (recordingsChangedRefreshQueued);
+    } finally {
+        recordingsChangedRefreshInFlight = false;
+    }
+}
+
+function scheduleRecordingsChangedRefresh(delayMs: number = 120) {
+    if (recordingsChangedRefreshTimer) {
+        clearTimeout(recordingsChangedRefreshTimer);
+    }
+    recordingsChangedRefreshTimer = setTimeout(() => {
+        recordingsChangedRefreshTimer = null;
+        void flushRecordingsChangedRefresh();
+    }, delayMs);
+}
+
+function suppressRecordingsChangedEventsFor(ms: number = 3000) {
+    suppressRecordingsChangedUntil = Date.now() + ms;
+}
+
+async function getRecordingsSizeCached(forceRefresh: boolean = false): Promise<number> {
+    const now = Date.now();
+    const cacheFresh = now - recordingsSizeCacheUpdatedAt < RECORDINGS_SIZE_CACHE_MS;
+    if (!forceRefresh && cacheFresh) {
+        return cachedRecordingsSizeGb;
+    }
+
+    if (recordingsSizeFetchInFlight) {
+        return recordingsSizeFetchInFlight;
+    }
+
+    recordingsSizeFetchInFlight = commands
+        .getRecordingsSize()
+        .then((size) => {
+            cachedRecordingsSizeGb = size;
+            recordingsSizeCacheUpdatedAt = Date.now();
+            return size;
+        })
+        .catch((error) => {
+            console.warn("Failed to refresh recordings size, using cached value:", error);
+            return cachedRecordingsSizeGb;
+        })
+        .finally(() => {
+            recordingsSizeFetchInFlight = null;
+        });
+
+    return recordingsSizeFetchInFlight;
 }
 
 function scheduleMetadataRetry(videoId: string, attemptsLeft: number = 4, delayMs: number = 700) {
@@ -460,9 +557,11 @@ async function main() {
     }
 
     const listenerManager = new ListenerManager();
-    listenerManager.listen_app("RecordingsChanged", async () => {
-        const recordings = await updateSidebar();
-        checkLatestAndRetry(recordings);
+    listenerManager.listen_app("RecordingsChanged", () => {
+        if (Date.now() < suppressRecordingsChangedUntil) {
+            return;
+        }
+        scheduleRecordingsChangedRefresh();
     });
     listenerManager.listen_app("MarkerflagsChanged", () =>
         commands.getMarkerFlags().then((flags) => ui.setMarkerFlags(flags)),
@@ -729,7 +828,7 @@ async function updateSidebar(forceUpdateIds: string[] = []): Promise<Recording[]
         ui,
         forceUpdateIds,
         getRecordingsList: commands.getRecordingsList,
-        getRecordingsSize: commands.getRecordingsSize,
+        getRecordingsSize: () => getRecordingsSizeCached(false),
         setVideo,
         toggleFavorite: commands.toggleFavorite,
         showRenameModal,
@@ -804,6 +903,9 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
 }
 
 async function setMetadata(videoId: string): Promise<boolean> {
+    const requestSerial = ++metadataRenderRequestSerial;
+    const requestedVideoKey = normalizeVideoId(videoId);
+
     let { data, resolvedVideoId } = await getMetadataWithFallback(
         videoId,
         commands.getMetadata,
@@ -825,12 +927,39 @@ async function setMetadata(videoId: string): Promise<boolean> {
             console.log(`[diagnose] setMetadata upgraded-by-list kind=${kind} requested=${videoId} resolved=${resolvedVideoId}`);
         }
     }
+
+    // Ignore stale async responses when the active video changed while metadata was loading.
+    const latestActiveVideoId = preferredActiveVideoId ?? ui.getActiveVideoId();
+    if (
+        requestSerial !== metadataRenderRequestSerial ||
+        !latestActiveVideoId ||
+        !videoIdsMatch(latestActiveVideoId, requestedVideoKey)
+    ) {
+        const completed = !!(data && "Metadata" in data);
+        console.log(
+            `[diagnose] setMetadata stale-skip requested=${videoId} active=${latestActiveVideoId ?? "null"} serial=${requestSerial}/${metadataRenderRequestSerial}`,
+        );
+        return completed;
+    }
+
+    // Cache by requested video id so different recordings never share a skip key.
+    const cacheKey = requestedVideoKey;
+    const signature = metadataDataSignature(data);
+    const previousSignature = metadataRenderSignatures.get(cacheKey);
+    if (previousSignature === signature && lastRenderedMetadataVideoKey === cacheKey) {
+        const completed = !!(data && "Metadata" in data);
+        console.log(`[diagnose] setMetadata skip-same-signature kind=${kind} key=${cacheKey}`);
+        return completed;
+    }
+
     const rendered = await renderMetadataState({
         data,
         requestedVideoId: videoId,
         resolvedVideoId,
         ui,
     });
+    metadataRenderSignatures.set(cacheKey, signature);
+    lastRenderedMetadataVideoKey = cacheKey;
     if (rendered.clearRetry) {
         clearMetadataRetry(videoId);
     }
@@ -900,6 +1029,7 @@ function showDeleteModal(videoId: string, isFavorite: boolean = false) {
 }
 
 function handleDeleteVideoOnly(videoId: string, isFavorite: boolean = false) {
+    suppressRecordingsChangedEventsFor();
     deleteVideoOnlyWithConfirm({
         videoId,
         isFavorite,
@@ -913,6 +1043,7 @@ function handleDeleteVideoOnly(videoId: string, isFavorite: boolean = false) {
 }
 
 async function deleteVideo(videoId: string): Promise<void> {
+    suppressRecordingsChangedEventsFor();
     return deleteVideoFlow({
         videoId,
         getActiveVideoId: ui.getActiveVideoId,
