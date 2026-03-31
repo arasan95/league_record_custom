@@ -92,6 +92,6 @@ export function cleanupDuplicateScoreboardElements(playerEl: HTMLElement, specta
     if (oldInternalHeader && oldInternalHeader.id !== "video-header") oldInternalHeader.remove();
     const nestedHeader = playerEl.querySelector("#video-header");
     if (nestedHeader && nestedHeader !== spectatorHeader) nestedHeader.remove();
-    const oldScoreboard = playerEl.querySelector(".scoreboard");
-    if (oldScoreboard) oldScoreboard.remove();
+    // Keep current scoreboard mounted until a new one is fully built and mounted.
+    // mountScoreboardInPlayer() performs the atomic swap and removes old instances.
 }
