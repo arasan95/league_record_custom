@@ -785,8 +785,24 @@ export default class UI {
     private updateTimelineItems = () => {
          if (!this.timeline || !this.player) return;
 
+         const currentTime = this.player.currentTime?.() ?? 0;
+         const duration = this.player.duration?.();
+         const hasStarted =
+             typeof this.player.hasStarted === "function" ? Boolean(this.player.hasStarted()) : false;
+         const keepFinalSnapshotWhileIdle =
+             this.player.paused?.() &&
+             !hasStarted &&
+             currentTime <= 0.05 &&
+             Number.isFinite(duration) &&
+             (duration as number) > 0;
+
+         // Keep metadata-final snapshot until first playback starts when autoplay is off.
+         if (keepFinalSnapshotWhileIdle) {
+             return;
+         }
+
          applyScoreboardTickFlow({
-             playerCurrentTimeSec: this.player.currentTime(),
+             playerCurrentTimeSec: currentTime,
              currentGameVersion: this.currentGameVersion,
              timeline: this.timeline,
              scoreboardRefs: this.scoreboardRefs,

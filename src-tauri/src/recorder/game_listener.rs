@@ -174,8 +174,8 @@ impl GameListener {
     ) -> Vec<LiveGameEvent> {
         let client = shaco::ingame::IngameClient::new();
         let mut last_event_id = 0;
-        // Cache: Stable player key -> List of Items.
-        // We use participantId-derived keys when resolvable from player_map; fallback to identity key otherwise.
+        // Cache: Stable per-player key -> List of Items.
+        // Do not use participantId alone here: unstable/ambiguous runtime mapping can cause cross-player contamination.
         let mut previous_inventory: HashMap<String, Vec<shaco::model::ingame::PlayerItem>> = HashMap::new();
         // Flag: fire GameStarted only once (on first successful in-game API response)
         let mut game_started_fired = false;
@@ -246,33 +246,11 @@ impl GameListener {
                     }
 
                     // 2. Process Inventory Diffs (Synthetic Item Events)
-                    for player in &data.all_players {
+                    for (player_idx, player) in data.all_players.iter().enumerate() {
                         let name = player.summoner_name.clone();
                         let current_items = player.items.clone();
 
-                        let team_intro = team_id_str(&player.team);
-                        let summoner_key = normalize_identity_key(&player.summoner_name);
-                        let scoped_summoner = format!("team:{}|summoner:{}", team_intro, summoner_key);
-                        let riot_key = player.riot_id.riot_id.as_deref().map(normalize_identity_key);
-                        let resolved_pid = if let Ok(map) = player_map.lock() {
-                            map.get(&scoped_summoner)
-                                .copied()
-                                .or_else(|| map.get(&format!("summoner:{}", summoner_key)).copied())
-                                .or_else(|| {
-                                    riot_key.as_ref().and_then(|rkey| {
-                                        map.get(&format!("team:{}|riot:{}", team_intro, rkey))
-                                            .copied()
-                                            .or_else(|| map.get(&format!("riot:{}", rkey)).copied())
-                                    })
-                                })
-                        } else {
-                            None
-                        };
-                        let inventory_key = if let Some(pid) = resolved_pid {
-                            format!("pid:{pid}")
-                        } else {
-                            build_live_player_fallback_key(player)
-                        };
+                        let inventory_key = format!("idx:{player_idx}|{}", build_live_player_fallback_key(player));
                         let old_items = previous_inventory.entry(inventory_key).or_default();
 
                         let mut old_counts: HashMap<i32, i32> = HashMap::new();
@@ -862,9 +840,36 @@ impl GameListener {
                                             if let Some(id) = name_to_id.get(name) {
                                                 return Some(*id);
                                             }
+
+                                            // Synthetic shopper_name format:
+                                            // "<summoner>#TEAM:<team>#CNAME:<champion>"
+                                            if let Some(team_sep) = name.find("#TEAM:") {
+                                                let real_name = &name[..team_sep];
+                                                let team_and_rest = &name[team_sep + "#TEAM:".len()..];
+                                                let team_id = team_and_rest.split('#').next().unwrap_or_default();
+                                                let summoner_key = normalize_identity_key(real_name);
+                                                if !summoner_key.is_empty() {
+                                                    if let Some(id) =
+                                                        name_to_id.get(&format!("team:{team_id}|summoner:{summoner_key}"))
+                                                    {
+                                                        return Some(*id);
+                                                    }
+                                                    if let Some(id) = name_to_id.get(&format!("summoner:{summoner_key}")) {
+                                                        return Some(*id);
+                                                    }
+                                                    if let Some(id) = name_to_id.get(real_name) {
+                                                        return Some(*id);
+                                                    }
+                                                }
+                                            }
+
                                             if let Some(real_name) = name.split('#').next() {
-                                                if let Some(id) = name_to_id.get(real_name) {
-                                                    if !real_name.is_empty() {
+                                                if !real_name.is_empty() {
+                                                    let summoner_key = normalize_identity_key(real_name);
+                                                    if let Some(id) = name_to_id.get(&format!("summoner:{summoner_key}")) {
+                                                        return Some(*id);
+                                                    }
+                                                    if let Some(id) = name_to_id.get(real_name) {
                                                         return Some(*id);
                                                     }
                                                 }
