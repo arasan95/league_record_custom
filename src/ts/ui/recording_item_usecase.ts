@@ -72,7 +72,8 @@ export function isRedSideMeta(meta: GameMetadata): boolean {
 
 export function resolveDurationSeconds(meta: GameMetadata): number {
     const statsAny = meta.stats as any;
-    let rawDuration = Math.floor((statsAny?.gameDuration as number | undefined) || 0);
+    const metadataDuration = (meta as any).gameDuration as number | undefined;
+    let rawDuration = Math.floor((metadataDuration as number | undefined) || (statsAny?.gameDuration as number | undefined) || 0);
     if (rawDuration === 0 && meta.goldTimeline && meta.goldTimeline.length > 0) {
         const lastFrame = meta.goldTimeline[meta.goldTimeline.length - 1];
         rawDuration = Math.floor(lastFrame.timestamp / 1000);
