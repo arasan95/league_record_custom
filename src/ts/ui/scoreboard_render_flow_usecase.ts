@@ -185,6 +185,7 @@ export async function renderScoreboardMainRows(input: {
         getChampionEnglishNameByIdSync,
         openUrl: open,
     });
+    if (!isRenderValid()) return false;
     goldDiffRefs.push(...center.diffRefs);
 
     scoreboardEl.style.display = "";
