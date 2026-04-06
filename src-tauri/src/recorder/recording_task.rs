@@ -285,15 +285,9 @@ impl RecordingTask {
         let settings_state = ctx.app_handle.state::<SettingsWrapper>();
 
         let window_size = if manual_mode {
-            // Manual start should be immediate. Don't block for long window discovery.
-            // If the LoL window isn't ready yet, use a sane fallback and continue.
-            match Self::get_window_size(2, Duration::from_millis(100)).await {
-                Ok(size) => size,
-                Err(_) => {
-                    log::warn!("Manual mode: LoL window size not ready. Using fallback 1920x1080.");
-                    Resolution::new(1920, 1080)
-                }
-            }
+            // Safety first: avoid starting with a guessed resolution.
+            // A guessed fallback can produce black-video/audio-only recordings on some systems.
+            Self::get_window_size(20, Duration::from_millis(200)).await?
         } else {
             Self::get_window_size(60, Duration::from_millis(500)).await?
         };

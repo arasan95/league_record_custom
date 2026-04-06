@@ -60,7 +60,16 @@ export function buildScoreboardContext(input: {
 
     const isPractice = metadata.queue?.name?.toLowerCase().includes("practice") ?? false;
     const isSR = SR_QUEUES.includes(metadata.queue.id as any) || isPractice;
-    const isTFT = getGameModeByQueueId(metadata.queue?.id ?? 0, metadata.queue?.name ?? "") === "TFT";
+    const isTftByQueue = getGameModeByQueueId(metadata.queue?.id ?? 0, metadata.queue?.name ?? "") === "TFT";
+    const hasTftParticipantData = metadata.participants.some((p) =>
+        p.placement != null
+        || p.playersEliminated != null
+        || p.level != null
+        || (p.traits?.length ?? 0) > 0
+        || (p.units?.length ?? 0) > 0
+        || p.companion != null
+    );
+    const isTFT = isTftByQueue || hasTftParticipantData;
 
     return {
         team100,
