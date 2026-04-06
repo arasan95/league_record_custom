@@ -710,10 +710,20 @@ export default class UI {
         console.log("Setting Video Description Metadata", data);
 
         const currentRenderId = this.metadataRenderId;
+        const isTftByQueue = getGameModeByQueueId(data.queue?.id ?? 0, data.queue?.name ?? "") === "TFT";
+        const hasTftParticipantData = data.participants.some((p) =>
+            p.placement != null
+            || p.playersEliminated != null
+            || p.level != null
+            || (p.traits?.length ?? 0) > 0
+            || (p.units?.length ?? 0) > 0
+            || p.companion != null
+        );
+        const isTftMatch = isTftByQueue || hasTftParticipantData;
 
         this.currentGameVersion = data.gameVersion || (await getCurrentPatchVersion());
         await ensureItemDataLoaded(this.currentGameVersion);
-        if (getGameModeByQueueId(data.queue?.id ?? 0, data.queue?.name ?? "") === "TFT") {
+        if (isTftMatch) {
             await ensureTftDataLoaded();
         }
 
@@ -750,15 +760,15 @@ export default class UI {
             },
         });
         if (!prepared) return;
-        this.scoreboardEl = prepared.scoreboardEl;
 
         if (prepared.isTFT) {
-            if (this.scoreboardEl) {
-                this.scoreboardEl.style.display = "none";
-            }
+            const oldScoreboards = prepared.playerEl.querySelectorAll(".scoreboard");
+            oldScoreboards.forEach((el) => el.remove());
+            this.scoreboardEl = null;
             this.player.off("timeupdate", this.updateTimelineItems);
             return;
         }
+        this.scoreboardEl = prepared.scoreboardEl;
 
         const rendered = await renderScoreboardMainRows({
             data,
