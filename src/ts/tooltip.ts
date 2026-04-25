@@ -6,6 +6,7 @@ import manualFallbackMappingsRaw from "../assets/fallback_mappings.json";
 
 let dynamicTooltipFallback: Record<string, Record<string, string>> = {};
 let allCalcFormulas: Record<string, any> = {};
+let tooltipFallbackRefreshPromise: Promise<void> | null = null;
 
 // Debug/diagnostics helper: allow offline perf scripts to inject caches without Tauri runtime.
 export function __setTooltipDebugCaches(
@@ -14,6 +15,66 @@ export function __setTooltipDebugCaches(
 ) {
     dynamicTooltipFallback = fallbackMap || {};
     allCalcFormulas = calcMap || {};
+}
+
+function isPlainObject(value: unknown): value is Record<string, any> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function mergeTooltipMapsKeepingOldValues(
+    previous: Record<string, Record<string, string>>,
+    next: Record<string, Record<string, string>>,
+): Record<string, Record<string, string>> {
+    const merged: Record<string, Record<string, string>> = {};
+    for (const spellId of Object.keys(previous || {})) {
+        merged[spellId] = { ...(previous[spellId] || {}) };
+    }
+    for (const spellId of Object.keys(next || {})) {
+        const existing = merged[spellId] || {};
+        const incoming = next[spellId];
+        merged[spellId] = isPlainObject(incoming) ? { ...existing, ...incoming } : existing;
+    }
+    return merged;
+}
+
+function mergeCalcFormulasKeepingOldValues(
+    previous: Record<string, any>,
+    next: Record<string, any>,
+): Record<string, any> {
+    const merged: Record<string, any> = { ...(previous || {}) };
+    for (const key of Object.keys(next || {})) {
+        const existing = merged[key];
+        const incoming = next[key];
+        if (isPlainObject(existing) && isPlainObject(incoming)) {
+            merged[key] = { ...existing, ...incoming };
+        } else {
+            merged[key] = incoming;
+        }
+    }
+    return merged;
+}
+
+function applyManualTooltipFallbackMappings(base: Record<string, Record<string, string>>) {
+    const withManual = mergeTooltipMapsKeepingOldValues(base || {}, {});
+    const manualFallbackMappings: Record<string, Record<string, string>> = manualFallbackMappingsRaw;
+    for (const spellId of Object.keys(manualFallbackMappings)) {
+        const existing = withManual[spellId] || {};
+        withManual[spellId] = { ...existing, ...manualFallbackMappings[spellId] };
+    }
+    return withManual;
+}
+
+async function readJsonFromAppLocalData(filePath: string): Promise<any | null> {
+    try {
+        if (!(await exists(filePath, { baseDir: BaseDirectory.AppLocalData }))) {
+            return null;
+        }
+        const raw = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
+        return JSON.parse(new TextDecoder().decode(raw));
+    } catch (e) {
+        console.warn(`Failed to read JSON cache file ${filePath}:`, e);
+        return null;
+    }
 }
 
 export async function initTooltipFallback() {
@@ -44,55 +105,69 @@ export async function initTooltipFallback() {
         shouldExtract = true;
     }
 
-    if (shouldExtract) {
+    const existingGenerated =
+        (await readJsonFromAppLocalData(filePath)) as Record<string, Record<string, string>> | null;
+    const existingCalc = (await readJsonFromAppLocalData(calcFormulasPath)) as Record<string, any> | null;
+
+    if (existingGenerated && isPlainObject(existingGenerated)) {
+        dynamicTooltipFallback = applyManualTooltipFallbackMappings(existingGenerated);
+        console.log("Loaded tooltip fallbacks from previous cache:", Object.keys(dynamicTooltipFallback).length, "spells");
+    } else {
+        dynamicTooltipFallback = applyManualTooltipFallbackMappings({});
+        console.warn("tooltip_variable_fallback.json not found. Using manual fallback mappings only.");
+    }
+
+    if (existingCalc && isPlainObject(existingCalc)) {
+        allCalcFormulas = existingCalc;
+        console.log("Loaded all_calc_formulas from previous cache with", Object.keys(allCalcFormulas).length, "champions");
+    } else {
+        allCalcFormulas = {};
+        console.warn("all_calc_formulas.json not found. Tooltip formulas may be limited.");
+    }
+
+    if (!shouldExtract || tooltipFallbackRefreshPromise) {
+        return;
+    }
+
+    const previousGeneratedSnapshot = existingGenerated && isPlainObject(existingGenerated) ? existingGenerated : {};
+    const previousCalcSnapshot = existingCalc && isPlainObject(existingCalc) ? existingCalc : {};
+    tooltipFallbackRefreshPromise = (async () => {
         try {
             console.log("Starting background WAD extraction...");
             await invoke("update_champion_data");
             await writeFile(verPath, new TextEncoder().encode(currentVersion), { baseDir: BaseDirectory.AppLocalData });
-        } catch (e) {
-            // Keep app usable: if extraction fails, continue loading previous cache data.
-            console.warn("WAD extraction failed. Falling back to existing tooltip cache:", e);
-        }
-    }
 
-    try {
-        if (await exists(filePath, { baseDir: BaseDirectory.AppLocalData })) {
-            const raw = await readFile(filePath, { baseDir: BaseDirectory.AppLocalData });
-            const str = new TextDecoder().decode(raw);
-            const generated = JSON.parse(str);
+            const extractedGenerated =
+                (await readJsonFromAppLocalData(filePath)) as Record<string, Record<string, string>> | null;
+            const extractedCalc = (await readJsonFromAppLocalData(calcFormulasPath)) as Record<string, any> | null;
 
-            dynamicTooltipFallback = { ...generated };
-            const manualFallbackMappings: Record<string, Record<string, string>> = manualFallbackMappingsRaw;
-
-            for (const spellId of Object.keys(manualFallbackMappings)) {
-                if (!dynamicTooltipFallback[spellId]) {
-                    dynamicTooltipFallback[spellId] = {};
-                }
-                for (const k of Object.keys(manualFallbackMappings[spellId])) {
-                    dynamicTooltipFallback[spellId][k] = manualFallbackMappings[spellId][k];
-                }
+            if (extractedGenerated && isPlainObject(extractedGenerated)) {
+                const mergedGenerated = mergeTooltipMapsKeepingOldValues(previousGeneratedSnapshot, extractedGenerated);
+                dynamicTooltipFallback = applyManualTooltipFallbackMappings(mergedGenerated);
+                console.log(
+                    "[tooltip-cache] merged fallbacks old=%d new=%d merged=%d",
+                    Object.keys(previousGeneratedSnapshot).length,
+                    Object.keys(extractedGenerated).length,
+                    Object.keys(dynamicTooltipFallback).length,
+                );
             }
 
-            console.log("Loaded dynamic tooltip fallbacks:", Object.keys(dynamicTooltipFallback).length, "spells");
-        } else {
-            console.warn("tooltip_variable_fallback.json not found. Tooltip variable resolution may be limited.");
+            if (extractedCalc && isPlainObject(extractedCalc)) {
+                allCalcFormulas = mergeCalcFormulasKeepingOldValues(previousCalcSnapshot, extractedCalc);
+                console.log(
+                    "[tooltip-cache] merged calc formulas old=%d new=%d merged=%d",
+                    Object.keys(previousCalcSnapshot).length,
+                    Object.keys(extractedCalc).length,
+                    Object.keys(allCalcFormulas).length,
+                );
+            }
+        } catch (e) {
+            // Keep app usable: if extraction fails, continue using the previous in-memory cache.
+            console.warn("WAD extraction failed. Continuing with previous tooltip cache:", e);
+        } finally {
+            tooltipFallbackRefreshPromise = null;
         }
-    } catch (e) {
-        console.error("Failed to load tooltip_variable_fallback.json:", e);
-    }
-
-    try {
-        if (await exists(calcFormulasPath, { baseDir: BaseDirectory.AppLocalData })) {
-            const raw = await readFile(calcFormulasPath, { baseDir: BaseDirectory.AppLocalData });
-            const str = new TextDecoder().decode(raw);
-            allCalcFormulas = JSON.parse(str);
-            console.log("Loaded all_calc_formulas with", Object.keys(allCalcFormulas).length, "champions");
-        } else {
-            console.warn("all_calc_formulas.json not found. Tooltip formulas may be limited.");
-        }
-    } catch (e) {
-        console.error("Failed to load all_calc_formulas.json:", e);
-    }
+    })();
 }
 
 let globalTooltip: HTMLDivElement | null = null;
