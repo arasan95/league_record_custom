@@ -221,11 +221,25 @@ pub async fn pick_ffmpeg_path(app_handle: AppHandle) -> Option<String> {
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub async fn clear_cache(app_handle: AppHandle) -> Result<(), String> {
+    clear_cache_inner(app_handle, true).await
+}
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub async fn clear_cache_for_patch_update(app_handle: AppHandle) -> Result<(), String> {
+    // Keep tooltip_cache so existing tooltip variables remain available while new patch data is extracting.
+    clear_cache_inner(app_handle, false).await
+}
+
+async fn clear_cache_inner(app_handle: AppHandle, include_tooltip_cache: bool) -> Result<(), String> {
     use tauri::Manager;
     // In Tauri v2, we use app_handle.path().app_local_data_dir()
     let app_dir = app_handle.path().app_local_data_dir().map_err(|e| e.to_string())?;
 
-    let cache_dirs = ["img_cache", "items_cache", "tooltip_cache"];
+    let mut cache_dirs = vec!["img_cache", "items_cache"];
+    if include_tooltip_cache {
+        cache_dirs.push("tooltip_cache");
+    }
 
     for dir in cache_dirs {
         let path = app_dir.join(dir);

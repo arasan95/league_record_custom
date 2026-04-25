@@ -26,6 +26,7 @@ fn generate_bindings() -> anyhow::Result<()> {
             commands::pick_ffmpeg_path,
             commands::get_ffmpeg_runtime_info,
             commands::clear_cache,
+            commands::clear_cache_for_patch_update,
             commands::download_image,
             commands::save_scoreboard_cache,
             commands::load_scoreboard_cache
