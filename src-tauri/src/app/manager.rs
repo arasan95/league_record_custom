@@ -1,6 +1,7 @@
 use std::fs;
 
 use std::path::Path;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use log::LevelFilter;
@@ -13,6 +14,7 @@ use super::{RecordingManager, SystemTrayManager};
 use crate::constants::{APP_NAME, CURRENT_VERSION};
 use crate::state::{SettingsFile, SettingsWrapper};
 use crate::{filewatcher, recorder::LeagueRecorder};
+const PERF_LOG_ENABLED: bool = false;
 
 pub trait AppManager {
     const SETTINGS_FILE: &'static str;
@@ -38,9 +40,21 @@ impl AppManager for AppHandle {
     const SETTINGS_FILE: &'static str = "settings.json";
 
     fn setup(&self) -> Result<()> {
+        let setup_started_at = Instant::now();
         let config_folder = self.path().app_config_dir().context("Error getting app directory")?;
 
+        let init_settings_started_at = Instant::now();
         let settings = self.initialize_settings(&config_folder)?;
+        if PERF_LOG_ENABLED {
+            log::info!(
+                "[perf] setup:initialize_settings {:.1}ms",
+                init_settings_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+            println!(
+                "[perf] setup:initialize_settings {:.1}ms",
+                init_settings_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+        }
 
         let debug_log = settings.debug_log();
         if debug_log {
@@ -60,23 +74,78 @@ impl AppManager for AppHandle {
         self.check_app_updated();
 
         // make sure the system autostart setting for the app matches what is set in the settings
+        let sync_autostart_started_at = Instant::now();
         self.sync_autostart();
+        if PERF_LOG_ENABLED {
+            log::info!(
+                "[perf] setup:sync_autostart {:.1}ms",
+                sync_autostart_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+            println!(
+                "[perf] setup:sync_autostart {:.1}ms",
+                sync_autostart_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+        }
 
         // Initialize Raw Input Listener (Background Thread)
         // This replaces the old windows-key-listener global hook to avoid Vanguard freezes.
+        let raw_input_started_at = Instant::now();
         crate::state::RawInputListener::start(self.app_handle().clone());
+        if PERF_LOG_ENABLED {
+            log::info!(
+                "[perf] setup:start_raw_input {:.1}ms",
+                raw_input_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+            println!(
+                "[perf] setup:start_raw_input {:.1}ms",
+                raw_input_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+        }
 
+        let update_hotkeys_started_at = Instant::now();
         self.update_hotkeys();
+        if PERF_LOG_ENABLED {
+            log::info!(
+                "[perf] setup:update_hotkeys {:.1}ms",
+                update_hotkeys_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+            println!(
+                "[perf] setup:update_hotkeys {:.1}ms",
+                update_hotkeys_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+        }
 
         // start watching recordings folder for changes
+        let watcher_started_at = Instant::now();
         let recordings_path = settings.get_recordings_path();
         if debug_log {
             log::info!("recordings watcher initialized");
         }
         filewatcher::replace(self, &recordings_path);
+        if PERF_LOG_ENABLED {
+            log::info!(
+                "[perf] setup:filewatcher_replace {:.1}ms",
+                watcher_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+            println!(
+                "[perf] setup:filewatcher_replace {:.1}ms",
+                watcher_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+        }
 
         // start checking for LoL games to record
+        let recorder_started_at = Instant::now();
         self.manage(LeagueRecorder::new(self.clone()));
+        if PERF_LOG_ENABLED {
+            log::info!(
+                "[perf] setup:league_recorder_new {:.1}ms",
+                recorder_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+            println!(
+                "[perf] setup:league_recorder_new {:.1}ms",
+                recorder_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+        }
 
         // cleanup recordings if they are too old or the total size of the recordings gets too big
         // this only happens if 'maxRecordingAge' or 'maxRecordingsSize' is configured in the settings
@@ -84,6 +153,17 @@ impl AppManager for AppHandle {
             let app_handle = self.clone();
             move || app_handle.cleanup_recordings()
         });
+
+        if PERF_LOG_ENABLED {
+            log::info!(
+                "[perf] setup:total {:.1}ms",
+                setup_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+            println!(
+                "[perf] setup:total {:.1}ms",
+                setup_started_at.elapsed().as_secs_f64() * 1000.0
+            );
+        }
 
         Ok(())
     }
