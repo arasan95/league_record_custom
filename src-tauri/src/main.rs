@@ -125,7 +125,8 @@ fn run_app_default() {
         .invoke_handler(tauri::generate_handler![
             commands::get_recordings_path,
             commands::create_clip,
-            commands::load_tooltip_locale_db
+            commands::load_tooltip_locale_db,
+            commands::perf_log
         ]);
 
     #[cfg(all(
@@ -156,7 +157,8 @@ fn run_app_default() {
             commands::get_recordings_path,
             commands::get_settings,
             commands::create_clip,
-            commands::load_tooltip_locale_db
+            commands::load_tooltip_locale_db,
+            commands::perf_log
         ]);
 
     #[cfg(all(
@@ -180,7 +182,8 @@ fn run_app_default() {
             commands::get_ffmpeg_runtime_info,
             commands::download_image,
             commands::load_scoreboard_cache,
-            commands::load_tooltip_locale_db
+            commands::load_tooltip_locale_db,
+            commands::perf_log
         ]);
 
     #[cfg(all(
@@ -238,7 +241,8 @@ fn run_app_default() {
             commands::save_scoreboard_cache,
             commands::load_scoreboard_cache,
             commands::update_champion_data,
-            commands::load_tooltip_locale_db
+            commands::load_tooltip_locale_db,
+            commands::perf_log
         ]);
 
     #[cfg(all(
@@ -283,7 +287,8 @@ fn run_app_default() {
             commands::save_scoreboard_cache,
             commands::load_scoreboard_cache,
             commands::update_champion_data,
-            commands::load_tooltip_locale_db
+            commands::load_tooltip_locale_db,
+            commands::perf_log
         ]);
 
     #[cfg(all(
@@ -327,7 +332,8 @@ fn run_app_default() {
             commands::download_image,
             commands::save_scoreboard_cache,
             commands::load_scoreboard_cache,
-            commands::update_champion_data
+            commands::update_champion_data,
+            commands::perf_log
         ]);
 
     #[cfg(all(
@@ -363,7 +369,8 @@ fn run_app_default() {
             commands::clear_cache_for_patch_update,
             commands::save_scoreboard_cache,
             commands::load_scoreboard_cache,
-            commands::load_tooltip_locale_db
+            commands::load_tooltip_locale_db,
+            commands::perf_log
         ]);
 
     #[cfg(feature = "av-no-invoke")]

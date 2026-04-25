@@ -68,6 +68,20 @@ let manualStartPending = false;
 let manualStartPendingTimeout: ReturnType<typeof setTimeout> | null = null;
 const RECORDINGS_SIZE_CACHE_MS = 5000;
 
+function perfNowMs(): number {
+    if (typeof performance !== "undefined" && typeof performance.now === "function") {
+        return performance.now();
+    }
+    return Date.now();
+}
+
+function logPerf(label: string, startedAtMs: number): void {
+    const PERF_LOG_ENABLED = false;
+    if (!PERF_LOG_ENABLED) return;
+    const elapsedMs = perfNowMs() - startedAtMs;
+    console.log(`[perf] ${label}: ${elapsedMs.toFixed(1)}ms`);
+}
+
 function metadataDataSignature(data: any): string {
     if (!data) return "null";
     if ("NoData" in data) return "NoData";
@@ -365,6 +379,8 @@ console.log(MarkersPlugin);
 
 await main();
 async function main() {
+    const startupStartedAt = perfNowMs();
+
     // Check if running in a Tauri environment
     // @ts-ignore
     if (!window.__TAURI_INTERNALS__) {
@@ -374,7 +390,9 @@ async function main() {
 
 
     // handle context menu based on developer mode
+    const patchVersionStartedAt = perfNowMs();
     await initPatchVersion();
+    logPerf("startup:initPatchVersion", patchVersionStartedAt);
     
     // Warm up DataDragon cache in background to avoid startup stalls on slow network.
     ensureDataLoaded("ja").catch((e) => console.warn("ensureDataLoaded failed during startup:", e));
@@ -496,11 +514,27 @@ async function main() {
                      document.body.classList.remove("selectable");
                  }
 
-                 const activeId = ui.getActiveVideoId();
-                 if (activeId) {
-                     await setMetadata(activeId);
+                 const markerFlagsChanged =
+                     settings.markerFlags.kill !== s.markerFlags.kill ||
+                     settings.markerFlags.death !== s.markerFlags.death ||
+                     settings.markerFlags.assist !== s.markerFlags.assist ||
+                     settings.markerFlags.structure !== s.markerFlags.structure ||
+                     settings.markerFlags.dragon !== s.markerFlags.dragon ||
+                     settings.markerFlags.voidgrub !== s.markerFlags.voidgrub ||
+                     settings.markerFlags.herald !== s.markerFlags.herald ||
+                     settings.markerFlags.baron !== s.markerFlags.baron;
+                 if (markerFlagsChanged) {
+                     changeMarkers();
                  }
-                 await updateSidebar();
+
+                 const recordingsPathChanged =
+                     settings.recordingsFolder !== s.recordingsFolder ||
+                     settings.clipsFolder !== s.clipsFolder;
+                 if (recordingsPathChanged) {
+                     setTimeout(() => {
+                         void updateSidebar();
+                     }, 250);
+                 }
              });
              return null;
         });
@@ -808,22 +842,31 @@ async function main() {
         }
     });
 
+    const initialSidebarStartedAt = perfNowMs();
     const videoIds = await updateSidebar();
+    logPerf("startup:updateSidebar(initial)", initialSidebarStartedAt);
     checkLatestAndRetry(videoIds);
     const firstVideo = videoIds.find((v: Recording) => v.videoExists);
     if (firstVideo) {
-        void setVideo(firstVideo.videoId, false);
+        void (async () => {
+            const initialSetVideoStartedAt = perfNowMs();
+            await setVideo(firstVideo.videoId, false);
+            logPerf("startup:setVideo(first)", initialSetVideoStartedAt);
+        })();
         player.one("canplay", ui.showWindow);
     } else {
         void setVideo(null);
         player.one("ready", ui.showWindow);
     }
+
+    logPerf("startup:main(init path)", startupStartedAt);
 }
 
 // --- SIDEBAR, VIDEO PLAYER, DESCRIPTION  ---
 
 // use this function to update the sidebar
 async function updateSidebar(forceUpdateIds: string[] = []): Promise<Recording[]> {
+    const startedAt = perfNowMs();
     const recordings = await refreshSidebar({
         ui,
         forceUpdateIds,
@@ -842,6 +885,7 @@ async function updateSidebar(forceUpdateIds: string[] = []): Promise<Recording[]
             ui.setActiveVideoId(matched.videoId);
         }
     }
+    logPerf(`updateSidebar(forceIds=${forceUpdateIds.length})`, startedAt);
     return recordings;
 }
 
@@ -866,10 +910,12 @@ async function retrySidebarUpdate(attemptsLeft: number, targetId: string) {
 
 // use this function to set the video (null => no video)
 async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
+    const startedAt = perfNowMs();
     if (videoId === null) {
         preferredActiveVideoId = null;
         ui.setActiveVideoId(null);
         player.src("");
+        logPerf("setVideo(null)", startedAt);
     } else {
         const settings = await commands.getSettings();
         
@@ -884,7 +930,9 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
         // VideoId is now an absolute path (base path without extension), so we use it directly
         ui.setActiveVideoId(cleanVideoId);
         clearMetadataRetry(cleanVideoId);
+        const setMetadataStartedAt = perfNowMs();
         const completed = await setMetadata(cleanVideoId);
+        logPerf("setVideo:setMetadata", setMetadataStartedAt);
         if (!completed) {
             scheduleMetadataRetry(cleanVideoId);
         }
@@ -899,18 +947,22 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
         if (settings.autoplayVideo && allowAutoplay) {
             void player.play()?.catch(() => {});
         }
+        logPerf("setVideo(total)", startedAt);
     }
 }
 
 async function setMetadata(videoId: string): Promise<boolean> {
+    const startedAt = perfNowMs();
     const requestSerial = ++metadataRenderRequestSerial;
     const requestedVideoKey = normalizeVideoId(videoId);
 
+    const loadStartedAt = perfNowMs();
     let { data, resolvedVideoId } = await getMetadataWithFallback(
         videoId,
         commands.getMetadata,
         buildMetadataCandidates,
     );
+    logPerf("setMetadata:load", loadStartedAt);
     let kind = !data ? "null" : "Metadata" in data ? "Metadata" : "Deferred" in data ? "Deferred" : "NoData";
     console.log(`[diagnose] setMetadata kind=${kind} requested=${videoId} resolved=${resolvedVideoId}`);
 
@@ -966,6 +1018,7 @@ async function setMetadata(videoId: string): Promise<boolean> {
     currentEvents = rendered.currentEvents;
     highlightEvents = rendered.highlightEvents;
     changeMarkers();
+    logPerf(`setMetadata(total kind=${kind})`, startedAt);
     return rendered.completed;
 }
 

@@ -113,8 +113,13 @@ impl SettingsWrapper {
 
     pub fn update_from_file(&self, settings_file: &Path, app_handle: &AppHandle) {
         let old_recordings_path = self.get_recordings_path();
+        let old_clips_path = self.get_clips_path();
         let old_marker_flags = self.get_marker_flags();
         let old_log = self.debug_log();
+        let old_max_recording_age = self.max_recording_age();
+        let old_max_recordings_size = self.max_recordings_size();
+        let old_auto_delete_clips = self.auto_delete_clips();
+        let old_keep_video_json_on_auto_delete = self.keep_video_json_on_auto_delete();
         let old_hightlight_hotkey = self.hightlight_hotkey();
         let old_start_recording_hotkey = self.start_recording_hotkey();
         let old_stop_recording_hotkey = self.stop_recording_hotkey();
@@ -165,7 +170,20 @@ impl SettingsWrapper {
             app_handle.update_hotkeys();
         }
 
-        app_handle.cleanup_recordings();
+        // Recording cleanup can scan many files and should not block UI save flows.
+        let cleanup_settings_changed =
+            self.max_recording_age() != old_max_recording_age
+                || self.max_recordings_size() != old_max_recordings_size
+                || self.auto_delete_clips() != old_auto_delete_clips
+                || self.keep_video_json_on_auto_delete() != old_keep_video_json_on_auto_delete
+                || self.get_recordings_path() != old_recordings_path
+                || self.get_clips_path() != old_clips_path;
+        if cleanup_settings_changed {
+            let app_handle = app_handle.clone();
+            async_runtime::spawn_blocking(move || {
+                app_handle.cleanup_recordings();
+            });
+        }
     }
 
     pub fn get_recordings_path(&self) -> PathBuf {

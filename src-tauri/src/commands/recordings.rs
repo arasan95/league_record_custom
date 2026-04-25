@@ -10,6 +10,7 @@ use crate::state::{MarkerFlags, SettingsFile, SettingsWrapper};
 use crate::util::compare_time;
 
 use super::path_guard::resolve_existing_video_base;
+const PERF_LOG_ENABLED: bool = false;
 
 #[cfg_attr(test, derive(specta::Type))]
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -46,8 +47,11 @@ pub fn get_recordings_path(settings: State<SettingsWrapper>) -> PathBuf {
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub fn get_recordings_size(app_handle: AppHandle) -> f32 {
+    let started_at = std::time::Instant::now();
     let mut size = 0;
+    let mut file_count = 0usize;
     for file in app_handle.get_recordings() {
+        file_count += 1;
         if let Ok(metadata) = std::fs::metadata(file.with_extension("mp4")) {
             size += metadata.len();
         }
@@ -55,14 +59,21 @@ pub fn get_recordings_size(app_handle: AppHandle) -> f32 {
             size += metadata.len();
         }
     }
+    let elapsed_ms = started_at.elapsed().as_secs_f64() * 1000.0;
+    if PERF_LOG_ENABLED {
+        log::info!("[perf] get_recordings_size: {:.1}ms (records={})", elapsed_ms, file_count);
+        println!("[perf] get_recordings_size: {:.1}ms (records={})", elapsed_ms, file_count);
+    }
     size as f32 / 1_000_000_000.0
 }
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub fn get_recordings_list(app_handle: AppHandle) -> Vec<Recording> {
+    let started_at = std::time::Instant::now();
     let mut recordings = app_handle.get_recordings();
     recordings.sort_by(|a, b| compare_time(a, b).unwrap_or(Ordering::Equal));
+    let scanned = recordings.len();
 
     let mut ret = Vec::new();
     for path in recordings {
@@ -71,8 +82,8 @@ pub fn get_recordings_list(app_handle: AppHandle) -> Vec<Recording> {
             mp4_path.set_extension("mp4");
             let video_exists = mp4_path.exists();
 
-            // Keep list loading fast: do not trigger deferred metadata re-processing here.
-            match action::get_recording_metadata(&path, false) {
+            // Keep list loading fast: avoid parsing heavy timeline/event payloads.
+            match action::get_recording_metadata_for_list(&path) {
                 Ok(metadata) => {
                     ret.push(Recording {
                         video_id,
@@ -92,6 +103,21 @@ pub fn get_recordings_list(app_handle: AppHandle) -> Vec<Recording> {
         }
     }
 
+    let elapsed_ms = started_at.elapsed().as_secs_f64() * 1000.0;
+    if PERF_LOG_ENABLED {
+        log::info!(
+            "[perf] get_recordings_list: {:.1}ms (scanned={}, returned={})",
+            elapsed_ms,
+            scanned,
+            ret.len()
+        );
+        println!(
+            "[perf] get_recordings_list: {:.1}ms (scanned={}, returned={})",
+            elapsed_ms,
+            scanned,
+            ret.len()
+        );
+    }
     ret
 }
 

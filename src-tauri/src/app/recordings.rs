@@ -187,10 +187,90 @@ pub mod action {
     use std::path::{Path, PathBuf};
 
     use anyhow::{bail, Context, Result};
+    use riot_datatypes::{lcu, MatchId, ParticipantId, Queue};
+    use serde::Deserialize;
     use tauri::async_runtime;
 
     use crate::recorder::MetadataFile;
-    use crate::recorder::{self, Deferred, NoData};
+    use crate::recorder::{self, Deferred, GameMetadata, NoData, Participant};
+
+    #[derive(Debug, Deserialize)]
+    enum MetadataFileList {
+        Metadata(GameMetadataList),
+        Deferred(DeferredList),
+        NoData(NoData),
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct GameMetadataList {
+        favorite: bool,
+        match_id: MatchId,
+        ingame_time_rec_start_offset: f64,
+        #[serde(default)]
+        highlights: Vec<f64>,
+        queue: Queue,
+        player: lcu::Player,
+        champion_name: String,
+        stats: lcu::Stats,
+        participant_id: ParticipantId,
+        #[serde(default)]
+        participants: Vec<Participant>,
+        #[serde(default)]
+        teams: Vec<lcu::MatchTeam>,
+        #[serde(default)]
+        game_version: String,
+        #[serde(default)]
+        game_duration: i64,
+        #[serde(default)]
+        lp_diff: Option<i32>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct DeferredList {
+        favorite: bool,
+        match_id: MatchId,
+        ingame_time_rec_start_offset: f64,
+        #[serde(default)]
+        highlights: Vec<f64>,
+        #[serde(default)]
+        participants: Vec<Participant>,
+    }
+
+    impl MetadataFileList {
+        fn into_metadata_file(self) -> MetadataFile {
+            match self {
+                MetadataFileList::Metadata(meta) => MetadataFile::Metadata(GameMetadata {
+                    favorite: meta.favorite,
+                    match_id: meta.match_id,
+                    ingame_time_rec_start_offset: meta.ingame_time_rec_start_offset,
+                    highlights: meta.highlights,
+                    queue: meta.queue,
+                    player: meta.player,
+                    champion_name: meta.champion_name,
+                    stats: meta.stats,
+                    participant_id: meta.participant_id,
+                    participants: meta.participants,
+                    teams: meta.teams,
+                    events: vec![],
+                    gold_timeline: vec![],
+                    game_version: meta.game_version,
+                    game_duration: meta.game_duration,
+                    lp_diff: meta.lp_diff,
+                }),
+                MetadataFileList::Deferred(def) => MetadataFile::Deferred(Deferred {
+                    favorite: def.favorite,
+                    match_id: def.match_id,
+                    ingame_time_rec_start_offset: def.ingame_time_rec_start_offset,
+                    highlights: def.highlights,
+                    events: vec![],
+                    participants: def.participants,
+                }),
+                MetadataFileList::NoData(no_data) => MetadataFile::NoData(no_data),
+            }
+        }
+    }
 
     pub fn rename_recording(recording_path: PathBuf, new_name: String) -> Result<bool> {
         let mut new_recording_path = recording_path.clone();
@@ -273,6 +353,30 @@ pub mod action {
             }
             metadata_file => Ok(metadata_file),
         }
+    }
+
+    pub fn get_recording_metadata_for_list(video_path: &Path) -> Result<MetadataFile> {
+        let metadata_path = video_path.with_extension("json");
+        let mp4_path = video_path.with_extension("mp4");
+
+        if !metadata_path.is_file() && !mp4_path.is_file() {
+            bail!("no such video");
+        }
+
+        if metadata_path.exists() && fs::metadata(&metadata_path)?.is_file() {
+            let reader = BufReader::new(File::open(&metadata_path)?);
+            return match serde_json::from_reader::<_, MetadataFileList>(reader) {
+                Ok(light) => Ok(light.into_metadata_file()),
+                Err(_) => {
+                    let reader = BufReader::new(File::open(&metadata_path)?);
+                    Ok(serde_json::from_reader::<_, MetadataFile>(reader)?)
+                }
+            };
+        }
+
+        let metadata_file = MetadataFile::NoData(NoData { favorite: false });
+        save_recording_metadata(&metadata_path, &metadata_file)?;
+        Ok(metadata_file)
     }
 
     pub fn save_recording_metadata(path: &Path, metadata_file: &MetadataFile) -> Result<()> {
