@@ -2,6 +2,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use chrono::Utc;
+use std::time::Duration;
 
 use tauri::AppHandle;
 use xxhash_rust::xxh64::xxh64;
@@ -17,6 +18,16 @@ mod tooltip_db;
 pub use media::*;
 pub use recordings::*;
 pub use tooltip_db::*;
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub fn perf_log(message: String) {
+    const PERF_LOG_ENABLED: bool = false;
+    if PERF_LOG_ENABLED {
+        println!("{message}");
+        log::info!("{message}");
+    }
+}
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
@@ -51,6 +62,8 @@ pub async fn download_image(
 
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .connect_timeout(Duration::from_secs(2))
+        .timeout(Duration::from_secs(6))
         .build()
         .map_err(|e| e.to_string())?;
 

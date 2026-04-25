@@ -209,10 +209,14 @@ export function showSettingsModalView(input: {
             saveMouseConfig(pendingMouseConfig);
             onReloadKeybinds();
             updateAutoButtons(newSettings);
-            void saveCallback(newSettings).then(() => {
-                closeSettingsModal();
-                (window as any)._developerModeEnabled = newSettings.developerMode;
-            });
+            closeSettingsModal();
+            void saveCallback(newSettings)
+                .then(() => {
+                    (window as any)._developerModeEnabled = newSettings.developerMode;
+                })
+                .catch((error) => {
+                    console.error("Failed to save settings:", error);
+                });
         },
     }, { class: "btn-save" }, getText(lang, "save"));
 
