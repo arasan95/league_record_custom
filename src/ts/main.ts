@@ -19,8 +19,9 @@ import { buildMetadataCandidates, normalizeVideoId, toAssetPath, videoIdsMatch }
 import { getLatestRetryVideoId, getRetryState } from "./main_sidebar_usecase";
 import { getMetadataFromRecordingsList, getMetadataWithFallback } from "./main_metadata_usecase";
 import { renderMetadataState } from "./main_metadata_render_usecase";
-import { buildMarkers, markerEventName, type HighlightEvents, type RecordingEvents } from "./main_markers_usecase";
+import { buildMarkers, markerEventName, type HighlightEvents, type MarkerDetail, type RecordingEvents } from "./main_markers_usecase";
 import { initializeProgressTooltips } from "./main_progress_tooltip_usecase";
+import { initializeMarkerHoverTooltips } from "./main_marker_tooltip_usecase";
 import { createKeyboardHandlers } from "./main_keyboard_usecase";
 import { refreshSidebar, retrySidebarUpdateLoop } from "./main_recordings_usecase";
 import { buildTimelineRows } from "./main_timeline_usecase";
@@ -52,6 +53,7 @@ export function reloadKeybinds() {
 
 let currentEvents: RecordingEvents | null = null;
 let highlightEvents: HighlightEvents | null = null;
+let markerDetails: Array<MarkerDetail | undefined> = [];
 let preferredActiveVideoId: string | null = null;
 const metadataRetryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 const metadataRenderSignatures = new Map<string, string>();
@@ -494,6 +496,13 @@ async function main() {
         player,
         playerElement,
         getRecordingOffset: () => currentEvents?.recordingOffset ?? highlightEvents?.recordingOffset ?? 0,
+    });
+
+    initializeMarkerHoverTooltips({
+        playerElement,
+        getMarkerDetails: () => markerDetails,
+        getParticipants: () => currentEvents?.participants,
+        getSelfParticipantId: () => currentEvents?.participantId ?? 0,
     });
 
     // add events to html elements
@@ -1023,7 +1032,9 @@ async function setMetadata(videoId: string): Promise<boolean> {
 }
 
 function changeMarkers() {
-    const markers = buildMarkers(currentEvents, highlightEvents, ui.getMarkerFlags(), EVENT_DELAY);
+    const built = buildMarkers(currentEvents, highlightEvents, ui.getMarkerFlags(), EVENT_DELAY);
+    const markers = built.markers;
+    markerDetails = built.details;
 
     player.markers().removeAll();
     player.markers().add(markers);
