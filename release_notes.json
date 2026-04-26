@@ -2,11 +2,15 @@
     "notes":  [
                   "[日本語]",
                   "主な変更点:",
+                  "- シークバーのイベントマーカーにホバー詳細表示を追加（キル/デス/アシスト/タワーなど）",
+                  "- コントロールバーを右クリックした際に白く光り続ける（フォーカスが残る）問題を修正",
                   "- スコアボードの表示バグ修正",
                   "- サイドバーの表示バグ修正",
                   "",
                   "[English]",
                   "Highlights:",
+                  "- Added hover details for seekbar event markers (kill/death/assist/tower etc.)",
+                  "- Fixed sticky highlight/focus after right-clicking player controls",
                   "- Fixed scoreboard display bugs",
                   "- Fixed sidebar display bugs"
               ]

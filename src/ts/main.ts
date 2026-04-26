@@ -405,6 +405,12 @@ async function main() {
         initTooltipFallback().catch(console.error);
     }, 1500);
     addEventListener("contextmenu", (event) => {
+        // Avoid "stuck" focus/active highlight on Video.js controls after right-click.
+        const active = document.activeElement as HTMLElement | null;
+        if (active && typeof active.blur === "function") active.blur();
+        const target = event.target as HTMLElement | null;
+        if (target && typeof (target as any).blur === "function") (target as any).blur();
+
         // We check a global-ish flag to avoid async delay during the event
         if (!(window as any)._developerModeEnabled) {
             event.preventDefault();

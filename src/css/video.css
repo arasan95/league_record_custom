@@ -317,6 +317,23 @@ body:has(.vjs-fullscreen) {
     align-items: center !important; /* Center vertically */
 }
 
+/* Disable sticky focus/active highlight on right click (and generally) */
+.video-js .vjs-control-bar,
+.video-js .vjs-control-bar * {
+    -webkit-tap-highlight-color: transparent;
+}
+.video-js .vjs-control-bar .vjs-control:focus,
+.video-js .vjs-control-bar .vjs-control:focus-visible,
+.video-js .vjs-control-bar .vjs-control:active,
+.video-js .vjs-control-bar .vjs-slider:focus,
+.video-js .vjs-control-bar .vjs-slider:focus-visible,
+.video-js .vjs-control-bar .vjs-progress-control:focus,
+.video-js .vjs-control-bar .vjs-progress-control:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    background-color: transparent !important;
+}
+
 /* Ensure control bar is always visible */
 .video-js.vjs-user-inactive:not(.vjs-paused) .vjs-control-bar {
     opacity: 1 !important;
