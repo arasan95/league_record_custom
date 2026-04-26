@@ -677,6 +677,114 @@ body:has(.vjs-fullscreen) {
     bottom: auto;
     top: 0;
 }
+
+/* Marker Hover Tooltip (K/D/A detail) */
+#custom-marker-tooltip {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.95);
+    color: white;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    pointer-events: none;
+    z-index: 20002;
+    white-space: normal;
+    display: none;
+    transform: translateX(-50%);
+    bottom: auto;
+    top: 0;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+#custom-marker-tooltip .lr-marker-tooltip-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+#custom-marker-tooltip .lr-marker-tooltip-card {
+    padding: 6px 6px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    white-space: nowrap;
+}
+#custom-marker-tooltip .lr-marker-tooltip-type {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    opacity: 0.95;
+    margin-bottom: 6px;
+}
+
+#custom-marker-tooltip .lr-marker-tooltip-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+#custom-marker-tooltip .lr-marker-tooltip-arrow {
+    opacity: 0.9;
+    font-size: 14px;
+}
+
+#custom-marker-tooltip .lr-marker-champ {
+    display: flex;
+    align-items: center;
+}
+#custom-marker-tooltip .lr-marker-champ-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+}
+#custom-marker-tooltip .lr-marker-champ.is-self .lr-marker-champ-icon {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28) inset, 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+#custom-marker-tooltip .lr-marker-tooltip-assists {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    opacity: 0.95;
+}
+#custom-marker-tooltip .lr-marker-assist-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: rgba(0, 0, 0, 0.35);
+    border: none;
+}
+#custom-marker-tooltip .lr-marker-assist-icon.is-self {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25) inset;
+}
+
+#custom-marker-tooltip .lr-marker-tooltip-time {
+    margin-top: 6px;
+    font-size: 12px;
+    opacity: 0.85;
+    text-align: center;
+}
+
+/* Marker overlays (frame around hovered markers) */
+#custom-marker-overlays {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 60; /* above markers (40) but below control bar tooltips */
+}
+.lr-marker-overlay {
+    position: absolute;
+    box-sizing: border-box;
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.03);
+}
 .video-js .vjs-mouse-display .vjs-time-tooltip { display: none !important; }
 .video-js .vjs-play-progress .vjs-time-tooltip { display: none !important; }
 .video-js .vjs-mouse-display { z-index: 10000 !important; }
