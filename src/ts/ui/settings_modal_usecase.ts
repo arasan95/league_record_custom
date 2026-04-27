@@ -155,6 +155,7 @@ export function showSettingsModalView(input: {
             const { highlightHotkeyValue, startRecHotkeyValue, stopRecHotkeyValue } = getBackendHotkeyValues();
             const newSettings: Settings = buildSettingsPayload({
                 base: settings,
+                language: generalControls.refs.langSelect.value,
                 recordingsFolder: generalControls.refs.folderInput.value,
                 clipsFolder: generalControls.refs.clipsFolderInput.value,
                 filenameFormat: generalControls.refs.filenameInput.value,

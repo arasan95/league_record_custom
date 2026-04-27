@@ -39,6 +39,7 @@ type OtherSwitchInputs = {
 
 export type BuildSettingsPayloadInput = {
     base: Settings;
+    language: string;
     recordingsFolder: string;
     clipsFolder: string;
     filenameFormat: string;
@@ -88,6 +89,7 @@ export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings
 
     return {
         ...input.base,
+        language: input.language as any,
         recordingsFolder: input.recordingsFolder,
         clipsFolder: input.clipsFolder,
         filenameFormat: input.filenameFormat,
