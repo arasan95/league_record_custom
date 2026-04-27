@@ -9,4 +9,8 @@ pub enum AudioSource {
     SYSTEM,
     /// the default audio input and output of the pc
     ALL,
+    /// full audio on track 1, application/game audio on track 2, system on track 3, mic on track 4
+    SEPARATED,
+    /// full audio on track 1, selected app 1 on track 2, selected app 2 on track 3, selected app 3 on track 4
+    APPLICATIONS3,
 }

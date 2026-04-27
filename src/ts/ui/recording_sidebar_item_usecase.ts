@@ -1,4 +1,8 @@
 import type { Participant, Recording } from "../bindings";
+import { startDrag } from "@crabnebula/tauri-plugin-drag";
+import { open } from "@tauri-apps/plugin-shell";
+import xLogoIcon from "../../assets/share-icons/x-logo.svg";
+import discordSymbolIcon from "../../assets/share-icons/discord-symbol.svg";
 import {
     getChampionIconUrl,
     getChampionIconUrlById,
@@ -21,6 +25,20 @@ import {
     resolveTftUnitCost,
 } from "./recording_item_usecase";
 const PERF_LOG_ENABLED = false;
+const X_COMPOSE_URL = "https://x.com/compose/post";
+const SHARE_MODAL_ID = "recording-share-modal";
+const DRAG_PREVIEW_ICON_DATA_URI =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAoMBgQfYf2sAAAAASUVORK5CYII=";
+let shareModalCleanup: (() => void) | null = null;
+
+function createShareIcon(kind: "x" | "discord"): HTMLImageElement {
+    const img = document.createElement("img");
+    img.className = "recording-share-option-icon";
+    img.alt = "";
+    img.draggable = false;
+    img.src = kind === "x" ? xLogoIcon : discordSymbolIcon;
+    return img;
+}
 
 type SidebarImagePerfStats = {
     resolveMs: number;
@@ -265,6 +283,200 @@ function perfNowMs(): number {
         return performance.now();
     }
     return Date.now();
+}
+
+function getRecordingMp4Path(videoId: string): string {
+    return videoId.toLowerCase().endsWith(".mp4") ? videoId : `${videoId}.mp4`;
+}
+
+function basename(path: string): string {
+    return path.split(/[\\/]/).pop() || "recording.mp4";
+}
+
+async function openXComposer(): Promise<void> {
+    await open(X_COMPOSE_URL);
+}
+
+function closeShareModal(): void {
+    shareModalCleanup?.();
+    shareModalCleanup = null;
+    document.getElementById(SHARE_MODAL_ID)?.remove();
+}
+
+function showShareModal(videoId: string): void {
+    closeShareModal();
+
+    const overlay = document.createElement("div");
+    overlay.id = SHARE_MODAL_ID;
+    overlay.className = "recording-share-modal-overlay";
+
+    const panel = document.createElement("div");
+    panel.className = "recording-share-modal";
+    panel.addEventListener("click", (e) => e.stopPropagation());
+
+    const content = document.createElement("div");
+    content.className = "recording-share-modal-content";
+
+    const renderSelectView = () => {
+        content.replaceChildren();
+
+        const title = document.createElement("div");
+        title.className = "recording-share-modal-title";
+        title.textContent = "共有先を選択";
+
+        const subtitle = document.createElement("div");
+        subtitle.className = "recording-share-modal-subtitle";
+        subtitle.textContent = "Discord はドラッグ&ドロップで送信できます";
+
+        const options = document.createElement("div");
+        options.className = "recording-share-modal-options";
+
+        const xButton = document.createElement("button");
+        xButton.className = "recording-share-option recording-share-option-icon-only";
+        xButton.type = "button";
+        xButton.title = "X";
+        xButton.setAttribute("aria-label", "Share to X");
+        xButton.append(createShareIcon("x"));
+        xButton.onclick = () => renderXView();
+
+        const discordButton = document.createElement("button");
+        discordButton.className = "recording-share-option recording-share-option-icon-only";
+        discordButton.type = "button";
+        discordButton.title = "Discord";
+        discordButton.setAttribute("aria-label", "Share to Discord");
+        discordButton.append(createShareIcon("discord"));
+        discordButton.onclick = () => renderDiscordView();
+
+        const cancelButton = document.createElement("button");
+        cancelButton.className = "recording-share-cancel";
+        cancelButton.type = "button";
+        cancelButton.textContent = "閉じる";
+        cancelButton.onclick = () => closeShareModal();
+
+        options.append(xButton, discordButton);
+        content.append(title, subtitle, options, cancelButton);
+    };
+
+    const renderXView = () => {
+        content.replaceChildren();
+        const videoPath = getRecordingMp4Path(videoId);
+        const fileName = basename(videoPath);
+
+        const title = document.createElement("div");
+        title.className = "recording-share-modal-title";
+        title.textContent = "Xへ共有";
+
+        const subtitle = document.createElement("div");
+        subtitle.className = "recording-share-modal-subtitle";
+        subtitle.textContent = "Xの投稿画面に下の動画ファイルをドラッグしてください";
+
+        const chip = document.createElement("div");
+        chip.className = "discord-share-drag-chip recording-share-modal-drag-chip";
+        chip.title = videoPath;
+        chip.textContent = fileName;
+        chip.addEventListener("pointerdown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void startDrag({
+                item: [videoPath],
+                icon: DRAG_PREVIEW_ICON_DATA_URI,
+                mode: "copy",
+            }).catch((err) => {
+                console.error("Failed to start native drag for X share:", err);
+            });
+        });
+
+        const actions = document.createElement("div");
+        actions.className = "recording-share-modal-actions recording-share-modal-actions-3";
+
+        const openButton = document.createElement("button");
+        openButton.className = "recording-share-option";
+        openButton.type = "button";
+        openButton.textContent = "Xを開く";
+        openButton.onclick = () => {
+            void openXComposer().catch((err) => {
+                console.error("Failed to open X composer:", err);
+            });
+        };
+
+        const backButton = document.createElement("button");
+        backButton.className = "recording-share-option";
+        backButton.type = "button";
+        backButton.textContent = "戻る";
+        backButton.onclick = () => renderSelectView();
+
+        const closeButton = document.createElement("button");
+        closeButton.className = "recording-share-cancel";
+        closeButton.type = "button";
+        closeButton.textContent = "閉じる";
+        closeButton.onclick = () => closeShareModal();
+
+        actions.append(openButton, backButton, closeButton);
+        content.append(title, subtitle, chip, actions);
+    };
+
+    const renderDiscordView = () => {
+        content.replaceChildren();
+        const videoPath = getRecordingMp4Path(videoId);
+        const fileName = basename(videoPath);
+
+        const title = document.createElement("div");
+        title.className = "recording-share-modal-title";
+        title.textContent = "Discordへ共有";
+
+        const subtitle = document.createElement("div");
+        subtitle.className = "recording-share-modal-subtitle";
+        subtitle.textContent = "下のファイルを Discord の入力欄へドラッグしてください";
+
+        const chip = document.createElement("div");
+        chip.className = "discord-share-drag-chip recording-share-modal-drag-chip";
+        chip.title = videoPath;
+        chip.textContent = fileName;
+        chip.addEventListener("pointerdown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void startDrag({
+                item: [videoPath],
+                icon: DRAG_PREVIEW_ICON_DATA_URI,
+                mode: "copy",
+            }).catch((err) => {
+                console.error("Failed to start native drag for Discord share:", err);
+            });
+        });
+
+        const actions = document.createElement("div");
+        actions.className = "recording-share-modal-actions";
+
+        const backButton = document.createElement("button");
+        backButton.className = "recording-share-option";
+        backButton.type = "button";
+        backButton.textContent = "戻る";
+        backButton.onclick = () => renderSelectView();
+
+        const closeButton = document.createElement("button");
+        closeButton.className = "recording-share-cancel";
+        closeButton.type = "button";
+        closeButton.textContent = "閉じる";
+        closeButton.onclick = () => closeShareModal();
+
+        actions.append(backButton, closeButton);
+        content.append(title, subtitle, chip, actions);
+    };
+
+    renderSelectView();
+    panel.append(content);
+    overlay.append(panel);
+    overlay.addEventListener("click", () => closeShareModal());
+
+    const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        closeShareModal();
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    shareModalCleanup = () => document.removeEventListener("keydown", onKeyDown, true);
+
+    document.body.append(overlay);
 }
 
 function createSidebarImagePerfStats(): SidebarImagePerfStats {
@@ -741,10 +953,16 @@ export function createRecordingSidebarItem(input: {
         },
     }, { class: "favorite", ...(favorite ? { style: "color: gold" } : {}) }, favorite ? "\u2605" : "\u2606") as HTMLSpanElement;
 
+    const shareBtn = createEl("span", {
+        onclick: (e: MouseEvent) => {
+            e.stopPropagation();
+            showShareModal(recording.videoId);
+        },
+    }, { class: "share", title: "Share" }, "\u21AA");
     const renameBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onRename(recording.videoId); } }, { class: "rename" }, "\u270E");
     const deleteBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onDelete(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete", title: getText(currentLanguage as any, "delete" as any) || "Delete" }, "\u2716");
     const deleteVideoOnlyBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); if (onDeleteVideoOnly) onDeleteVideoOnly(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete-video-only", title: getText(currentLanguage as any, "deleteVideoOnly" as any) || "Delete Video Only" }, "\uD83D\uDDD1");
-    const actionsDiv = createEl("div", {}, { class: "sidebar-actions" }, [favoriteBtn, renameBtn, deleteVideoOnlyBtn, deleteBtn]);
+    const actionsDiv = createEl("div", {}, { class: "sidebar-actions" }, [favoriteBtn, shareBtn, renameBtn, deleteVideoOnlyBtn, deleteBtn]);
 
     if (recording.metadata && "Metadata" in recording.metadata) {
         li.dataset.hasMetadata = recording.metadata.Metadata.queue.name !== "Unknown Queue" ? "true" : "false";

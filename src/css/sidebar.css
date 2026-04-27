@@ -621,7 +621,7 @@
     display: flex;
 }
 
-.favorite, .rename, .delete, .delete-video-only {
+.favorite, .share, .rename, .delete, .delete-video-only {
     font-size: 16px;
     color: #666;
     transition: color 0.2s;
@@ -636,9 +636,137 @@
 }
 
 .favorite:hover { color: gold; }
+.share:hover { color: #7dd3fc; }
 .rename:hover { color: rgb(69, 255, 137); }
 .delete:hover { color: red; }
 .delete-video-only:hover { color: orange; }
+
+.recording-share-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40000;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    background: rgba(2, 6, 23, 0.58);
+    backdrop-filter: blur(2px);
+}
+
+.recording-share-modal {
+    width: min(360px, calc(100vw - 32px));
+    padding: 14px;
+    border: 1px solid #384766;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #111827 0%, #0b1324 100%);
+    box-shadow: 0 20px 44px rgba(0, 0, 0, 0.5);
+    color: #e5ecff;
+}
+
+.recording-share-modal-content {
+    display: grid;
+    gap: 10px;
+}
+
+.recording-share-modal-title {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.recording-share-modal-subtitle {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #a6b4d8;
+}
+
+.recording-share-modal-options {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 12px;
+}
+
+.recording-share-option,
+.recording-share-cancel {
+    border: 1px solid #4a5a80;
+    border-radius: 8px;
+    background: #1a2540;
+    color: #edf2ff;
+    cursor: pointer;
+    padding: 10px 12px;
+    font-size: 13px;
+    text-align: left;
+    min-height: 40px;
+}
+
+.recording-share-option:hover,
+.recording-share-cancel:hover {
+    border-color: #6d83bc;
+    background: #25345b;
+}
+
+.recording-share-cancel {
+    margin-top: 10px;
+    text-align: center;
+}
+
+.recording-share-option-icon-only {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    text-align: center;
+}
+
+.recording-share-option-icon {
+    display: block;
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+}
+
+.recording-share-modal-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.recording-share-modal-actions .recording-share-option,
+.recording-share-modal-actions .recording-share-cancel {
+    margin-top: 0;
+    min-height: 40px;
+    text-align: center;
+}
+
+.recording-share-modal-actions-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.recording-share-modal-drag-chip {
+    margin-top: 6px;
+    user-select: none;
+}
+
+.discord-share-drag-chip {
+    cursor: grab;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #293462;
+    border: 1px solid #6875f5;
+    color: #fff;
+    font-size: 12px;
+}
+
+.discord-share-drag-chip:active {
+    cursor: grabbing;
+}
 
 /* Fallback for no-metadata (just text) */
 .video-name {

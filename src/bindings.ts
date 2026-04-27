@@ -89,7 +89,11 @@ export type AudioSource =
 /**
  * the default audio input and output of the pc
  */
-"ALL"
+"ALL" |
+/**
+ * full audio on track 1, application/game audio on track 2, system on track 3, mic on track 4
+ */
+"SEPARATED"
 export type BuildingType = { buildingType: "INHIBITOR_BUILDING"; lane_type: LaneType } | { buildingType: "TOWER_BUILDING"; lane_type: LaneType; tower_type: TowerType }
 export type Deferred = { favorite: boolean; matchId: MatchId; ingameTimeRecStartOffset: number; highlights?: number[] }
 export type DragonType = "FIRE_DRAGON" | "EARTH_DRAGON" | "WATER_DRAGON" | "AIR_DRAGON" | "HEXTECH_DRAGON" | "CHEMTECH_DRAGON" | "ELDER_DRAGON"
