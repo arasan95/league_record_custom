@@ -256,11 +256,16 @@ pub async fn create_clip(
         }
         Ok(o) => {
             let stderr = String::from_utf8_lossy(&o.stderr);
-            if stderr.trim().is_empty() {
-                Err("FFmpeg exited with non-zero code.".into())
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            let code = o.status.code().map(|c| c.to_string()).unwrap_or_else(|| "unknown".to_string());
+            let detail = if !stderr.trim().is_empty() {
+                stderr.trim().to_string()
+            } else if !stdout.trim().is_empty() {
+                stdout.trim().to_string()
             } else {
-                Err(format!("FFmpeg exited with non-zero code: {}", stderr.trim()))
-            }
+                "No ffmpeg output.".to_string()
+            };
+            Err(format!("FFmpeg exited with non-zero code ({}): {}", code, detail))
         }
         Err(e) => Err(format!("Failed to execute ffmpeg: {}. Is FFmpeg installed?", e)),
     }
