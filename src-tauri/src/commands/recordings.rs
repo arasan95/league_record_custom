@@ -1,4 +1,5 @@
-﻿use std::cmp::Ordering;
+use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -265,6 +266,51 @@ pub async fn pick_clips_folder(app_handle: AppHandle) -> Option<PathBuf> {
         .and_then(|d| d.into_path().ok())
 }
 
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub async fn get_running_applications() -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        let output = Command::new("tasklist").args(["/fo", "csv", "/nh"]).output();
+        let Ok(output) = output else { return vec![] };
+        if !output.status.success() {
+            return vec![];
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut apps = BTreeSet::new();
+        for line in stdout.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let image_name = if trimmed.starts_with('"') {
+                trimmed
+                    .trim_start_matches('"')
+                    .split("\",\"")
+                    .next()
+                    .map(str::to_string)
+            } else {
+                trimmed.split(',').next().map(|v| v.trim_matches('"').to_string())
+            };
+            let Some(image_name) = image_name else { continue };
+            let lower = image_name.to_ascii_lowercase();
+            if !lower.ends_with(".exe") {
+                continue;
+            }
+            if lower == "system idle process" || lower == "system" {
+                continue;
+            }
+            apps.insert(image_name);
+        }
+        apps.into_iter().collect()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        vec![]
+    }
+}
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub async fn save_scoreboard_cache(video_id: String, content: String) -> Result<(), String> {
@@ -291,3 +337,4 @@ pub async fn load_scoreboard_cache(video_id: String) -> Result<String, String> {
     let content = std::fs::read_to_string(cache_path).map_err(|e| e.to_string())?;
     Ok(content)
 }
+

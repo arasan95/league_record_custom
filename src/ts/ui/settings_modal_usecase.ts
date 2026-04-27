@@ -57,6 +57,7 @@ export function showSettingsModalView(input: {
         onPickRecordingsFolder: () => invoke<string | null>("pick_recordings_folder"),
         onPickClipsFolder: () => invoke<string | null>("pick_clips_folder"),
         onClearCache: () => commands.clearCache().then(() => {}),
+        onLoadRunningApplications: () => commands.getRunningApplications(),
     });
 
     const generalTabContent = createEl("div", {}, { class: "settings-tab-content settings-scroll-container" });
@@ -103,6 +104,7 @@ export function showSettingsModalView(input: {
         generalControls.groups.outputResolutionGroup,
         generalControls.groups.framerateGroup,
         generalControls.groups.recordAudioGroup,
+        generalControls.groups.applicationAudioTracksGroup,
         generalControls.groups.maxAgeGroup,
         generalControls.groups.maxSizeGroup,
     );
@@ -164,6 +166,11 @@ export function showSettingsModalView(input: {
                 outputResolution: generalControls.refs.resSelect.value,
                 framerate: generalControls.refs.frSelect.value,
                 recordAudio: generalControls.refs.audioSelect.value,
+                applicationAudioTracks: generalControls.refs.appAudioTrackControls.map((control) => ({
+                    application: control.appSelect.value.trim() || null,
+                    enabled: control.enabledToggle.dataset.enabled === "1",
+                    volumePercent: Math.max(0, Math.min(100, parseInt(control.volumeInput.value || "100", 10) || 0)),
+                })),
                 maxRecordingAgeDays: generalControls.refs.maxAgeInput.value,
                 maxRecordingsSizeGb: generalControls.refs.maxSizeInput.value,
                 highlightHotkeyValue,

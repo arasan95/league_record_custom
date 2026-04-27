@@ -214,6 +214,19 @@ impl SettingsWrapper {
         self.0.read().unwrap().record_audio
     }
 
+    pub fn get_application_audio_tracks(&self) -> Vec<libobs_recorder::settings::ApplicationAudioTrackSetting> {
+        let tracks = self.0.read().unwrap().application_audio_tracks.clone();
+        tracks
+            .into_iter()
+            .take(3)
+            .map(|track| libobs_recorder::settings::ApplicationAudioTrackSetting {
+                application: track.application,
+                enabled: track.enabled,
+                volume_percent: track.volume_percent,
+            })
+            .collect()
+    }
+
     pub fn get_marker_flags(&self) -> MarkerFlags {
         self.0.read().unwrap().marker_flags.clone()
     }
@@ -314,6 +327,25 @@ impl SettingsWrapper {
 #[cfg_attr(test, derive(specta::Type))]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ApplicationAudioTrackSetting {
+    pub application: Option<String>,
+    pub enabled: bool,
+    pub volume_percent: u8,
+}
+
+impl Default for ApplicationAudioTrackSetting {
+    fn default() -> Self {
+        Self {
+            application: None,
+            enabled: true,
+            volume_percent: 100,
+        }
+    }
+}
+
+#[cfg_attr(test, derive(specta::Type))]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub marker_flags: MarkerFlags,
 
@@ -325,6 +357,7 @@ pub struct Settings {
     pub output_resolution: Option<StdResolution>,
     pub framerate: Framerate,
     pub record_audio: AudioSource,
+    pub application_audio_tracks: Vec<ApplicationAudioTrackSetting>,
 
     pub autostart: bool,
     pub max_recording_age_days: Option<u64>,
@@ -408,6 +441,11 @@ impl Default for Settings {
             output_resolution: None,
             framerate: default_framerate(),
             record_audio: DEFAULT_RECORD_AUDIO,
+            application_audio_tracks: vec![
+                ApplicationAudioTrackSetting::default(),
+                ApplicationAudioTrackSetting::default(),
+                ApplicationAudioTrackSetting::default(),
+            ],
 
             autostart: DEFAULT_AUTOSTART,
             max_recording_age_days: DEFAULT_MAX_RECORDING_AGE_DAYS,
@@ -485,6 +523,43 @@ impl<'de> Deserialize<'de> for Settings {
                         }
                         "recordAudio" => {
                             settings.record_audio = map.next_value().unwrap_or(DEFAULT_RECORD_AUDIO);
+                        }
+                        "applicationAudioTracks" => {
+                            let raw: serde_json::Value = map.next_value().unwrap_or(serde_json::Value::Null);
+                            if let Some(array) = raw.as_array() {
+                                let mut converted: Vec<ApplicationAudioTrackSetting> = Vec::new();
+                                for item in array.iter().take(3) {
+                                    if let Some(app) = item.as_str() {
+                                        converted.push(ApplicationAudioTrackSetting {
+                                            application: Some(app.to_string()),
+                                            enabled: true,
+                                            volume_percent: 100,
+                                        });
+                                        continue;
+                                    }
+                                    if let Some(obj) = item.as_object() {
+                                        let application = obj
+                                            .get("application")
+                                            .and_then(|v| v.as_str())
+                                            .map(ToString::to_string);
+                                        let enabled = obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+                                        let volume_percent = obj
+                                            .get("volumePercent")
+                                            .and_then(|v| v.as_u64())
+                                            .unwrap_or(100)
+                                            .min(100) as u8;
+                                        converted.push(ApplicationAudioTrackSetting {
+                                            application,
+                                            enabled,
+                                            volume_percent,
+                                        });
+                                    }
+                                }
+                                while converted.len() < 3 {
+                                    converted.push(ApplicationAudioTrackSetting::default());
+                                }
+                                settings.application_audio_tracks = converted;
+                            }
                         }
                         "autostart" => {
                             settings.autostart = map.next_value().unwrap_or(DEFAULT_AUTOSTART);

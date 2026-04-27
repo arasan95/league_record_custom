@@ -50,6 +50,11 @@ export type BuildSettingsPayloadInput = {
     outputResolution: string;
     framerate: string;
     recordAudio: string;
+    applicationAudioTracks: Array<{
+        application: string | null;
+        enabled: boolean;
+        volumePercent: number;
+    }>;
     maxRecordingAgeDays: string;
     maxRecordingsSizeGb: string;
     highlightHotkeyValue: string | null;
@@ -94,6 +99,11 @@ export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings
         outputResolution: (input.outputResolution || null) as any,
         framerate: [parseInt(framerateN, 10), parseInt(framerateD, 10)],
         recordAudio: input.recordAudio as any,
+        applicationAudioTracks: input.applicationAudioTracks.slice(0, 3).map((track) => ({
+            application: (track.application || "").trim() || null,
+            enabled: !!track.enabled,
+            volumePercent: Math.max(0, Math.min(100, Math.round(track.volumePercent))),
+        })),
         maxRecordingAgeDays: input.maxRecordingAgeDays === "" ? null : parseInt(input.maxRecordingAgeDays, 10),
         maxRecordingsSizeGb: input.maxRecordingsSizeGb === "" ? null : parseInt(input.maxRecordingsSizeGb, 10),
         hightlightHotkey: input.highlightHotkeyValue,
