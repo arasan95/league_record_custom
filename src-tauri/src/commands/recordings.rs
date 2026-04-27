@@ -272,7 +272,14 @@ pub async fn pick_clips_folder(app_handle: AppHandle) -> Option<PathBuf> {
 pub async fn get_running_applications() -> Vec<String> {
     #[cfg(target_os = "windows")]
     {
-        let output = Command::new("tasklist").args(["/fo", "csv", "/nh"]).output();
+        let mut command = Command::new("tasklist");
+        command.args(["/fo", "csv", "/nh"]);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        let output = command.output();
         let Ok(output) = output else { return vec![] };
         if !output.status.success() {
             return vec![];
