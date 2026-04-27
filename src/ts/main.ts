@@ -6,7 +6,7 @@ import "@fffffffxxxxxxx/videojs-markers";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { join, sep } from "@tauri-apps/api/path";
 
-import { commands, type GameEvent, type Recording } from "./bindings";
+import { commands, type ClipAudioTrack, type GameEvent, type Recording } from "./bindings";
 import ListenerManager from "./listeners";
 import UI from "./ui";
 import { splitRight, playNotificationSound } from "./util";
@@ -275,12 +275,8 @@ let loopEnd: number | null = null;
 let isLooping = false;
 
 function updateClipBtnState() {
-    if (!createClipBtn) return;
-    if (loopStart !== null && loopEnd !== null && loopEnd > loopStart) {
-        createClipBtn.disabled = false;
-    } else {
-        createClipBtn.disabled = true;
-    }
+    const canCreateClip = loopStart !== null && loopEnd !== null && loopEnd > loopStart;
+    if (createClipBtn) createClipBtn.disabled = !canCreateClip;
 }
 
 function formatLoopTime(seconds: number): string {
@@ -304,6 +300,58 @@ function parseLoopTime(timeStr: string): number | null {
     const secs = parseInt(parts[1], 10);
     if (isNaN(mins) || isNaN(secs)) return null;
     return mins * 60 + secs;
+}
+
+type ClipAudioMode = "game-only" | "vc-in";
+
+function pickClipAudioMode(_tracks: ReadonlyArray<ClipAudioTrack>): Promise<ClipAudioMode | null> {
+    return new Promise((resolve) => {
+        let selectedMode: ClipAudioMode = "vc-in";
+        const cleanup = () => {
+            document.removeEventListener("keydown", onKeyDown);
+        };
+        const close = (result: ClipAudioMode | null) => {
+            cleanup();
+            ui.hideModal();
+            resolve(result);
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                close(null);
+            } else if (event.key === "Enter") {
+                event.preventDefault();
+                close(selectedMode);
+            }
+        };
+
+        const title = document.createElement("p");
+        title.textContent = "Clip Audio";
+
+        const buttonRow = document.createElement("p");
+        const gameOnlyButton = document.createElement("button");
+        gameOnlyButton.className = "btn";
+        gameOnlyButton.textContent = "Game Only";
+        gameOnlyButton.onclick = () => {
+            selectedMode = "game-only";
+            close("game-only");
+        };
+        const vcInButton = document.createElement("button");
+        vcInButton.className = "btn";
+        vcInButton.textContent = "With VC";
+        vcInButton.onclick = () => {
+            selectedMode = "vc-in";
+            close("vc-in");
+        };
+        const cancelButton = document.createElement("button");
+        cancelButton.className = "btn";
+        cancelButton.textContent = "Cancel";
+        cancelButton.onclick = () => close(null);
+        buttonRow.append(gameOnlyButton, vcInButton, cancelButton);
+
+        document.addEventListener("keydown", onKeyDown);
+        ui.showModal([title, buttonRow]);
+    });
 }
 
 function handleTimeInput(e: Event) {
@@ -344,7 +392,29 @@ if (createClipBtn) {
         try {
             createClipBtn.disabled = true;
             createClipBtn.textContent = "...";
-            const newFile = await commands.createClip(videoId, loopStart, loopEnd);
+            const tracksResult = await commands.getClipAudioTracks(videoId);
+            if (tracksResult.status === "error") {
+                throw tracksResult.error;
+            }
+
+            let selectedAudioTrackIndex: number | null = null;
+            if (tracksResult.data.length > 1) {
+                const mode = await pickClipAudioMode(tracksResult.data);
+                if (mode === null) {
+                    return;
+                }
+                selectedAudioTrackIndex = mode === "game-only" ? 1 : 0;
+            } else if (tracksResult.data.length === 1) {
+                selectedAudioTrackIndex = tracksResult.data[0].index;
+            }
+
+            const clipResult = selectedAudioTrackIndex === null
+                ? await commands.createClip(videoId, loopStart, loopEnd, null)
+                : await commands.createClipWithAudioTrack(videoId, loopStart, loopEnd, selectedAudioTrackIndex);
+            if (clipResult.status === "error") {
+                throw clipResult.error;
+            }
+            const newFile = clipResult.data;
             // Wait a bit or refresh? Ideally we should refresh the sidebar
             await  updateSidebar(); 
             // Show simple alert using error modal for now as it's the only one available

@@ -16,6 +16,24 @@ mod window;
 
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+pub struct ApplicationAudioTrackSetting {
+    pub application: Option<String>,
+    pub enabled: bool,
+    pub volume_percent: u8,
+}
+
+impl Default for ApplicationAudioTrackSetting {
+    fn default() -> Self {
+        Self {
+            application: None,
+            enabled: true,
+            volume_percent: 100,
+        }
+    }
+}
+
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
 pub struct RecorderSettings {
     /// ID of GPU
     pub(crate) window: Window,
@@ -25,6 +43,7 @@ pub struct RecorderSettings {
     pub(crate) framerate: Option<Framerate>,
     pub(crate) rate_control: Option<RateControl>,
     pub(crate) audio_source: Option<AudioSource>,
+    pub(crate) application_audio_tracks: Option<Vec<ApplicationAudioTrackSetting>>,
     pub(crate) encoder: Option<Encoder>,
 }
 
@@ -51,6 +70,7 @@ impl RecorderSettings {
             framerate: None,
             rate_control: None,
             audio_source: None,
+            application_audio_tracks: None,
             encoder: None,
         }
     }
@@ -109,6 +129,14 @@ impl RecorderSettings {
 
     pub fn get_audio_source(&self) -> Option<&AudioSource> {
         self.audio_source.as_ref()
+    }
+
+    pub fn set_application_audio_tracks(&mut self, application_audio_tracks: Vec<ApplicationAudioTrackSetting>) {
+        self.application_audio_tracks = Some(application_audio_tracks);
+    }
+
+    pub fn get_application_audio_tracks(&self) -> Option<&Vec<ApplicationAudioTrackSetting>> {
+        self.application_audio_tracks.as_ref()
     }
 
     pub fn set_encoder(&mut self, encoder: Encoder) {

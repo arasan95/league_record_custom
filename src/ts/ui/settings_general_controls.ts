@@ -13,6 +13,14 @@ type CreateSettingsGeneralControlsInput = {
     onPickRecordingsFolder: () => Promise<string | null>;
     onPickClipsFolder: () => Promise<string | null>;
     onClearCache: () => Promise<void>;
+    onLoadRunningApplications: () => Promise<string[]>;
+};
+
+type ApplicationAudioTrackControl = {
+    appSelect: HTMLSelectElement;
+    enabledToggle: HTMLButtonElement;
+    volumeRange: HTMLInputElement;
+    volumeInput: HTMLInputElement;
 };
 
 export type SettingsGeneralControlsResult = {
@@ -25,6 +33,7 @@ export type SettingsGeneralControlsResult = {
         outputResolutionGroup: HTMLDivElement;
         framerateGroup: HTMLDivElement;
         recordAudioGroup: HTMLDivElement;
+        applicationAudioTracksGroup: HTMLDivElement;
         maxAgeGroup: HTMLDivElement;
         maxSizeGroup: HTMLDivElement;
         troubleshootingGroup: HTMLDivElement;
@@ -38,6 +47,7 @@ export type SettingsGeneralControlsResult = {
         resSelect: HTMLSelectElement;
         frSelect: HTMLSelectElement;
         audioSelect: HTMLSelectElement;
+        appAudioTrackControls: [ApplicationAudioTrackControl, ApplicationAudioTrackControl, ApplicationAudioTrackControl];
         maxAgeInput: HTMLInputElement;
         maxSizeInput: HTMLInputElement;
     };
@@ -59,6 +69,7 @@ export function createSettingsGeneralControls({
     onPickRecordingsFolder,
     onPickClipsFolder,
     onClearCache,
+    onLoadRunningApplications,
 }: CreateSettingsGeneralControlsInput): SettingsGeneralControlsResult {
     const langSelect = createEl("select", {}, { class: "settings-select" }) as HTMLSelectElement;
     const languages = [
@@ -185,11 +196,118 @@ export function createSettingsGeneralControls({
     }
 
     const audioSelect = createEl("select", {}, { class: "settings-select" }) as HTMLSelectElement;
-    ["NONE", "APPLICATION", "SYSTEM", "ALL"].forEach((a) => {
-        const opt = createEl("option", {}, { value: a }, a) as HTMLOptionElement;
-        if (a === settings.recordAudio) opt.selected = true;
+    const audioOptions = [
+        { value: "NONE", label: "None" },
+        { value: "APPLICATION", label: "Application" },
+        { value: "SYSTEM", label: "System" },
+        { value: "ALL", label: "System + Mic" },
+        { value: "SEPARATED", label: "Separated (Game/System/Mic)" },
+        { value: "APPLICATIONS3", label: "3 Apps to 3 Tracks" },
+    ];
+    audioOptions.forEach((a) => {
+        const opt = createEl("option", {}, { value: a.value }, a.label) as HTMLOptionElement;
+        if (a.value === settings.recordAudio) opt.selected = true;
         audioSelect.append(opt);
     });
+
+    const existingTrackSettings = Array.isArray((settings as any).applicationAudioTracks)
+        ? ((settings as any).applicationAudioTracks as any[])
+        : [];
+    const appAudioTrackControls = [2, 3, 4].map((outputTrackNo, idx) => {
+        const current = existingTrackSettings[idx] || {};
+        const currentApp = typeof current.application === "string" ? current.application : "";
+        const currentEnabled = current.enabled !== undefined ? Boolean(current.enabled) : true;
+        const currentVolume = Number.isFinite(current.volumePercent) ? Math.max(0, Math.min(100, Number(current.volumePercent))) : 100;
+
+        const appSelect = createEl("select", {}, { class: "settings-select", style: "min-width: 220px; flex: 1;" }) as HTMLSelectElement;
+        appSelect.append(createEl("option", {}, { value: "" }, "Choose running app") as HTMLOptionElement);
+        if (currentApp) {
+            appSelect.append(createEl("option", {}, { value: currentApp, selected: "true" }, currentApp) as HTMLOptionElement);
+        }
+
+        const enabledToggle = createEl("button", {}, { class: "btn-browse", type: "button", style: "margin-left: 0; min-width: 78px;" }) as HTMLButtonElement;
+        const setEnabledVisual = (enabled: boolean) => {
+            enabledToggle.dataset.enabled = enabled ? "1" : "0";
+            enabledToggle.textContent = enabled ? "ON" : "OFF";
+            enabledToggle.style.borderColor = enabled ? "#3fb950" : "#666";
+            enabledToggle.style.color = enabled ? "#3fb950" : "#aaa";
+        };
+        setEnabledVisual(currentEnabled);
+        enabledToggle.onclick = () => {
+            const next = enabledToggle.dataset.enabled !== "1";
+            setEnabledVisual(next);
+        };
+
+        const volumeRange = createEl("input", {}, {
+            type: "range",
+            min: "0",
+            max: "100",
+            value: currentVolume.toString(),
+            style: "flex: 1;",
+        }) as HTMLInputElement;
+        const volumeInput = createEl("input", {}, {
+            class: "settings-input",
+            type: "number",
+            min: "0",
+            max: "100",
+            value: currentVolume.toString(),
+            style: "width: 70px;",
+        }) as HTMLInputElement;
+        const syncVolume = (raw: string) => {
+            const n = Math.max(0, Math.min(100, parseInt(raw || "0", 10) || 0));
+            volumeRange.value = n.toString();
+            volumeInput.value = n.toString();
+        };
+        volumeRange.oninput = () => syncVolume(volumeRange.value);
+        volumeInput.oninput = () => syncVolume(volumeInput.value);
+
+        const row = createEl("div", {}, { style: "display: flex; flex-wrap: wrap; gap: 8px; align-items: center;" }, [
+            createEl("span", {}, { style: "min-width: 72px; color: #ddd; font-weight: 600;" }, `Track ${outputTrackNo}`),
+            appSelect,
+            enabledToggle,
+            volumeRange,
+            volumeInput,
+        ]);
+        return { row, appSelect, enabledToggle, volumeRange, volumeInput };
+    }) as Array<ApplicationAudioTrackControl & { row: HTMLDivElement }>;
+
+    onLoadRunningApplications()
+        .then((apps) => {
+            const uniqueApps = [...new Set((apps || []).filter((app) => typeof app === "string" && app.length > 0))];
+            appAudioTrackControls.forEach((control) => {
+                const selected = control.appSelect.value;
+                control.appSelect.innerHTML = "";
+                control.appSelect.append(createEl("option", {}, { value: "" }, "Choose running app") as HTMLOptionElement);
+                uniqueApps.forEach((app) => {
+                    control.appSelect.append(createEl("option", {}, { value: app }, app) as HTMLOptionElement);
+                });
+                if (selected && !uniqueApps.includes(selected)) {
+                    control.appSelect.append(createEl("option", {}, { value: selected }, `${selected} (not running)`) as HTMLOptionElement);
+                }
+                control.appSelect.value = selected || "";
+            });
+        })
+        .catch((err) => {
+            console.error("Failed to load running applications:", err);
+        });
+    const applicationAudioTracksContainer = createEl(
+        "div",
+        {},
+        { style: "display: grid; grid-template-columns: 1fr; gap: 8px; width: 100%;" },
+        appAudioTrackControls.map((control) => control.row),
+    ) as HTMLDivElement;
+    const applicationAudioTracksGroup = createGroup(
+        createEl,
+        "Application Audio Tracks",
+        applicationAudioTracksContainer,
+        true,
+    );
+
+    const updateApplicationTracksVisibility = () => {
+        applicationAudioTracksGroup.style.display = audioSelect.value === "APPLICATIONS3" ? "" : "none";
+    };
+    audioSelect.addEventListener("change", updateApplicationTracksVisibility);
+    updateApplicationTracksVisibility();
 
     const maxAgeInput = createEl("input", {}, {
         class: "settings-input",
@@ -229,6 +347,7 @@ export function createSettingsGeneralControls({
             outputResolutionGroup: createGroup(createEl, getText(lang, "outputResolution"), resSelect),
             framerateGroup: createGroup(createEl, getText(lang, "framerate"), frSelect),
             recordAudioGroup: createGroup(createEl, getText(lang, "recordAudio"), audioSelect),
+            applicationAudioTracksGroup,
             maxAgeGroup: createGroup(createEl, getText(lang, "maxAge"), maxAgeInput),
             maxSizeGroup: createGroup(createEl, getText(lang, "maxSize"), maxSizeInput),
             troubleshootingGroup: createGroup(createEl, "Troubleshooting", clearCacheBtn as HTMLElement, true),
@@ -242,6 +361,12 @@ export function createSettingsGeneralControls({
             resSelect,
             frSelect,
             audioSelect,
+            appAudioTrackControls: appAudioTrackControls.map((control) => ({
+                appSelect: control.appSelect,
+                enabledToggle: control.enabledToggle,
+                volumeRange: control.volumeRange,
+                volumeInput: control.volumeInput,
+            })) as [ApplicationAudioTrackControl, ApplicationAudioTrackControl, ApplicationAudioTrackControl],
             maxAgeInput,
             maxSizeInput,
         },

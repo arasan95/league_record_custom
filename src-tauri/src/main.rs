@@ -74,6 +74,9 @@ fn run_app_default() {
     ))]
     let app = app.plugin(tauri_plugin_shell::init());
 
+    #[cfg(all(not(feature = "av-no-plugins"), not(feature = "av-safe-plugins")))]
+    let app = app.plugin(tauri_plugin_drag::init());
+
     #[cfg(all(
         not(feature = "av-no-plugins"),
         not(feature = "av-safe-plugins"),
@@ -111,6 +114,7 @@ fn run_app_default() {
         .invoke_handler(tauri::generate_handler![
             commands::get_recordings_path,
             commands::create_clip,
+            commands::get_clip_audio_tracks,
             commands::get_settings
         ]);
 
@@ -125,6 +129,7 @@ fn run_app_default() {
         .invoke_handler(tauri::generate_handler![
             commands::get_recordings_path,
             commands::create_clip,
+            commands::get_clip_audio_tracks,
             commands::load_tooltip_locale_db,
             commands::perf_log
         ]);
@@ -140,7 +145,8 @@ fn run_app_default() {
     let app = app
         .invoke_handler(tauri::generate_handler![
             commands::get_recordings_path,
-            commands::create_clip
+            commands::create_clip,
+            commands::get_clip_audio_tracks
         ]);
 
     #[cfg(all(
@@ -157,6 +163,7 @@ fn run_app_default() {
             commands::get_recordings_path,
             commands::get_settings,
             commands::create_clip,
+            commands::get_clip_audio_tracks,
             commands::load_tooltip_locale_db,
             commands::perf_log
         ]);
@@ -179,6 +186,7 @@ fn run_app_default() {
             commands::get_metadata,
             commands::save_settings,
             commands::create_clip,
+            commands::get_clip_audio_tracks,
             commands::get_ffmpeg_runtime_info,
             commands::download_image,
             commands::load_scoreboard_cache,
@@ -215,6 +223,7 @@ fn run_app_default() {
             commands::get_settings,
             commands::save_settings,
             commands::pick_recordings_folder,
+            commands::get_running_applications,
             commands::pick_clips_folder
         ]);
 
@@ -233,6 +242,7 @@ fn run_app_default() {
     let app = app
         .invoke_handler(tauri::generate_handler![
             commands::create_clip,
+            commands::get_clip_audio_tracks,
             commands::pick_ffmpeg_path,
             commands::get_ffmpeg_runtime_info,
             commands::clear_cache,
@@ -277,7 +287,9 @@ fn run_app_default() {
             commands::get_settings,
             commands::save_settings,
             commands::pick_recordings_folder,
+            commands::get_running_applications,
             commands::create_clip,
+            commands::get_clip_audio_tracks,
             commands::pick_clips_folder,
             commands::pick_ffmpeg_path,
             commands::get_ffmpeg_runtime_info,
@@ -323,7 +335,9 @@ fn run_app_default() {
             commands::get_settings,
             commands::save_settings,
             commands::pick_recordings_folder,
+            commands::get_running_applications,
             commands::create_clip,
+            commands::get_clip_audio_tracks,
             commands::pick_clips_folder,
             commands::pick_ffmpeg_path,
             commands::get_ffmpeg_runtime_info,
@@ -412,3 +426,5 @@ fn run_app_minimal() {
 mod parse_tests {
     // Tests containing personal hardcoded paths have been removed.
 }
+
+

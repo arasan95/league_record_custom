@@ -317,6 +317,7 @@ impl RecordingTask {
         settings.set_framerate(settings_state.get_framerate());
         settings.set_rate_control(RateControl::CQP(settings_state.get_encoding_quality()));
         settings.set_audio_source(settings_state.get_audio_source());
+        settings.set_application_audio_tracks(settings_state.get_application_audio_tracks());
 
         let mut recorder = if manual_mode {
             if let Some(rec) = Self::take_manual_warm_recorder() {
