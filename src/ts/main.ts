@@ -14,6 +14,7 @@ import { DEFAULT_KEYBINDS, isAction, loadKeybinds, loadMouseConfig, type Keybind
 import { TitleBar } from "./titlebar";
 import { initPatchVersion } from "./version";
 import { initTooltipFallback } from "./tooltip";
+import { getText } from "./i18n";
 import { ensureDataLoaded } from "./datadragon";
 import { buildMetadataCandidates, normalizeVideoId, toAssetPath, videoIdsMatch } from "./main_video_id_usecase";
 import { getLatestRetryVideoId, getRetryState } from "./main_sidebar_usecase";
@@ -304,7 +305,7 @@ function parseLoopTime(timeStr: string): number | null {
 
 type ClipAudioMode = "game-only" | "vc-in";
 
-function pickClipAudioMode(_tracks: ReadonlyArray<ClipAudioTrack>): Promise<ClipAudioMode | null> {
+function pickClipAudioMode(_tracks: ReadonlyArray<ClipAudioTrack>, lang: string): Promise<ClipAudioMode | null> {
     return new Promise((resolve) => {
         let selectedMode: ClipAudioMode = "vc-in";
         const cleanup = () => {
@@ -326,26 +327,26 @@ function pickClipAudioMode(_tracks: ReadonlyArray<ClipAudioTrack>): Promise<Clip
         };
 
         const title = document.createElement("p");
-        title.textContent = "Clip Audio";
+        title.textContent = getText(lang as any, "clipAudioTitle" as any) || "Clip Audio";
 
         const buttonRow = document.createElement("p");
         const gameOnlyButton = document.createElement("button");
         gameOnlyButton.className = "btn";
-        gameOnlyButton.textContent = "Game Only";
+        gameOnlyButton.textContent = getText(lang as any, "clipAudioGameOnly" as any) || "Game Only";
         gameOnlyButton.onclick = () => {
             selectedMode = "game-only";
             close("game-only");
         };
         const vcInButton = document.createElement("button");
         vcInButton.className = "btn";
-        vcInButton.textContent = "With VC";
+        vcInButton.textContent = getText(lang as any, "clipAudioWithVc" as any) || "With VC";
         vcInButton.onclick = () => {
             selectedMode = "vc-in";
             close("vc-in");
         };
         const cancelButton = document.createElement("button");
         cancelButton.className = "btn";
-        cancelButton.textContent = "Cancel";
+        cancelButton.textContent = getText(lang as any, "cancel" as any) || "Cancel";
         cancelButton.onclick = () => close(null);
         buttonRow.append(gameOnlyButton, vcInButton, cancelButton);
 
@@ -399,7 +400,9 @@ if (createClipBtn) {
 
             let selectedAudioTrackIndex: number | null = null;
             if (tracksResult.data.length > 1) {
-                const mode = await pickClipAudioMode(tracksResult.data);
+                const settings = await commands.getSettings();
+                const lang = settings.language || "en";
+                const mode = await pickClipAudioMode(tracksResult.data, lang);
                 if (mode === null) {
                     return;
                 }
@@ -643,8 +646,8 @@ async function main() {
 
     // handle keybord shortcuts
     // handle keybord shortcuts
-    addEventListener("keydown", keyboardHandlers.handleKeyDown);
-    addEventListener("keyup", keyboardHandlers.handleKeyUp);
+    addEventListener("keydown", keyboardHandlers.handleKeyDown, true);
+    addEventListener("keyup", keyboardHandlers.handleKeyUp, true);
 
     // Mouse Controls (Wheel & Middle Click)
     const playerEl = document.getElementById("video_player");

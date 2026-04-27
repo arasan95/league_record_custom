@@ -1,4 +1,4 @@
-import type { Participant, Recording } from "../bindings";
+import { commands, type Participant, type Recording } from "../bindings";
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import { open } from "@tauri-apps/plugin-shell";
 import xLogoIcon from "../../assets/share-icons/x-logo.svg";
@@ -303,8 +303,10 @@ function closeShareModal(): void {
     document.getElementById(SHARE_MODAL_ID)?.remove();
 }
 
-function showShareModal(videoId: string): void {
+async function showShareModal(videoId: string): Promise<void> {
     closeShareModal();
+    const settings = await commands.getSettings().catch(() => null);
+    const currentLanguage = (settings?.language || "en") as string;
 
     const overlay = document.createElement("div");
     overlay.id = SHARE_MODAL_ID;
@@ -322,11 +324,7 @@ function showShareModal(videoId: string): void {
 
         const title = document.createElement("div");
         title.className = "recording-share-modal-title";
-        title.textContent = "共有先を選択";
-
-        const subtitle = document.createElement("div");
-        subtitle.className = "recording-share-modal-subtitle";
-        subtitle.textContent = "Discord はドラッグ&ドロップで送信できます";
+        title.textContent = getText(currentLanguage as any, "shareChooseDestination" as any) || "Choose Destination";
 
         const options = document.createElement("div");
         options.className = "recording-share-modal-options";
@@ -335,7 +333,7 @@ function showShareModal(videoId: string): void {
         xButton.className = "recording-share-option recording-share-option-icon-only";
         xButton.type = "button";
         xButton.title = "X";
-        xButton.setAttribute("aria-label", "Share to X");
+        xButton.setAttribute("aria-label", getText(currentLanguage as any, "shareToXAria" as any) || "Share to X");
         xButton.append(createShareIcon("x"));
         xButton.onclick = () => renderXView();
 
@@ -343,18 +341,18 @@ function showShareModal(videoId: string): void {
         discordButton.className = "recording-share-option recording-share-option-icon-only";
         discordButton.type = "button";
         discordButton.title = "Discord";
-        discordButton.setAttribute("aria-label", "Share to Discord");
+        discordButton.setAttribute("aria-label", getText(currentLanguage as any, "shareToDiscordAria" as any) || "Share to Discord");
         discordButton.append(createShareIcon("discord"));
         discordButton.onclick = () => renderDiscordView();
 
         const cancelButton = document.createElement("button");
         cancelButton.className = "recording-share-cancel";
         cancelButton.type = "button";
-        cancelButton.textContent = "閉じる";
+        cancelButton.textContent = getText(currentLanguage as any, "close" as any) || "Close";
         cancelButton.onclick = () => closeShareModal();
 
         options.append(xButton, discordButton);
-        content.append(title, subtitle, options, cancelButton);
+        content.append(title, options, cancelButton);
     };
 
     const renderXView = () => {
@@ -364,11 +362,11 @@ function showShareModal(videoId: string): void {
 
         const title = document.createElement("div");
         title.className = "recording-share-modal-title";
-        title.textContent = "Xへ共有";
+        title.textContent = getText(currentLanguage as any, "shareToXTitle" as any) || "Share to X";
 
         const subtitle = document.createElement("div");
         subtitle.className = "recording-share-modal-subtitle";
-        subtitle.textContent = "Xの投稿画面に下の動画ファイルをドラッグしてください";
+        subtitle.textContent = getText(currentLanguage as any, "shareToXSubtitle" as any) || "Drag the file below into X";
 
         const chip = document.createElement("div");
         chip.className = "discord-share-drag-chip recording-share-modal-drag-chip";
@@ -392,7 +390,7 @@ function showShareModal(videoId: string): void {
         const openButton = document.createElement("button");
         openButton.className = "recording-share-option";
         openButton.type = "button";
-        openButton.textContent = "Xを開く";
+        openButton.textContent = getText(currentLanguage as any, "shareOpenX" as any) || "Open X";
         openButton.onclick = () => {
             void openXComposer().catch((err) => {
                 console.error("Failed to open X composer:", err);
@@ -402,13 +400,13 @@ function showShareModal(videoId: string): void {
         const backButton = document.createElement("button");
         backButton.className = "recording-share-option";
         backButton.type = "button";
-        backButton.textContent = "戻る";
+        backButton.textContent = getText(currentLanguage as any, "back" as any) || "Back";
         backButton.onclick = () => renderSelectView();
 
         const closeButton = document.createElement("button");
         closeButton.className = "recording-share-cancel";
         closeButton.type = "button";
-        closeButton.textContent = "閉じる";
+        closeButton.textContent = getText(currentLanguage as any, "close" as any) || "Close";
         closeButton.onclick = () => closeShareModal();
 
         actions.append(openButton, backButton, closeButton);
@@ -422,11 +420,11 @@ function showShareModal(videoId: string): void {
 
         const title = document.createElement("div");
         title.className = "recording-share-modal-title";
-        title.textContent = "Discordへ共有";
+        title.textContent = getText(currentLanguage as any, "shareToDiscordTitle" as any) || "Share to Discord";
 
         const subtitle = document.createElement("div");
         subtitle.className = "recording-share-modal-subtitle";
-        subtitle.textContent = "下のファイルを Discord の入力欄へドラッグしてください";
+        subtitle.textContent = getText(currentLanguage as any, "shareToDiscordSubtitle" as any) || "Drag the file below into Discord";
 
         const chip = document.createElement("div");
         chip.className = "discord-share-drag-chip recording-share-modal-drag-chip";
@@ -450,13 +448,13 @@ function showShareModal(videoId: string): void {
         const backButton = document.createElement("button");
         backButton.className = "recording-share-option";
         backButton.type = "button";
-        backButton.textContent = "戻る";
+        backButton.textContent = getText(currentLanguage as any, "back" as any) || "Back";
         backButton.onclick = () => renderSelectView();
 
         const closeButton = document.createElement("button");
         closeButton.className = "recording-share-cancel";
         closeButton.type = "button";
-        closeButton.textContent = "閉じる";
+        closeButton.textContent = getText(currentLanguage as any, "close" as any) || "Close";
         closeButton.onclick = () => closeShareModal();
 
         actions.append(backButton, closeButton);
@@ -956,9 +954,9 @@ export function createRecordingSidebarItem(input: {
     const shareBtn = createEl("span", {
         onclick: (e: MouseEvent) => {
             e.stopPropagation();
-            showShareModal(recording.videoId);
+            void showShareModal(recording.videoId);
         },
-    }, { class: "share", title: "Share" }, "\u21AA");
+    }, { class: "share", title: getText(currentLanguage as any, "share" as any) || "Share" }, "\u21AA");
     const renameBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onRename(recording.videoId); } }, { class: "rename" }, "\u270E");
     const deleteBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onDelete(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete", title: getText(currentLanguage as any, "delete" as any) || "Delete" }, "\u2716");
     const deleteVideoOnlyBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); if (onDeleteVideoOnly) onDeleteVideoOnly(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete-video-only", title: getText(currentLanguage as any, "deleteVideoOnly" as any) || "Delete Video Only" }, "\uD83D\uDDD1");
