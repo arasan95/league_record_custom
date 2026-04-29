@@ -621,7 +621,7 @@
     display: flex;
 }
 
-.favorite, .share, .rename, .delete, .delete-video-only {
+.favorite, .share, .rename, .delete, .delete-video-only, .replay-action {
     font-size: 16px;
     color: #666;
     transition: color 0.2s;
@@ -637,6 +637,11 @@
 
 .favorite:hover { color: gold; }
 .share:hover { color: #7dd3fc; }
+.replay-play:hover { color: #34d399; }
+.replay-action.is-loading {
+    opacity: 0.65;
+    pointer-events: none;
+}
 .rename:hover { color: rgb(69, 255, 137); }
 .delete:hover { color: red; }
 .delete-video-only:hover { color: orange; }
