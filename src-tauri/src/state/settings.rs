@@ -113,8 +113,13 @@ impl SettingsWrapper {
 
     pub fn update_from_file(&self, settings_file: &Path, app_handle: &AppHandle) {
         let old_recordings_path = self.get_recordings_path();
+        let old_clips_path = self.get_clips_path();
         let old_marker_flags = self.get_marker_flags();
         let old_log = self.debug_log();
+        let old_max_recording_age = self.max_recording_age();
+        let old_max_recordings_size = self.max_recordings_size();
+        let old_auto_delete_clips = self.auto_delete_clips();
+        let old_keep_video_json_on_auto_delete = self.keep_video_json_on_auto_delete();
         let old_hightlight_hotkey = self.hightlight_hotkey();
         let old_start_recording_hotkey = self.start_recording_hotkey();
         let old_stop_recording_hotkey = self.stop_recording_hotkey();
@@ -165,7 +170,20 @@ impl SettingsWrapper {
             app_handle.update_hotkeys();
         }
 
-        app_handle.cleanup_recordings();
+        // Recording cleanup can scan many files and should not block UI save flows.
+        let cleanup_settings_changed =
+            self.max_recording_age() != old_max_recording_age
+                || self.max_recordings_size() != old_max_recordings_size
+                || self.auto_delete_clips() != old_auto_delete_clips
+                || self.keep_video_json_on_auto_delete() != old_keep_video_json_on_auto_delete
+                || self.get_recordings_path() != old_recordings_path
+                || self.get_clips_path() != old_clips_path;
+        if cleanup_settings_changed {
+            let app_handle = app_handle.clone();
+            async_runtime::spawn_blocking(move || {
+                app_handle.cleanup_recordings();
+            });
+        }
     }
 
     pub fn get_recordings_path(&self) -> PathBuf {
@@ -194,6 +212,19 @@ impl SettingsWrapper {
 
     pub fn get_audio_source(&self) -> AudioSource {
         self.0.read().unwrap().record_audio
+    }
+
+    pub fn get_application_audio_tracks(&self) -> Vec<libobs_recorder::settings::ApplicationAudioTrackSetting> {
+        let tracks = self.0.read().unwrap().application_audio_tracks.clone();
+        tracks
+            .into_iter()
+            .take(3)
+            .map(|track| libobs_recorder::settings::ApplicationAudioTrackSetting {
+                application: track.application,
+                enabled: track.enabled,
+                volume_percent: track.volume_percent,
+            })
+            .collect()
     }
 
     pub fn get_marker_flags(&self) -> MarkerFlags {
@@ -296,6 +327,25 @@ impl SettingsWrapper {
 #[cfg_attr(test, derive(specta::Type))]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ApplicationAudioTrackSetting {
+    pub application: Option<String>,
+    pub enabled: bool,
+    pub volume_percent: u8,
+}
+
+impl Default for ApplicationAudioTrackSetting {
+    fn default() -> Self {
+        Self {
+            application: None,
+            enabled: true,
+            volume_percent: 100,
+        }
+    }
+}
+
+#[cfg_attr(test, derive(specta::Type))]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub marker_flags: MarkerFlags,
 
@@ -307,6 +357,7 @@ pub struct Settings {
     pub output_resolution: Option<StdResolution>,
     pub framerate: Framerate,
     pub record_audio: AudioSource,
+    pub application_audio_tracks: Vec<ApplicationAudioTrackSetting>,
 
     pub autostart: bool,
     pub max_recording_age_days: Option<u64>,
@@ -390,6 +441,11 @@ impl Default for Settings {
             output_resolution: None,
             framerate: default_framerate(),
             record_audio: DEFAULT_RECORD_AUDIO,
+            application_audio_tracks: vec![
+                ApplicationAudioTrackSetting::default(),
+                ApplicationAudioTrackSetting::default(),
+                ApplicationAudioTrackSetting::default(),
+            ],
 
             autostart: DEFAULT_AUTOSTART,
             max_recording_age_days: DEFAULT_MAX_RECORDING_AGE_DAYS,
@@ -467,6 +523,43 @@ impl<'de> Deserialize<'de> for Settings {
                         }
                         "recordAudio" => {
                             settings.record_audio = map.next_value().unwrap_or(DEFAULT_RECORD_AUDIO);
+                        }
+                        "applicationAudioTracks" => {
+                            let raw: serde_json::Value = map.next_value().unwrap_or(serde_json::Value::Null);
+                            if let Some(array) = raw.as_array() {
+                                let mut converted: Vec<ApplicationAudioTrackSetting> = Vec::new();
+                                for item in array.iter().take(3) {
+                                    if let Some(app) = item.as_str() {
+                                        converted.push(ApplicationAudioTrackSetting {
+                                            application: Some(app.to_string()),
+                                            enabled: true,
+                                            volume_percent: 100,
+                                        });
+                                        continue;
+                                    }
+                                    if let Some(obj) = item.as_object() {
+                                        let application = obj
+                                            .get("application")
+                                            .and_then(|v| v.as_str())
+                                            .map(ToString::to_string);
+                                        let enabled = obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+                                        let volume_percent = obj
+                                            .get("volumePercent")
+                                            .and_then(|v| v.as_u64())
+                                            .unwrap_or(100)
+                                            .min(100) as u8;
+                                        converted.push(ApplicationAudioTrackSetting {
+                                            application,
+                                            enabled,
+                                            volume_percent,
+                                        });
+                                    }
+                                }
+                                while converted.len() < 3 {
+                                    converted.push(ApplicationAudioTrackSetting::default());
+                                }
+                                settings.application_audio_tracks = converted;
+                            }
                         }
                         "autostart" => {
                             settings.autostart = map.next_value().unwrap_or(DEFAULT_AUTOSTART);

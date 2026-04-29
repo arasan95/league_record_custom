@@ -74,6 +74,9 @@ fn run_app_default() {
     ))]
     let app = app.plugin(tauri_plugin_shell::init());
 
+    #[cfg(all(not(feature = "av-no-plugins"), not(feature = "av-safe-plugins")))]
+    let app = app.plugin(tauri_plugin_drag::init());
+
     #[cfg(all(
         not(feature = "av-no-plugins"),
         not(feature = "av-safe-plugins"),
@@ -111,6 +114,7 @@ fn run_app_default() {
         .invoke_handler(tauri::generate_handler![
             commands::get_recordings_path,
             commands::create_clip,
+            commands::get_clip_audio_tracks,
             commands::get_settings
         ]);
 
@@ -125,7 +129,9 @@ fn run_app_default() {
         .invoke_handler(tauri::generate_handler![
             commands::get_recordings_path,
             commands::create_clip,
-            commands::load_tooltip_locale_db
+            commands::get_clip_audio_tracks,
+            commands::load_tooltip_locale_db,
+            commands::perf_log
         ]);
 
     #[cfg(all(
@@ -139,7 +145,8 @@ fn run_app_default() {
     let app = app
         .invoke_handler(tauri::generate_handler![
             commands::get_recordings_path,
-            commands::create_clip
+            commands::create_clip,
+            commands::get_clip_audio_tracks
         ]);
 
     #[cfg(all(
@@ -156,7 +163,9 @@ fn run_app_default() {
             commands::get_recordings_path,
             commands::get_settings,
             commands::create_clip,
-            commands::load_tooltip_locale_db
+            commands::get_clip_audio_tracks,
+            commands::load_tooltip_locale_db,
+            commands::perf_log
         ]);
 
     #[cfg(all(
@@ -177,10 +186,12 @@ fn run_app_default() {
             commands::get_metadata,
             commands::save_settings,
             commands::create_clip,
+            commands::get_clip_audio_tracks,
             commands::get_ffmpeg_runtime_info,
             commands::download_image,
             commands::load_scoreboard_cache,
-            commands::load_tooltip_locale_db
+            commands::load_tooltip_locale_db,
+            commands::perf_log
         ]);
 
     #[cfg(all(
@@ -212,6 +223,10 @@ fn run_app_default() {
             commands::get_settings,
             commands::save_settings,
             commands::pick_recordings_folder,
+            commands::get_running_applications,
+            commands::is_league_client_available,
+            commands::download_recording_replay,
+            commands::play_recording_replay,
             commands::pick_clips_folder
         ]);
 
@@ -230,14 +245,17 @@ fn run_app_default() {
     let app = app
         .invoke_handler(tauri::generate_handler![
             commands::create_clip,
+            commands::get_clip_audio_tracks,
             commands::pick_ffmpeg_path,
             commands::get_ffmpeg_runtime_info,
             commands::clear_cache,
+            commands::clear_cache_for_patch_update,
             commands::download_image,
             commands::save_scoreboard_cache,
             commands::load_scoreboard_cache,
             commands::update_champion_data,
-            commands::load_tooltip_locale_db
+            commands::load_tooltip_locale_db,
+            commands::perf_log
         ]);
 
     #[cfg(all(
@@ -272,16 +290,23 @@ fn run_app_default() {
             commands::get_settings,
             commands::save_settings,
             commands::pick_recordings_folder,
+            commands::get_running_applications,
+            commands::is_league_client_available,
+            commands::download_recording_replay,
+            commands::play_recording_replay,
             commands::create_clip,
+            commands::get_clip_audio_tracks,
             commands::pick_clips_folder,
             commands::pick_ffmpeg_path,
             commands::get_ffmpeg_runtime_info,
             commands::clear_cache,
+            commands::clear_cache_for_patch_update,
             commands::download_image,
             commands::save_scoreboard_cache,
             commands::load_scoreboard_cache,
             commands::update_champion_data,
-            commands::load_tooltip_locale_db
+            commands::load_tooltip_locale_db,
+            commands::perf_log
         ]);
 
     #[cfg(all(
@@ -316,15 +341,22 @@ fn run_app_default() {
             commands::get_settings,
             commands::save_settings,
             commands::pick_recordings_folder,
+            commands::get_running_applications,
+            commands::is_league_client_available,
+            commands::download_recording_replay,
+            commands::play_recording_replay,
             commands::create_clip,
+            commands::get_clip_audio_tracks,
             commands::pick_clips_folder,
             commands::pick_ffmpeg_path,
             commands::get_ffmpeg_runtime_info,
             commands::clear_cache,
+            commands::clear_cache_for_patch_update,
             commands::download_image,
             commands::save_scoreboard_cache,
             commands::load_scoreboard_cache,
-            commands::update_champion_data
+            commands::update_champion_data,
+            commands::perf_log
         ]);
 
     #[cfg(all(
@@ -357,9 +389,11 @@ fn run_app_default() {
             commands::get_settings,
             commands::save_settings,
             commands::clear_cache,
+            commands::clear_cache_for_patch_update,
             commands::save_scoreboard_cache,
             commands::load_scoreboard_cache,
-            commands::load_tooltip_locale_db
+            commands::load_tooltip_locale_db,
+            commands::perf_log
         ]);
 
     #[cfg(feature = "av-no-invoke")]
@@ -401,3 +435,5 @@ fn run_app_minimal() {
 mod parse_tests {
     // Tests containing personal hardcoded paths have been removed.
 }
+
+

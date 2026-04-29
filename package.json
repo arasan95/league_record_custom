@@ -18,6 +18,7 @@
     "diag:tooltip:ja": "python tools/tooltip-diagnostics/run_tooltip_diagnostics.py --locales ja_JP"
   },
   "dependencies": {
+    "@crabnebula/tauri-plugin-drag": "^2.1.0",
     "@fffffffxxxxxxx/league_record_types": "file:league_record_types/",
     "@fffffffxxxxxxx/videojs-markers": "^1.2.0",
     "@tauri-apps/api": "^2.10.1",
@@ -27,6 +28,7 @@
     "@tauri-apps/plugin-process": "~2",
     "@tauri-apps/plugin-shell": "^2.3.4",
     "@tauri-apps/plugin-updater": "^2.10.0",
+    "@xmldom/xmldom": "^0.8.13",
     "video.js": "^8.23.4"
   },
   "devDependencies": {

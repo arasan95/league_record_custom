@@ -1121,6 +1121,7 @@ export async function ensureTftDataLoaded(langStr: string = "en") {
 
 
 const CDRAGON_BASE = "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/perk-images/styles";
+const DDRAGON_IMG_BASE = "https://ddragon.leagueoflegends.com/cdn/img";
 
 const SPELL_MAP: Record<number, string> = {
     1: "SummonerBoost",
@@ -1236,11 +1237,18 @@ export async function getSpellIconUrl(spellId: number): Promise<string> {
 }
 
 export async function getRuneIconUrl(perkId: number, styleId?: number): Promise<string> {
+    if (perkId === 0) return "";
+
+    const runeData = await getRuneData(perkId);
+    const ddragonIconPath = typeof runeData?.icon === "string" ? runeData.icon.replace(/^\/+/, "") : "";
+    if (ddragonIconPath) {
+        const url = `${DDRAGON_IMG_BASE}/${ddragonIconPath}`;
+        return await getCachedAssetUrl(url, "rune", `${perkId}.png`);
+    }
+
     const path = RUNE_MAP[perkId];
     if (!path) return "";
-    
-    // Legacy handling removed as Patch 26 revived Lethal Tempo
-    
+
     const url = `${CDRAGON_BASE}/${path}`;
     return await getCachedAssetUrl(url, "rune", `${perkId}.png`);
 }
@@ -1372,15 +1380,23 @@ export async function downloadAllAssets(onProgress: (msg: string) => void) {
         await ensureDataLoaded();
         const CURRENT_VERSION = getCurrentPatchVersion();
         await ensureItemDataLoaded(CURRENT_VERSION);
-        
-        if (!cachedChampionData || !cachedItemDataByVersion[CURRENT_VERSION]) throw new Error("Failed to load data lists");
+        await ensureRuneDataLoaded(CURRENT_VERSION);
+        const dataLocale = getDDragonLocale("ja");
+        const itemCacheKey = `${CURRENT_VERSION}_${dataLocale}`;
+        const runeCacheKey = `${CURRENT_VERSION}_${dataLocale}`;
+
+        if (!cachedChampionData || !cachedItemDataByVersion[itemCacheKey]) throw new Error("Failed to load data lists");
 
         // Use cached data
         const champions = Object.keys(cachedChampionData);
-        // Ensure cachedItemDataByVersion[CURRENT_VERSION] is not null/undefined before accessing
-        const items = Object.keys(cachedItemDataByVersion[CURRENT_VERSION]).map(id => parseInt(id));
+        const items = Object.keys(cachedItemDataByVersion[itemCacheKey]).map(id => parseInt(id));
         const spells = Object.keys(SPELL_MAP).map(id => parseInt(id));
-        const runes = Object.keys(RUNE_MAP).map(id => parseInt(id));
+        const runes = Array.from(
+            new Set([
+                ...Object.keys(cachedRuneDataByVersion[runeCacheKey] || {}).map(id => parseInt(id)),
+                ...Object.keys(RUNE_MAP).map(id => parseInt(id)),
+            ]),
+        );
 
         const totalChamps = champions.length;
         const totalItems = items.length;

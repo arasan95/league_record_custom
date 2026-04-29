@@ -5,7 +5,7 @@ export type RecordingEvents = {
     participantId: number;
     recordingOffset: number;
     events: Array<GameEvent>;
-    participants?: Array<Pick<Participant, "participantId" | "teamId">>;
+    participants?: Array<Participant>;
 };
 
 export type HighlightEvents = {
@@ -33,6 +33,31 @@ export type EventType =
 
 type MarkerLane = "blue" | "red" | "self";
 type TeamId = 100 | 200;
+
+export type MarkerDetail =
+    | {
+        id: number;
+        kind: "ChampionKill";
+        markerType: "Kill" | "Death" | "Assist";
+        lane: MarkerLane;
+        timestampMs: number;
+        killerParticipantId: number;
+        victimParticipantId: number;
+        assistingParticipantIds: number[];
+    }
+    | {
+        id: number;
+        kind: "Other";
+        markerType: Exclude<EventType, "Kill" | "Death" | "Assist"> | "Highlight";
+        lane: MarkerLane;
+        timestampMs: number;
+        label: string;
+    };
+
+export type BuiltMarkers = {
+    markers: MarkerOptions[];
+    details: Array<MarkerDetail | undefined>;
+};
 
 export function markerEventName(
     gameEvent: GameEvent,
@@ -243,12 +268,14 @@ function createMarker(
     eventType: EventType,
     lane: MarkerLane,
     eventDelay: number,
+    detailId?: number,
 ): MarkerOptions {
     const laneLabel = lane === "self" ? "" : lane === "blue" ? "Blue " : "Red ";
+    const detailClass = typeof detailId === "number" ? ` lr-ev-${detailId}` : "";
     return {
         time: timestamp / 1000 - recordingOffset - eventDelay,
         text: `${laneLabel}${eventType}`,
-        class: `${eventType.toLowerCase()} lane-${lane} ${lane === "self" ? "self-marker" : "team-marker"}`,
+        class: `${eventType.toLowerCase()} lane-${lane} ${lane === "self" ? "self-marker" : "team-marker"}${detailClass}`,
         duration: 2 * eventDelay,
     };
 }
@@ -258,11 +285,97 @@ export function buildMarkers(
     highlightEvents: HighlightEvents | null,
     markerFlags: MarkerFlags | null,
     eventDelay: number,
-): MarkerOptions[] {
+): BuiltMarkers {
     const markers: MarkerOptions[] = [];
+    const details: Array<MarkerDetail | undefined> = [];
+    let nextDetailId = 0;
+
+    const pushChampionKillMarker = (
+        event: Extract<GameEvent, { ChampionKill: any }>,
+        recordingOffset: number,
+        markerType: "Kill" | "Death" | "Assist",
+        lane: MarkerLane,
+    ) => {
+        const id = nextDetailId++;
+        markers.push(createMarker(event.timestamp, recordingOffset, markerType, lane, eventDelay, id));
+        details[id] = {
+            id,
+            kind: "ChampionKill",
+            markerType,
+            lane,
+            timestampMs: event.timestamp,
+            killerParticipantId: event.ChampionKill.killer_id,
+            victimParticipantId: event.ChampionKill.victim_id,
+            assistingParticipantIds: event.ChampionKill.assisting_participant_ids,
+        };
+    };
+
+    const pushOtherMarker = (
+        timestampMs: number,
+        recordingOffset: number,
+        markerType: Exclude<EventType, "Kill" | "Death" | "Assist"> | "Highlight",
+        lane: MarkerLane,
+        label: string,
+    ) => {
+        const id = nextDetailId++;
+        markers.push(createMarker(timestampMs, recordingOffset, markerType as EventType, lane, eventDelay, id));
+        details[id] = {
+            id,
+            kind: "Other",
+            markerType,
+            lane,
+            timestampMs,
+            label,
+        };
+    };
+
+    const formatLane = (laneType: any): string => {
+        switch (laneType) {
+            case "TOP_LANE":
+                return "Top";
+            case "MID_LANE":
+                return "Mid";
+            case "BOT_LANE":
+                return "Bot";
+            default:
+                return "Unknown";
+        }
+    };
+
+    const formatTeam = (teamIdRaw: any): string => {
+        const teamId = normalizeTeamId(teamIdRaw as any);
+        if (teamId === 100) return "Blue";
+        if (teamId === 200) return "Red";
+        return "";
+    };
+
+    const formatTowerType = (towerType: any): string => {
+        switch (towerType) {
+            case "OUTER_TURRET":
+                return "Outer";
+            case "INNER_TURRET":
+                return "Inner";
+            case "BASE_TURRET":
+                return "Base";
+            case "NEXUS_TURRET":
+                return "Nexus";
+            default:
+                return "Tower";
+        }
+    };
+
+    const buildTowerLabel = (event: Extract<GameEvent, { BuildingKill: any }>): string => {
+        const team = formatTeam(event.BuildingKill.team_id);
+        const bt: any = event.BuildingKill.building_type as any;
+        const lane = formatLane(bt?.lane_type ?? bt?.laneType);
+        const tier = formatTowerType(bt?.tower_type ?? bt?.towerType);
+        const parts = [team, lane, tier, "Tower"].filter(Boolean);
+        return parts.join(" ");
+    };
+
     if (highlightEvents !== null) {
         for (const event of highlightEvents.events) {
-            markers.push(createMarker(event, highlightEvents.recordingOffset, "Highlight", "self", eventDelay));
+            pushOtherMarker(event, highlightEvents.recordingOffset, "Highlight", "self", "Highlight");
         }
     }
     if (currentEvents !== null) {
@@ -271,20 +384,35 @@ export function buildMarkers(
 
         for (const event of currentEvents.events) {
             const name = markerEventName(event, participantId, markerFlags);
-            if (name !== null) {
-                markers.push(createMarker(event.timestamp, recordingOffset, name, "self", eventDelay));
+            if (name !== null && "ChampionKill" in event) {
+                pushChampionKillMarker(event, recordingOffset, name, "self");
+            } else if (name !== null) {
+                // Defensive fallback: markerEventName currently only returns K/D/A (ChampionKill).
+                pushOtherMarker(event.timestamp, recordingOffset, name as any, "self", name);
             }
 
             const selfObjective = resolveSelfObjectiveMarker(event, participantId, markerFlags);
             if (selfObjective !== null) {
-                markers.push(createMarker(event.timestamp, recordingOffset, selfObjective, "self", eventDelay));
+                if ("BuildingKill" in event && selfObjective === "Turret") {
+                    pushOtherMarker(event.timestamp, recordingOffset, selfObjective, "self", buildTowerLabel(event));
+                } else {
+                    pushOtherMarker(event.timestamp, recordingOffset, selfObjective, "self", selfObjective);
+                }
             }
 
             const teamLaneMarker = resolveTeamLaneMarker(event, markerFlags, participantTeamMap);
             if (teamLaneMarker !== null) {
-                markers.push(createMarker(event.timestamp, recordingOffset, teamLaneMarker.type, teamLaneMarker.lane, eventDelay));
+                if ("ChampionKill" in event && teamLaneMarker.type === "Kill") {
+                    pushChampionKillMarker(event, recordingOffset, "Kill", teamLaneMarker.lane);
+                } else {
+                    if ("BuildingKill" in event && teamLaneMarker.type === "Turret") {
+                        pushOtherMarker(event.timestamp, recordingOffset, teamLaneMarker.type, teamLaneMarker.lane, buildTowerLabel(event));
+                    } else {
+                        pushOtherMarker(event.timestamp, recordingOffset, teamLaneMarker.type, teamLaneMarker.lane, teamLaneMarker.type);
+                    }
+                }
             }
         }
     }
-    return markers;
+    return { markers, details };
 }

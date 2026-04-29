@@ -70,6 +70,21 @@ impl LcuRestClient {
             .await
     }
 
+    /// Make a post request where the response body is not needed.
+    pub async fn post_no_response<T: Serialize>(
+        &self,
+        path: impl AsRef<str>,
+        body: T,
+    ) -> Result<(), reqwest::Error> {
+        self.reqwest_client
+            .post(format!("https://127.0.0.1:{}{}", self.port, path.as_ref()))
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+
     /// Make a put request to the specified path
     pub async fn put<T: Serialize, U: DeserializeOwned>(
         &self,
