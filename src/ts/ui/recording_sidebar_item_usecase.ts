@@ -31,6 +31,34 @@ const DRAG_PREVIEW_ICON_DATA_URI =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAoMBgQfYf2sAAAAASUVORK5CYII=";
 let shareModalCleanup: (() => void) | null = null;
 
+function hasReplayGameId(recording: Recording): boolean {
+    const metadata = recording.metadata;
+    if (!metadata) return false;
+    if ("Metadata" in metadata) return metadata.Metadata.matchId.gameId > 0;
+    if ("Deferred" in metadata) return metadata.Deferred.matchId.gameId > 0;
+    return false;
+}
+
+function createReplayActionButton(videoId: string): HTMLSpanElement {
+    const button = document.createElement("span");
+    button.className = "replay-action replay-play";
+    button.title = "ROFLを準備してクライアントで再生";
+    button.textContent = "\u25B6";
+    button.addEventListener("click", async (e: MouseEvent) => {
+        e.stopPropagation();
+        button.classList.add("is-loading");
+        try {
+            const result = await commands.playRecordingReplay(videoId);
+            if (result.status === "error") {
+                alert(result.error || "リプレイ再生に失敗しました。");
+            }
+        } finally {
+            button.classList.remove("is-loading");
+        }
+    });
+    return button;
+}
+
 function createShareIcon(kind: "x" | "discord"): HTMLImageElement {
     const img = document.createElement("img");
     img.className = "recording-share-option-icon";
@@ -957,10 +985,11 @@ export function createRecordingSidebarItem(input: {
             void showShareModal(recording.videoId);
         },
     }, { class: "share", title: getText(currentLanguage as any, "share" as any) || "Share" }, "\u21AA");
+    const replayButtons = hasReplayGameId(recording) ? [createReplayActionButton(recording.videoId)] : [];
     const renameBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onRename(recording.videoId); } }, { class: "rename" }, "\u270E");
     const deleteBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onDelete(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete", title: getText(currentLanguage as any, "delete" as any) || "Delete" }, "\u2716");
     const deleteVideoOnlyBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); if (onDeleteVideoOnly) onDeleteVideoOnly(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete-video-only", title: getText(currentLanguage as any, "deleteVideoOnly" as any) || "Delete Video Only" }, "\uD83D\uDDD1");
-    const actionsDiv = createEl("div", {}, { class: "sidebar-actions" }, [favoriteBtn, shareBtn, renameBtn, deleteVideoOnlyBtn, deleteBtn]);
+    const actionsDiv = createEl("div", {}, { class: "sidebar-actions" }, [favoriteBtn, shareBtn, ...replayButtons, renameBtn, deleteVideoOnlyBtn, deleteBtn]);
 
     if (recording.metadata && "Metadata" in recording.metadata) {
         li.dataset.hasMetadata = recording.metadata.Metadata.queue.name !== "Unknown Queue" ? "true" : "false";
