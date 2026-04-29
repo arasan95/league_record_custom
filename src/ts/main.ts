@@ -6,7 +6,7 @@ import "@fffffffxxxxxxx/videojs-markers";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { join, sep } from "@tauri-apps/api/path";
 
-import { commands, type GameEvent, type Recording } from "./bindings";
+import { commands, type ClipAudioTrack, type GameEvent, type Recording } from "./bindings";
 import ListenerManager from "./listeners";
 import UI from "./ui";
 import { splitRight, playNotificationSound } from "./util";
@@ -14,13 +14,15 @@ import { DEFAULT_KEYBINDS, isAction, loadKeybinds, loadMouseConfig, type Keybind
 import { TitleBar } from "./titlebar";
 import { initPatchVersion } from "./version";
 import { initTooltipFallback } from "./tooltip";
+import { getText } from "./i18n";
 import { ensureDataLoaded } from "./datadragon";
 import { buildMetadataCandidates, normalizeVideoId, toAssetPath, videoIdsMatch } from "./main_video_id_usecase";
 import { getLatestRetryVideoId, getRetryState } from "./main_sidebar_usecase";
 import { getMetadataFromRecordingsList, getMetadataWithFallback } from "./main_metadata_usecase";
 import { renderMetadataState } from "./main_metadata_render_usecase";
-import { buildMarkers, markerEventName, type HighlightEvents, type RecordingEvents } from "./main_markers_usecase";
+import { buildMarkers, markerEventName, type HighlightEvents, type MarkerDetail, type RecordingEvents } from "./main_markers_usecase";
 import { initializeProgressTooltips } from "./main_progress_tooltip_usecase";
+import { initializeMarkerHoverTooltips } from "./main_marker_tooltip_usecase";
 import { createKeyboardHandlers } from "./main_keyboard_usecase";
 import { refreshSidebar, retrySidebarUpdateLoop } from "./main_recordings_usecase";
 import { buildTimelineRows } from "./main_timeline_usecase";
@@ -52,6 +54,7 @@ export function reloadKeybinds() {
 
 let currentEvents: RecordingEvents | null = null;
 let highlightEvents: HighlightEvents | null = null;
+let markerDetails: Array<MarkerDetail | undefined> = [];
 let preferredActiveVideoId: string | null = null;
 const metadataRetryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 const metadataRenderSignatures = new Map<string, string>();
@@ -67,6 +70,20 @@ let recordingsSizeFetchInFlight: Promise<number> | null = null;
 let manualStartPending = false;
 let manualStartPendingTimeout: ReturnType<typeof setTimeout> | null = null;
 const RECORDINGS_SIZE_CACHE_MS = 5000;
+
+function perfNowMs(): number {
+    if (typeof performance !== "undefined" && typeof performance.now === "function") {
+        return performance.now();
+    }
+    return Date.now();
+}
+
+function logPerf(label: string, startedAtMs: number): void {
+    const PERF_LOG_ENABLED = false;
+    if (!PERF_LOG_ENABLED) return;
+    const elapsedMs = perfNowMs() - startedAtMs;
+    console.log(`[perf] ${label}: ${elapsedMs.toFixed(1)}ms`);
+}
 
 function metadataDataSignature(data: any): string {
     if (!data) return "null";
@@ -259,12 +276,8 @@ let loopEnd: number | null = null;
 let isLooping = false;
 
 function updateClipBtnState() {
-    if (!createClipBtn) return;
-    if (loopStart !== null && loopEnd !== null && loopEnd > loopStart) {
-        createClipBtn.disabled = false;
-    } else {
-        createClipBtn.disabled = true;
-    }
+    const canCreateClip = loopStart !== null && loopEnd !== null && loopEnd > loopStart;
+    if (createClipBtn) createClipBtn.disabled = !canCreateClip;
 }
 
 function formatLoopTime(seconds: number): string {
@@ -288,6 +301,58 @@ function parseLoopTime(timeStr: string): number | null {
     const secs = parseInt(parts[1], 10);
     if (isNaN(mins) || isNaN(secs)) return null;
     return mins * 60 + secs;
+}
+
+type ClipAudioMode = "game-only" | "vc-in";
+
+function pickClipAudioMode(_tracks: ReadonlyArray<ClipAudioTrack>, lang: string): Promise<ClipAudioMode | null> {
+    return new Promise((resolve) => {
+        let selectedMode: ClipAudioMode = "vc-in";
+        const cleanup = () => {
+            document.removeEventListener("keydown", onKeyDown);
+        };
+        const close = (result: ClipAudioMode | null) => {
+            cleanup();
+            ui.hideModal();
+            resolve(result);
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                close(null);
+            } else if (event.key === "Enter") {
+                event.preventDefault();
+                close(selectedMode);
+            }
+        };
+
+        const title = document.createElement("p");
+        title.textContent = getText(lang as any, "clipAudioTitle" as any) || "Clip Audio";
+
+        const buttonRow = document.createElement("p");
+        const gameOnlyButton = document.createElement("button");
+        gameOnlyButton.className = "btn";
+        gameOnlyButton.textContent = getText(lang as any, "clipAudioGameOnly" as any) || "Game Only";
+        gameOnlyButton.onclick = () => {
+            selectedMode = "game-only";
+            close("game-only");
+        };
+        const vcInButton = document.createElement("button");
+        vcInButton.className = "btn";
+        vcInButton.textContent = getText(lang as any, "clipAudioWithVc" as any) || "With VC";
+        vcInButton.onclick = () => {
+            selectedMode = "vc-in";
+            close("vc-in");
+        };
+        const cancelButton = document.createElement("button");
+        cancelButton.className = "btn";
+        cancelButton.textContent = getText(lang as any, "cancel" as any) || "Cancel";
+        cancelButton.onclick = () => close(null);
+        buttonRow.append(gameOnlyButton, vcInButton, cancelButton);
+
+        document.addEventListener("keydown", onKeyDown);
+        ui.showModal([title, buttonRow]);
+    });
 }
 
 function handleTimeInput(e: Event) {
@@ -328,7 +393,31 @@ if (createClipBtn) {
         try {
             createClipBtn.disabled = true;
             createClipBtn.textContent = "...";
-            const newFile = await commands.createClip(videoId, loopStart, loopEnd);
+            const tracksResult = await commands.getClipAudioTracks(videoId);
+            if (tracksResult.status === "error") {
+                throw tracksResult.error;
+            }
+
+            let selectedAudioTrackIndex: number | null = null;
+            if (tracksResult.data.length > 1) {
+                const settings = await commands.getSettings();
+                const lang = settings.language || "en";
+                const mode = await pickClipAudioMode(tracksResult.data, lang);
+                if (mode === null) {
+                    return;
+                }
+                selectedAudioTrackIndex = mode === "game-only" ? 1 : 0;
+            } else if (tracksResult.data.length === 1) {
+                selectedAudioTrackIndex = tracksResult.data[0].index;
+            }
+
+            const clipResult = selectedAudioTrackIndex === null
+                ? await commands.createClip(videoId, loopStart, loopEnd, null)
+                : await commands.createClipWithAudioTrack(videoId, loopStart, loopEnd, selectedAudioTrackIndex);
+            if (clipResult.status === "error") {
+                throw clipResult.error;
+            }
+            const newFile = clipResult.data;
             // Wait a bit or refresh? Ideally we should refresh the sidebar
             await  updateSidebar(); 
             // Show simple alert using error modal for now as it's the only one available
@@ -365,6 +454,8 @@ console.log(MarkersPlugin);
 
 await main();
 async function main() {
+    const startupStartedAt = perfNowMs();
+
     // Check if running in a Tauri environment
     // @ts-ignore
     if (!window.__TAURI_INTERNALS__) {
@@ -374,7 +465,9 @@ async function main() {
 
 
     // handle context menu based on developer mode
+    const patchVersionStartedAt = perfNowMs();
     await initPatchVersion();
+    logPerf("startup:initPatchVersion", patchVersionStartedAt);
     
     // Warm up DataDragon cache in background to avoid startup stalls on slow network.
     ensureDataLoaded("ja").catch((e) => console.warn("ensureDataLoaded failed during startup:", e));
@@ -385,6 +478,12 @@ async function main() {
         initTooltipFallback().catch(console.error);
     }, 1500);
     addEventListener("contextmenu", (event) => {
+        // Avoid "stuck" focus/active highlight on Video.js controls after right-click.
+        const active = document.activeElement as HTMLElement | null;
+        if (active && typeof active.blur === "function") active.blur();
+        const target = event.target as HTMLElement | null;
+        if (target && typeof (target as any).blur === "function") (target as any).blur();
+
         // We check a global-ish flag to avoid async delay during the event
         if (!(window as any)._developerModeEnabled) {
             event.preventDefault();
@@ -478,6 +577,13 @@ async function main() {
         getRecordingOffset: () => currentEvents?.recordingOffset ?? highlightEvents?.recordingOffset ?? 0,
     });
 
+    initializeMarkerHoverTooltips({
+        playerElement,
+        getMarkerDetails: () => markerDetails,
+        getParticipants: () => currentEvents?.participants,
+        getSelfParticipantId: () => currentEvents?.participantId ?? 0,
+    });
+
     // add events to html elements
     ui.setRefreshBtnOnClickHandler(() => {
         window.location.reload();
@@ -496,11 +602,27 @@ async function main() {
                      document.body.classList.remove("selectable");
                  }
 
-                 const activeId = ui.getActiveVideoId();
-                 if (activeId) {
-                     await setMetadata(activeId);
+                 const markerFlagsChanged =
+                     settings.markerFlags.kill !== s.markerFlags.kill ||
+                     settings.markerFlags.death !== s.markerFlags.death ||
+                     settings.markerFlags.assist !== s.markerFlags.assist ||
+                     settings.markerFlags.structure !== s.markerFlags.structure ||
+                     settings.markerFlags.dragon !== s.markerFlags.dragon ||
+                     settings.markerFlags.voidgrub !== s.markerFlags.voidgrub ||
+                     settings.markerFlags.herald !== s.markerFlags.herald ||
+                     settings.markerFlags.baron !== s.markerFlags.baron;
+                 if (markerFlagsChanged) {
+                     changeMarkers();
                  }
-                 await updateSidebar();
+
+                 const recordingsPathChanged =
+                     settings.recordingsFolder !== s.recordingsFolder ||
+                     settings.clipsFolder !== s.clipsFolder;
+                 if (recordingsPathChanged) {
+                     setTimeout(() => {
+                         void updateSidebar();
+                     }, 250);
+                 }
              });
              return null;
         });
@@ -524,8 +646,8 @@ async function main() {
 
     // handle keybord shortcuts
     // handle keybord shortcuts
-    addEventListener("keydown", keyboardHandlers.handleKeyDown);
-    addEventListener("keyup", keyboardHandlers.handleKeyUp);
+    addEventListener("keydown", keyboardHandlers.handleKeyDown, true);
+    addEventListener("keyup", keyboardHandlers.handleKeyUp, true);
 
     // Mouse Controls (Wheel & Middle Click)
     const playerEl = document.getElementById("video_player");
@@ -808,22 +930,31 @@ async function main() {
         }
     });
 
+    const initialSidebarStartedAt = perfNowMs();
     const videoIds = await updateSidebar();
+    logPerf("startup:updateSidebar(initial)", initialSidebarStartedAt);
     checkLatestAndRetry(videoIds);
     const firstVideo = videoIds.find((v: Recording) => v.videoExists);
     if (firstVideo) {
-        void setVideo(firstVideo.videoId, false);
+        void (async () => {
+            const initialSetVideoStartedAt = perfNowMs();
+            await setVideo(firstVideo.videoId, false);
+            logPerf("startup:setVideo(first)", initialSetVideoStartedAt);
+        })();
         player.one("canplay", ui.showWindow);
     } else {
         void setVideo(null);
         player.one("ready", ui.showWindow);
     }
+
+    logPerf("startup:main(init path)", startupStartedAt);
 }
 
 // --- SIDEBAR, VIDEO PLAYER, DESCRIPTION  ---
 
 // use this function to update the sidebar
 async function updateSidebar(forceUpdateIds: string[] = []): Promise<Recording[]> {
+    const startedAt = perfNowMs();
     const recordings = await refreshSidebar({
         ui,
         forceUpdateIds,
@@ -842,6 +973,7 @@ async function updateSidebar(forceUpdateIds: string[] = []): Promise<Recording[]
             ui.setActiveVideoId(matched.videoId);
         }
     }
+    logPerf(`updateSidebar(forceIds=${forceUpdateIds.length})`, startedAt);
     return recordings;
 }
 
@@ -866,10 +998,12 @@ async function retrySidebarUpdate(attemptsLeft: number, targetId: string) {
 
 // use this function to set the video (null => no video)
 async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
+    const startedAt = perfNowMs();
     if (videoId === null) {
         preferredActiveVideoId = null;
         ui.setActiveVideoId(null);
         player.src("");
+        logPerf("setVideo(null)", startedAt);
     } else {
         const settings = await commands.getSettings();
         
@@ -884,7 +1018,9 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
         // VideoId is now an absolute path (base path without extension), so we use it directly
         ui.setActiveVideoId(cleanVideoId);
         clearMetadataRetry(cleanVideoId);
+        const setMetadataStartedAt = perfNowMs();
         const completed = await setMetadata(cleanVideoId);
+        logPerf("setVideo:setMetadata", setMetadataStartedAt);
         if (!completed) {
             scheduleMetadataRetry(cleanVideoId);
         }
@@ -899,18 +1035,22 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
         if (settings.autoplayVideo && allowAutoplay) {
             void player.play()?.catch(() => {});
         }
+        logPerf("setVideo(total)", startedAt);
     }
 }
 
 async function setMetadata(videoId: string): Promise<boolean> {
+    const startedAt = perfNowMs();
     const requestSerial = ++metadataRenderRequestSerial;
     const requestedVideoKey = normalizeVideoId(videoId);
 
+    const loadStartedAt = perfNowMs();
     let { data, resolvedVideoId } = await getMetadataWithFallback(
         videoId,
         commands.getMetadata,
         buildMetadataCandidates,
     );
+    logPerf("setMetadata:load", loadStartedAt);
     let kind = !data ? "null" : "Metadata" in data ? "Metadata" : "Deferred" in data ? "Deferred" : "NoData";
     console.log(`[diagnose] setMetadata kind=${kind} requested=${videoId} resolved=${resolvedVideoId}`);
 
@@ -966,11 +1106,14 @@ async function setMetadata(videoId: string): Promise<boolean> {
     currentEvents = rendered.currentEvents;
     highlightEvents = rendered.highlightEvents;
     changeMarkers();
+    logPerf(`setMetadata(total kind=${kind})`, startedAt);
     return rendered.completed;
 }
 
 function changeMarkers() {
-    const markers = buildMarkers(currentEvents, highlightEvents, ui.getMarkerFlags(), EVENT_DELAY);
+    const built = buildMarkers(currentEvents, highlightEvents, ui.getMarkerFlags(), EVENT_DELAY);
+    const markers = built.markers;
+    markerDetails = built.details;
 
     player.markers().removeAll();
     player.markers().add(markers);

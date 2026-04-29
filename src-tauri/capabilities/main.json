@@ -25,6 +25,7 @@
                         "core:path:allow-join",
                         "core:path:allow-resolve-directory",
                         "shell:allow-open",
+                        "drag:default",
                         {
                             "identifier":  "fs:allow-exists",
                             "allow":  [

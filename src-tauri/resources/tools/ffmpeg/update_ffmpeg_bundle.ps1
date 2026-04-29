@@ -15,8 +15,33 @@ $ErrorActionPreference = "Stop"
 $targetDir = Split-Path -Parent $PSCommandPath
 $targetExe = Join-Path $targetDir "ffmpeg.exe"
 $provenancePath = Join-Path $targetDir "ffmpeg-provenance.json"
+$sourceDir = Split-Path -Parent $FfmpegExePath
 
-Copy-Item -Path $FfmpegExePath -Destination $targetExe -Force
+if (-not (Test-Path -LiteralPath $FfmpegExePath)) {
+  throw "ffmpeg binary not found: $FfmpegExePath"
+}
+
+# Remove stale runtime files from previous bundles to avoid ABI mismatches.
+Get-ChildItem -LiteralPath $targetDir -File -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -match '^(ffmpeg|ffprobe|ffplay)\.exe$' -or $_.Extension -ieq ".dll" } |
+  ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
+
+Copy-Item -LiteralPath $FfmpegExePath -Destination $targetExe -Force
+
+# Some FFmpeg builds are dynamically linked. Bundle sibling DLLs to keep runtime self-contained.
+Get-ChildItem -LiteralPath $sourceDir -Filter "*.dll" -File -ErrorAction SilentlyContinue |
+  ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $targetDir $_.Name) -Force
+  }
+
+# Optional helper binaries are not required, but useful for diagnostics.
+foreach ($optionalExe in @("ffprobe.exe", "ffplay.exe")) {
+  $src = Join-Path $sourceDir $optionalExe
+  if (Test-Path -LiteralPath $src) {
+    Copy-Item -LiteralPath $src -Destination (Join-Path $targetDir $optionalExe) -Force
+  }
+}
+
 $hash = (Get-FileHash -Path $targetExe -Algorithm SHA256).Hash.ToLowerInvariant()
 
 $payload = [ordered]@{

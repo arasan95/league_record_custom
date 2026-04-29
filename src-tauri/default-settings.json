@@ -17,6 +17,11 @@
   "outputResolution": null,
   "framerate": [30, 1],
   "recordAudio": "APPLICATION",
+  "applicationAudioTracks": [
+    { "application": null, "enabled": true, "volumePercent": 100 },
+    { "application": null, "enabled": true, "volumePercent": 100 },
+    { "application": null, "enabled": true, "volumePercent": 100 }
+  ],
   "autostart": false,
   "maxRecordingAgeDays": null,
   "maxRecordingsSizeGb": null,

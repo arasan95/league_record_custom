@@ -7,7 +7,10 @@ use std::sync::OnceLock;
 use std::thread::{self, ThreadId};
 use std::time::Duration;
 
-use crate::settings::{Adapter, AdapterId, AudioSource, Encoder, Framerate, RateControl, RecorderSettings, Resolution};
+use crate::settings::{
+    Adapter, AdapterId, ApplicationAudioTrackSetting, AudioSource, Encoder, Framerate, RateControl, RecorderSettings,
+    Resolution,
+};
 use get::Get;
 use obs_data::ObsData;
 
@@ -27,7 +30,10 @@ const DEFAULT_PLUGIN_DATA_PATH: &str = "./data/obs-plugins/%module%/";
 // define null terminated libobs object names for ffi
 const OUTPUT: *const i8 = c"output".as_ptr().cast();
 const VIDEO_ENCODER: *const i8 = c"video_encoder".as_ptr().cast();
-const AUDIO_ENCODER: *const i8 = c"audio_encoder".as_ptr().cast();
+const AUDIO_ENCODER1: *const i8 = c"audio_encoder1".as_ptr().cast();
+const AUDIO_ENCODER2: *const i8 = c"audio_encoder2".as_ptr().cast();
+const AUDIO_ENCODER3: *const i8 = c"audio_encoder3".as_ptr().cast();
+const AUDIO_ENCODER4: *const i8 = c"audio_encoder4".as_ptr().cast();
 const VIDEO_SOURCE: *const i8 = c"video_source".as_ptr().cast();
 const AUDIO_SOURCE1: *const i8 = c"audio_source1".as_ptr().cast();
 const AUDIO_SOURCE2: *const i8 = c"audio_source2".as_ptr().cast();
@@ -38,6 +44,33 @@ const VIDEO_CHANNEL: u32 = 0;
 const AUDIO_CHANNEL1: u32 = 1;
 const AUDIO_CHANNEL2: u32 = 2;
 const AUDIO_CHANNEL3: u32 = 3;
+
+const AUDIO_MIX_FULL: u32 = 1 << 0;
+const AUDIO_MIX_GAME: u32 = 1 << 1;
+const AUDIO_MIX_SYSTEM: u32 = 1 << 2;
+const AUDIO_MIX_MIC: u32 = 1 << 3;
+
+fn normalize_process_name(value: Option<&str>) -> Option<String> {
+    let trimmed = value.unwrap_or_default().trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let mut process = trimmed.to_string();
+    if !process.to_ascii_lowercase().ends_with(".exe") {
+        process.push_str(".exe");
+    }
+    Some(process)
+}
+
+fn normalized_track(
+    track: Option<&ApplicationAudioTrackSetting>,
+) -> (Option<String>, bool, u8) {
+    let enabled = track.map(|t| t.enabled).unwrap_or(false);
+    let volume_percent = track.map(|t| t.volume_percent.min(100)).unwrap_or(100);
+    let app = normalize_process_name(track.and_then(|t| t.application.as_deref()));
+    (app, enabled, volume_percent)
+}
 
 static LIBOBS_THREAD: OnceLock<ThreadId> = OnceLock::new();
 static LIBOBS_SHUTDOWN: AtomicBool = AtomicBool::new(false);
@@ -57,7 +90,10 @@ type PhantomUnsend = std::marker::PhantomData<*mut ()>;
 pub struct InpRecorder {
     output: NonNull<libobs_sys::obs_output>,
     video_encoder: Cell<NonNull<libobs_sys::obs_encoder>>,
-    audio_encoder: NonNull<libobs_sys::obs_encoder>,
+    audio_encoder1: NonNull<libobs_sys::obs_encoder>,
+    audio_encoder2: NonNull<libobs_sys::obs_encoder>,
+    audio_encoder3: NonNull<libobs_sys::obs_encoder>,
+    audio_encoder4: NonNull<libobs_sys::obs_encoder>,
     video_source: NonNull<libobs_sys::obs_source>,
     audio_source1: NonNull<libobs_sys::obs_source>,
     audio_source2: NonNull<libobs_sys::obs_source>,
@@ -178,19 +214,16 @@ impl InpRecorder {
         };
         unsafe { libobs_sys::obs_set_output_source(VIDEO_CHANNEL, video_source) };
 
-        // CREATE AUDIO ENCODER
-        let mut data = ObsData::new();
-        data.set_int("bitrate", 160);
-        let audio_encoder = unsafe {
-            libobs_sys::obs_audio_encoder_create(get.c_str("ffmpeg_aac"), AUDIO_ENCODER, data.as_ptr(), 0, null_mut())
-        };
+        // CREATE AUDIO ENCODERS
+        let audio_encoder1 = Self::create_audio_encoder(&mut get, AUDIO_ENCODER1, 0)?;
+        let audio_encoder2 = Self::create_audio_encoder(&mut get, AUDIO_ENCODER2, 1)?;
+        let audio_encoder3 = Self::create_audio_encoder(&mut get, AUDIO_ENCODER3, 2)?;
+        let audio_encoder4 = Self::create_audio_encoder(&mut get, AUDIO_ENCODER4, 3)?;
         unsafe {
-            libobs_sys::obs_encoder_set_audio(audio_encoder, libobs_sys::obs_get_audio());
-            libobs_sys::obs_output_set_audio_encoder(
-                output,
-                audio_encoder,
-                0, // ignored since we only have 1 output
-            );
+            libobs_sys::obs_output_set_audio_encoder(output, audio_encoder1, 0);
+            libobs_sys::obs_output_set_audio_encoder(output, audio_encoder2, 1);
+            libobs_sys::obs_output_set_audio_encoder(output, audio_encoder3, 2);
+            libobs_sys::obs_output_set_audio_encoder(output, audio_encoder4, 3);
         }
 
         // CREATE AUDIO SOURCE 1
@@ -241,8 +274,14 @@ impl InpRecorder {
                 NonNull::new(libobs_sys::obs_get_encoder_by_name(VIDEO_ENCODER))
                     .ok_or("got nullpointer instead of video encoder")?,
             );
-            let audio_encoder = NonNull::new(libobs_sys::obs_get_encoder_by_name(AUDIO_ENCODER))
-                .ok_or("got nullpointer instead of audio encoder")?;
+            let audio_encoder1 = NonNull::new(libobs_sys::obs_get_encoder_by_name(AUDIO_ENCODER1))
+                .ok_or("got nullpointer instead of audio encoder 1")?;
+            let audio_encoder2 = NonNull::new(libobs_sys::obs_get_encoder_by_name(AUDIO_ENCODER2))
+                .ok_or("got nullpointer instead of audio encoder 2")?;
+            let audio_encoder3 = NonNull::new(libobs_sys::obs_get_encoder_by_name(AUDIO_ENCODER3))
+                .ok_or("got nullpointer instead of audio encoder 3")?;
+            let audio_encoder4 = NonNull::new(libobs_sys::obs_get_encoder_by_name(AUDIO_ENCODER4))
+                .ok_or("got nullpointer instead of audio encoder 4")?;
             let video_source = NonNull::new(libobs_sys::obs_get_source_by_name(VIDEO_SOURCE))
                 .ok_or("got nullpointer instead of video source")?;
             let audio_source1 = NonNull::new(libobs_sys::obs_get_source_by_name(AUDIO_SOURCE1))
@@ -257,7 +296,10 @@ impl InpRecorder {
             Ok(Self {
                 output,
                 video_encoder,
-                audio_encoder,
+                audio_encoder1,
+                audio_encoder2,
+                audio_encoder3,
+                audio_encoder4,
                 video_source,
                 audio_source1,
                 audio_source2,
@@ -333,6 +375,29 @@ impl InpRecorder {
             return Err(String::from("error on libobs reset audio"));
         }
         Ok(())
+    }
+
+    fn create_audio_encoder(
+        get: &mut Get,
+        name: *const i8,
+        mixer_idx: usize,
+    ) -> Result<*mut libobs_sys::obs_encoder, &'static str> {
+        let mut data = ObsData::new();
+        data.set_int("bitrate", 160);
+        let audio_encoder = unsafe {
+            libobs_sys::obs_audio_encoder_create(
+                get.c_str("ffmpeg_aac"),
+                name,
+                data.as_ptr(),
+                mixer_idx,
+                null_mut(),
+            )
+        };
+        if audio_encoder.is_null() {
+            return Err("unable to create audio encoder");
+        }
+        unsafe { libobs_sys::obs_encoder_set_audio(audio_encoder, libobs_sys::obs_get_audio()) };
+        Ok(audio_encoder)
     }
 
     fn get_available_encoders_internal() -> Vec<Encoder> {
@@ -549,15 +614,90 @@ impl InpRecorder {
 
         // set audio sources
         let audio_setting = settings.audio_source.unwrap_or(AudioSource::APPLICATION);
+        let separated_audio = audio_setting == AudioSource::SEPARATED;
+        let applications3_audio = audio_setting == AudioSource::APPLICATIONS3;
+        let app_tracks = settings.get_application_audio_tracks().cloned().unwrap_or_default();
+        let (app1, app1_enabled, app1_volume_percent) = normalized_track(app_tracks.first());
+        let (app2, app2_enabled, app2_volume_percent) = normalized_track(app_tracks.get(1));
+        let (app3, app3_enabled, app3_volume_percent) = normalized_track(app_tracks.get(2));
+        unsafe {
+            libobs_sys::obs_output_set_audio_encoder(self.output.as_ptr(), self.audio_encoder1.as_ptr(), 0);
+            libobs_sys::obs_output_set_audio_encoder(
+                self.output.as_ptr(),
+                if separated_audio || applications3_audio {
+                    self.audio_encoder2.as_ptr()
+                } else {
+                    null_mut()
+                },
+                1,
+            );
+            libobs_sys::obs_output_set_audio_encoder(
+                self.output.as_ptr(),
+                if separated_audio || applications3_audio {
+                    self.audio_encoder3.as_ptr()
+                } else {
+                    null_mut()
+                },
+                2,
+            );
+            libobs_sys::obs_output_set_audio_encoder(
+                self.output.as_ptr(),
+                if separated_audio || applications3_audio {
+                    self.audio_encoder4.as_ptr()
+                } else {
+                    null_mut()
+                },
+                3,
+            );
+            libobs_sys::obs_output_set_mixers(
+                self.output.as_ptr(),
+                if separated_audio {
+                    (AUDIO_MIX_FULL | AUDIO_MIX_GAME | AUDIO_MIX_SYSTEM | AUDIO_MIX_MIC) as usize
+                } else if applications3_audio {
+                    (AUDIO_MIX_FULL | AUDIO_MIX_GAME | AUDIO_MIX_SYSTEM | AUDIO_MIX_MIC) as usize
+                } else {
+                    AUDIO_MIX_FULL as usize
+                },
+            );
+        }
 
         // audio source 1
         let audio_source1 = match audio_setting {
-            AudioSource::APPLICATION => {
+            AudioSource::APPLICATION | AudioSource::SEPARATED => {
                 let mut data = ObsData::new();
                 data.set_string("window", settings.window.get_libobs_window_id());
                 unsafe { libobs_sys::obs_source_update(self.audio_source1.as_ptr(), data.as_ptr()) };
+                unsafe {
+                    libobs_sys::obs_source_set_audio_mixers(
+                        self.audio_source1.as_ptr(),
+                        if separated_audio { AUDIO_MIX_GAME } else { AUDIO_MIX_FULL },
+                    )
+                };
 
                 self.audio_source1.as_ptr()
+            }
+            AudioSource::APPLICATIONS3 => {
+                match app1.as_deref().filter(|_| app1_enabled) {
+                    Some(process) => {
+                        let mut data = ObsData::new();
+                        data.set_string("window", format!("::{process}"));
+                        unsafe { libobs_sys::obs_source_update(self.audio_source1.as_ptr(), data.as_ptr()) };
+                        unsafe {
+                            libobs_sys::obs_source_set_audio_mixers(
+                                self.audio_source1.as_ptr(),
+                                AUDIO_MIX_FULL | AUDIO_MIX_GAME,
+                            )
+                        };
+                        unsafe {
+                            libobs_sys::obs_source_set_volume(
+                                self.audio_source1.as_ptr(),
+                                f32::from(app1_volume_percent) / 100.0,
+                            );
+                        }
+                        self.audio_source1.as_ptr()
+                    }
+                    None => null_mut(),
+                }
             }
             _ => null_mut(),
         };
@@ -565,14 +705,84 @@ impl InpRecorder {
 
         // audio source 2
         let audio_source2 = match audio_setting {
-            AudioSource::SYSTEM | AudioSource::ALL => self.audio_source2.as_ptr(),
+            AudioSource::SYSTEM | AudioSource::ALL | AudioSource::SEPARATED => {
+                unsafe {
+                    libobs_sys::obs_source_set_audio_mixers(
+                        self.audio_source2.as_ptr(),
+                        if separated_audio {
+                            AUDIO_MIX_FULL | AUDIO_MIX_SYSTEM
+                        } else {
+                            AUDIO_MIX_FULL
+                        },
+                    )
+                };
+                self.audio_source2.as_ptr()
+            }
+            AudioSource::APPLICATIONS3 => {
+                match app2.as_deref().filter(|_| app2_enabled) {
+                    Some(process) => {
+                        let mut data = ObsData::new();
+                        data.set_string("window", format!("::{process}"));
+                        unsafe { libobs_sys::obs_source_update(self.audio_source2.as_ptr(), data.as_ptr()) };
+                        unsafe {
+                            libobs_sys::obs_source_set_audio_mixers(
+                                self.audio_source2.as_ptr(),
+                                AUDIO_MIX_FULL | AUDIO_MIX_SYSTEM,
+                            )
+                        };
+                        unsafe {
+                            libobs_sys::obs_source_set_volume(
+                                self.audio_source2.as_ptr(),
+                                f32::from(app2_volume_percent) / 100.0,
+                            );
+                        }
+                        self.audio_source2.as_ptr()
+                    }
+                    None => null_mut(),
+                }
+            }
             _ => null_mut(),
         };
         unsafe { libobs_sys::obs_set_output_source(AUDIO_CHANNEL2, audio_source2) };
 
         // audio source 3
         let audio_source3 = match audio_setting {
-            AudioSource::ALL => self.audio_source3.as_ptr(),
+            AudioSource::ALL | AudioSource::SEPARATED => {
+                unsafe {
+                    libobs_sys::obs_source_set_audio_mixers(
+                        self.audio_source3.as_ptr(),
+                        if separated_audio {
+                            AUDIO_MIX_FULL | AUDIO_MIX_MIC
+                        } else {
+                            AUDIO_MIX_FULL
+                        },
+                    )
+                };
+                self.audio_source3.as_ptr()
+            }
+            AudioSource::APPLICATIONS3 => {
+                match app3.as_deref().filter(|_| app3_enabled) {
+                    Some(process) => {
+                        let mut data = ObsData::new();
+                        data.set_string("window", format!("::{process}"));
+                        unsafe { libobs_sys::obs_source_update(self.audio_source3.as_ptr(), data.as_ptr()) };
+                        unsafe {
+                            libobs_sys::obs_source_set_audio_mixers(
+                                self.audio_source3.as_ptr(),
+                                AUDIO_MIX_FULL | AUDIO_MIX_MIC,
+                            )
+                        };
+                        unsafe {
+                            libobs_sys::obs_source_set_volume(
+                                self.audio_source3.as_ptr(),
+                                f32::from(app3_volume_percent) / 100.0,
+                            );
+                        }
+                        self.audio_source3.as_ptr()
+                    }
+                    None => null_mut(),
+                }
+            }
             _ => null_mut(),
         };
         unsafe { libobs_sys::obs_set_output_source(AUDIO_CHANNEL3, audio_source3) };
@@ -616,7 +826,10 @@ impl Drop for InpRecorder {
             libobs_sys::obs_encoder_release(self.video_encoder.get().as_ptr());
             libobs_sys::obs_source_release(self.video_source.as_ptr());
             // audio
-            libobs_sys::obs_encoder_release(self.audio_encoder.as_ptr());
+            libobs_sys::obs_encoder_release(self.audio_encoder1.as_ptr());
+            libobs_sys::obs_encoder_release(self.audio_encoder2.as_ptr());
+            libobs_sys::obs_encoder_release(self.audio_encoder3.as_ptr());
+            libobs_sys::obs_encoder_release(self.audio_encoder4.as_ptr());
             libobs_sys::obs_source_release(self.audio_source1.as_ptr());
             libobs_sys::obs_source_release(self.audio_source2.as_ptr());
             libobs_sys::obs_source_release(self.audio_source3.as_ptr());
