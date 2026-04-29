@@ -32,6 +32,14 @@ pub struct FfmpegRuntimeInfo {
     pub provenance: Option<FfmpegProvenance>,
 }
 
+#[cfg_attr(test, derive(specta::Type))]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipAudioTrack {
+    pub index: u32,
+    pub description: String,
+}
+
 fn app_local_bundled_ffmpeg_candidates(app_handle: &AppHandle) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
 
@@ -98,12 +106,68 @@ fn resolve_ffmpeg_command(settings: &SettingsWrapper, app_handle: &AppHandle) ->
     ("ffmpeg".to_string(), "path".to_string())
 }
 
+fn probe_audio_tracks(video_path: &PathBuf, ffmpeg_cmd: &str) -> Result<Vec<ClipAudioTrack>, String> {
+    let mut command = Command::new(ffmpeg_cmd);
+
+    #[cfg(target_os = "windows")]
+    use std::os::windows::process::CommandExt;
+    #[cfg(target_os = "windows")]
+    command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    let output = command
+        .arg("-hide_banner")
+        .arg("-i")
+        .arg(video_path)
+        .output()
+        .map_err(|e| format!("Failed to probe media streams: {}", e))?;
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let text = if stderr.trim().is_empty() { stdout.as_ref() } else { stderr.as_ref() };
+
+    let mut tracks: Vec<ClipAudioTrack> = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if !trimmed.contains("Stream #0:") || !trimmed.contains("Audio:") {
+            continue;
+        }
+        if let Some(audio_pos) = trimmed.find("Audio:") {
+            let raw_desc = trimmed[(audio_pos + "Audio:".len())..].trim();
+            let description = if raw_desc.is_empty() {
+                "Audio".to_string()
+            } else {
+                raw_desc.to_string()
+            };
+            tracks.push(ClipAudioTrack {
+                index: tracks.len() as u32,
+                description,
+            });
+        }
+    }
+
+    Ok(tracks)
+}
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub async fn get_clip_audio_tracks(
+    video_id: String,
+    app_handle: AppHandle,
+    state: State<'_, SettingsWrapper>,
+) -> Result<Vec<ClipAudioTrack>, String> {
+    let video_path = resolve_clip_input_path(&video_id, &state)?;
+    let (ffmpeg_cmd, _mode) = resolve_ffmpeg_command(&state, &app_handle);
+    probe_audio_tracks(&video_path, &ffmpeg_cmd)
+}
+
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub async fn create_clip(
     video_id: String,
     start: f64,
     end: f64,
+    game_audio_only: Option<bool>,
+    audio_track_index: Option<u32>,
     app_handle: AppHandle,
     state: State<'_, SettingsWrapper>,
 ) -> Result<String, String> {
@@ -138,17 +202,35 @@ pub async fn create_clip(
     #[cfg(target_os = "windows")]
     command.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
-    let output = command
+    command
         .arg("-ss")
         .arg(format!("{:.3}", start))
         .arg("-i")
         .arg(&video_path)
         .arg("-t")
-        .arg(format!("{:.3}", duration))
-        .arg("-c")
-        .arg("copy")
-        .arg(&output_path)
-        .output();
+        .arg(format!("{:.3}", duration));
+
+    if let Some(track_index) = audio_track_index {
+        command
+            .arg("-map")
+            .arg("0:v:0")
+            .arg("-map")
+            .arg(format!("0:a:{}", track_index))
+            .arg("-c")
+            .arg("copy");
+    } else if game_audio_only.unwrap_or(false) {
+        command
+            .arg("-map")
+            .arg("0:v:0")
+            .arg("-map")
+            .arg("0:a:1")
+            .arg("-c")
+            .arg("copy");
+    } else {
+        command.arg("-c").arg("copy");
+    }
+
+    let output = command.arg(&output_path).output();
 
     match output {
         Ok(o) if o.status.success() => {
@@ -174,11 +256,16 @@ pub async fn create_clip(
         }
         Ok(o) => {
             let stderr = String::from_utf8_lossy(&o.stderr);
-            if stderr.trim().is_empty() {
-                Err("FFmpeg exited with non-zero code.".into())
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            let code = o.status.code().map(|c| c.to_string()).unwrap_or_else(|| "unknown".to_string());
+            let detail = if !stderr.trim().is_empty() {
+                stderr.trim().to_string()
+            } else if !stdout.trim().is_empty() {
+                stdout.trim().to_string()
             } else {
-                Err(format!("FFmpeg exited with non-zero code: {}", stderr.trim()))
-            }
+                "No ffmpeg output.".to_string()
+            };
+            Err(format!("FFmpeg exited with non-zero code ({}): {}", code, detail))
         }
         Err(e) => Err(format!("Failed to execute ffmpeg: {}. Is FFmpeg installed?", e)),
     }
@@ -221,11 +308,25 @@ pub async fn pick_ffmpeg_path(app_handle: AppHandle) -> Option<String> {
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub async fn clear_cache(app_handle: AppHandle) -> Result<(), String> {
+    clear_cache_inner(app_handle, true).await
+}
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub async fn clear_cache_for_patch_update(app_handle: AppHandle) -> Result<(), String> {
+    // Keep tooltip_cache so existing tooltip variables remain available while new patch data is extracting.
+    clear_cache_inner(app_handle, false).await
+}
+
+async fn clear_cache_inner(app_handle: AppHandle, include_tooltip_cache: bool) -> Result<(), String> {
     use tauri::Manager;
     // In Tauri v2, we use app_handle.path().app_local_data_dir()
     let app_dir = app_handle.path().app_local_data_dir().map_err(|e| e.to_string())?;
 
-    let cache_dirs = ["img_cache", "items_cache", "tooltip_cache"];
+    let mut cache_dirs = vec!["img_cache", "items_cache"];
+    if include_tooltip_cache {
+        cache_dirs.push("tooltip_cache");
+    }
 
     for dir in cache_dirs {
         let path = app_dir.join(dir);

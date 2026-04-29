@@ -1,4 +1,4 @@
-import { commands } from "./bindings";
+import { invoke } from "@tauri-apps/api/core";
 
 const VERSION_KEY = "lol_patch_version";
 const FALLBACK_VERSION = "14.23.1"; // A recent safe fallback
@@ -33,9 +33,10 @@ export async function initPatchVersion(): Promise<string> {
             if (current !== latest) {
                 console.log(`New patch version detected: ${latest} (was ${current}). Clearing cache...`);
                 localStorage.setItem(VERSION_KEY, latest);
-                // Clear old images/stats cache so the new patch applies functionally
-                // Run cache cleanup in the background so startup does not stall.
-                commands.clearCache().catch(e => console.error("Failed to clear cache:", e));
+                // Keep tooltip_cache so old tooltip vars remain visible while new patch data is being extracted.
+                invoke("clear_cache_for_patch_update").catch(e =>
+                    console.error("Failed to clear runtime cache for patch update:", e),
+                );
             } else {
                 console.log(`Patch version is up to date: ${latest}`);
             }

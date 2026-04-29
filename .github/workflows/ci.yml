@@ -37,10 +37,19 @@ jobs:
             choco install ffmpeg -y --no-progress
           }
           $ff = (Get-Command ffmpeg -ErrorAction Stop).Source
+          if ($ff -match '\\chocolatey\\bin\\ffmpeg\.exe$') {
+            $resolved = Get-ChildItem -Path "$env:ChocolateyInstall\lib\ffmpeg*\tools\ffmpeg\bin\ffmpeg.exe" -File -ErrorAction SilentlyContinue |
+              Sort-Object LastWriteTime -Descending |
+              Select-Object -First 1
+            if ($null -ne $resolved) {
+              $ff = $resolved.FullName
+            }
+          }
           if (-not (Test-Path $ff)) {
             Write-Error "ffmpeg.exe not found"
             exit 1
           }
+          Write-Host "Using ffmpeg binary: $ff"
           $versionLine = (& $ff -version | Select-Object -First 1)
           $version = "unknown"
           if ($versionLine -match '^ffmpeg version\s+([^\s]+)') {

@@ -201,6 +201,11 @@ export function createKeyboardHandlers(input: {
             if (loopEnabledCheckbox) {
                 loopEnabledCheckbox.checked = !loopEnabledCheckbox.checked;
                 setLoopState({ isLooping: loopEnabledCheckbox.checked });
+                // Keep any checkbox-bound listeners in sync with hotkey toggles.
+                loopEnabledCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+            } else {
+                const state = getLoopState();
+                setLoopState({ isLooping: !state.isLooping });
             }
             handled = true;
         } else if (matchesAction(event, "stepForward")) {
