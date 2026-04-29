@@ -61,6 +61,25 @@ async pickRecordingsFolder() : Promise<string | null> {
 async getRunningApplications() : Promise<string[]> {
     return await TAURI_INVOKE("get_running_applications");
 },
+async isLeagueClientAvailable() : Promise<boolean> {
+    return await TAURI_INVOKE("is_league_client_available");
+},
+async downloadRecordingReplay(videoId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("download_recording_replay", { videoId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async playRecordingReplay(videoId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("play_recording_replay", { videoId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async createClip(videoId: string, start: number, end: number, gameAudioOnly: boolean | null) : Promise<Result<string, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("create_clip", { videoId, start, end, gameAudioOnly, audioTrackIndex: null }) };

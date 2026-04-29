@@ -224,6 +224,9 @@ fn run_app_default() {
             commands::save_settings,
             commands::pick_recordings_folder,
             commands::get_running_applications,
+            commands::is_league_client_available,
+            commands::download_recording_replay,
+            commands::play_recording_replay,
             commands::pick_clips_folder
         ]);
 
@@ -288,6 +291,9 @@ fn run_app_default() {
             commands::save_settings,
             commands::pick_recordings_folder,
             commands::get_running_applications,
+            commands::is_league_client_available,
+            commands::download_recording_replay,
+            commands::play_recording_replay,
             commands::create_clip,
             commands::get_clip_audio_tracks,
             commands::pick_clips_folder,
@@ -336,6 +342,9 @@ fn run_app_default() {
             commands::save_settings,
             commands::pick_recordings_folder,
             commands::get_running_applications,
+            commands::is_league_client_available,
+            commands::download_recording_replay,
+            commands::play_recording_replay,
             commands::create_clip,
             commands::get_clip_audio_tracks,
             commands::pick_clips_folder,
