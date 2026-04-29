@@ -1,21 +1,13 @@
 {
-    "notes":  [
-                  "[日本語]",
-                  "主な変更点:",
-                  "- クリップ作成時のVCチェックボックスを廃止し、複数オーディオトラック時に音声モード選択ウィンドウを追加",
-                  "- クリップ音声を「ゲーム音のみ / VC入り」から選択可能に変更",
-                  "- シェアウィンドウの文言を整理（不要なDiscord説明を削除し、Discord選択時の案内のみ表示）",
-                  "- シェア関連およびクリップ関連のUI文言を設定言語に対応",
-                  "- 言語設定が保存されず一部文言が日本語のままになる問題を修正",
-                  "- Toggle Loop ホットキーでチェックボックスが切り替わらない問題を修正",
-                  "",
-                  "[English]",
-                  "Highlights:",
-                  "- Removed the VC checkbox from clip creation and added an audio mode picker when multiple audio tracks are detected",
-                  "- Clip audio can now be selected as \"Game Only\" or \"With VC\"",
-                  "- Simplified Share window wording (removed redundant Discord hint from the first screen; shown only in Discord view)",
-                  "- Localized Share/Clip UI texts based on the selected app language",
-                  "- Fixed an issue where language settings were not persisted, leaving some texts in Japanese",
-                  "- Fixed Toggle Loop hotkey not updating the loop checkbox state"
-              ]
+    "notes": [
+        "[日本語]",
+        "主な変更点:",
+        "- 一部のルーンアイコンが表示されない問題を修正",
+        "- サイドバーからその試合の公式リプレイを再生するボタンを追加",
+        "",
+        "[English]",
+        "Highlights:",
+        "- Fixed an issue where some rune icons were not displayed",
+        "- Added a sidebar button to play the official replay for that match"
+    ]
 }
