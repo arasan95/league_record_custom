@@ -16,7 +16,7 @@ The following changes have been implemented in this version:
 - Status Visibility: Taskbar icon changes to reflect the current recording status.
 - Game Mode Filtering: Option to record only specific modes (Ranked, ARAM, Arena, etc.).
 - Playback Control: Automatically Play, Stop, or Select recordings based on game status.
-- Video Tools: A-B Loop repeat and clip creation (works out-of-the-box with bundled FFmpeg).
+- Video Tools: A-B Loop repeat and clip creation (FFmpeg is prepared automatically on first use).
 - Configuration: Expanded hotkey and general settings.
 - Tooltip: Tooltip data is extracted from local WAD files, so tooltips stay compatible with the latest patch.
 
@@ -26,11 +26,11 @@ The following changes have been implemented in this version:
 
 or browse all versions: [GitHub Releases](https://github.com/arasan95/league_record_custom/releases)
 
-The installer includes FFmpeg, so Clip works out-of-the-box for normal users.
+FFmpeg is distributed as a separate release asset and cached under the app data folder, so app updates do not reinstall it when the FFmpeg SHA256 has not changed.
 
 ## FFmpeg Notes
 
-For regular use, the bundled FFmpeg is selected automatically.  
+For regular use, the app-local FFmpeg runtime is selected automatically.
 Manual FFmpeg replacement is only needed for maintainers working in `src-tauri/resources/tools/ffmpeg/`.
 
 ## How to Use

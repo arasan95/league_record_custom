@@ -52,7 +52,7 @@
                                      "../licenses/*":  "licenses/",
                                      "../LICENSE.txt":  "LICENSE.txt",
                                      "resources/tooltip_data.db":  "tooltip_data.db",
-                                     "resources/tools/ffmpeg/*":  "tools/ffmpeg/"
+                                     "resources/tools/ffmpeg/ffmpeg-provenance.json":  "tools/ffmpeg/ffmpeg-provenance.json"
                                  },
                    "shortDescription":  "Record and review LoL games",
                    "longDescription":  "Record and review League of Legends games",
