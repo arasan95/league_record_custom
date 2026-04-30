@@ -93,7 +93,7 @@ function metadataDataSignature(data: any): string {
         const eventCount = Array.isArray(m.events) ? m.events.length : 0;
         const lastEventTs = eventCount > 0 ? Number(m.events[eventCount - 1]?.timestamp ?? -1) : -1;
         const participantKey = Array.isArray(m.participants)
-            ? m.participants.map((p: any) => `${p.participantId}:${p.championId}`).join("|")
+            ? m.participants.map((p: any) => `${p.participantId}:${p.championId}:${p.honorReceived ? 1 : 0}`).join("|")
             : "";
         const highlightsCount = Array.isArray(m.highlights) ? m.highlights.length : 0;
         return `Metadata|pid=${m.participantId}|pc=${m.participants?.length ?? 0}|p=${participantKey}|ev=${eventCount}|last=${lastEventTs}|hi=${highlightsCount}|q=${m.queue?.id ?? 0}|gv=${m.gameVersion ?? ""}`;
@@ -103,7 +103,7 @@ function metadataDataSignature(data: any): string {
         const eventCount = Array.isArray(d.events) ? d.events.length : 0;
         const lastEventTs = eventCount > 0 ? Number(d.events[eventCount - 1]?.timestamp ?? -1) : -1;
         const participantKey = Array.isArray(d.participants)
-            ? d.participants.map((p: any) => `${p.participantId}:${p.championId}`).join("|")
+            ? d.participants.map((p: any) => `${p.participantId}:${p.championId}:${p.honorReceived ? 1 : 0}`).join("|")
             : "";
         const highlightsCount = Array.isArray(d.highlights) ? d.highlights.length : 0;
         return `Deferred|pc=${d.participants?.length ?? 0}|p=${participantKey}|ev=${eventCount}|last=${lastEventTs}|hi=${highlightsCount}|off=${d.ingameTimeRecStartOffset ?? 0}`;
