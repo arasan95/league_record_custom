@@ -33,6 +33,9 @@ strum_macros = "0.27.1"
 specta = "=2.0.0-rc.22"
 specta-typescript = "0.0.9"
 
+[patch.crates-io]
+phf_generator = { path = "vendor/phf_generator-0.8.0" }
+
 # --- APP ---
 
 [package]
@@ -53,7 +56,7 @@ name = "LeagueRecord"
 path = "src/main.rs"
 
 [dependencies]
-tauri = { version = "2.10", features = ["protocol-asset", "tray-icon"] }
+tauri = { version = "2.11", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-updater = "2.10"
 tauri-plugin-autostart = "2.5.0"
 tauri-plugin-single-instance = "2.3.0"
