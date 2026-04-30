@@ -4,10 +4,14 @@
         "主な変更点:",
         "- 言語設定を変更してもスコアボードのツールチップ言語が切り替わらない問題を修正",
         "- 言語変更後にアクティブな録画のスコアボードとサイドバー表示を更新するよう改善",
+        "- 言語設定を保存したあと、自動的に画面を更新して新しい言語を反映するよう改善",
+        "- ツールチップDBのチャンピオン名と異名を各言語の表記に修正",
         "",
         "[English]",
         "Highlights:",
         "- Fixed an issue where scoreboard tooltips did not switch language after changing the language setting",
-        "- Improved refresh behavior for the active recording scoreboard and sidebar after language changes"
+        "- Improved refresh behavior for the active recording scoreboard and sidebar after language changes",
+        "- Automatically refresh the screen after saving a language setting change",
+        "- Fixed champion names and titles in the tooltip DB to use each selected language"
     ]
 }
