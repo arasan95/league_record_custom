@@ -78,7 +78,8 @@ jobs:
             -FfmpegExePath $ff `
             -Version $version `
             -SourceName "Chocolatey ffmpeg package" `
-            -SourceUrl "https://community.chocolatey.org/packages/ffmpeg"
+            -SourceUrl "https://community.chocolatey.org/packages/ffmpeg" `
+            -DownloadUrl "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ffmpeg-windows-x64.zip"
 
       - run: bun install --linker=isolated && bun run --bun tauri build
         env:
@@ -198,6 +199,6 @@ jobs:
 
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "./src-tauri/target/release/*.zip, ./src-tauri/target/release/bundle/nsis/*, latest.json"
+          artifacts: "./src-tauri/target/release/*.zip, ./src-tauri/target/release/bundle/nsis/*, ./src-tauri/resources/tools/ffmpeg/ffmpeg-windows-x64.zip, ./src-tauri/resources/tools/ffmpeg/ffmpeg-provenance.json, latest.json"
           prerelease: true
           body: ${{ steps.release_body.outputs.body }}

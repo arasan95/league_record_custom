@@ -65,3 +65,7 @@ av-triage-results/
 
 # Bundled binaries are prepared in CI, not tracked in git.
 src-tauri/resources/tools/ffmpeg/ffmpeg.exe
+src-tauri/resources/tools/ffmpeg/ffprobe.exe
+src-tauri/resources/tools/ffmpeg/ffplay.exe
+src-tauri/resources/tools/ffmpeg/*.dll
+src-tauri/resources/tools/ffmpeg/ffmpeg-windows-x64.zip
