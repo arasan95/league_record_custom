@@ -2,12 +2,12 @@
     "notes": [
         "[日本語]",
         "主な変更点:",
-        "- 一部のルーンアイコンが表示されない問題を修正",
-        "- サイドバーからその試合の公式リプレイを再生するボタンを追加",
+        "- 言語設定を変更してもスコアボードのツールチップ言語が切り替わらない問題を修正",
+        "- 言語変更後にアクティブな録画のスコアボードとサイドバー表示を更新するよう改善",
         "",
         "[English]",
         "Highlights:",
-        "- Fixed an issue where some rune icons were not displayed",
-        "- Added a sidebar button to play the official replay for that match"
+        "- Fixed an issue where scoreboard tooltips did not switch language after changing the language setting",
+        "- Improved refresh behavior for the active recording scoreboard and sidebar after language changes"
     ]
 }

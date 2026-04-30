@@ -912,6 +912,10 @@ export default class UI {
         bindChangeHandler(this.autoSelectCb, handler);
     };
 
+    public setCurrentLanguage = (language: string) => {
+        this.currentLanguage = language;
+    };
+
     public showSettingsModal = (
         settings: Settings,
         saveCallback: (s: Settings) => Promise<void>,

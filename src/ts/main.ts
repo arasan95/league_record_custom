@@ -591,6 +591,7 @@ async function main() {
     ui.setRecordingsFolderBtnOnClickHandler(commands.openRecordingsFolder);
     ui.setSettingsBtnOnClickHandler(() => {
         commands.getSettings().then(settings => {
+             const previousLanguage = settings.language || "en";
              ui.showSettingsModal(settings, async (s) => { 
                  await commands.saveSettings(s); 
                  
@@ -615,10 +616,20 @@ async function main() {
                      changeMarkers();
                  }
 
+                 const languageChanged = previousLanguage !== (s.language || "en");
+                 if (languageChanged) {
+                     ui.setCurrentLanguage(s.language || "en");
+                     const activeVideoId = preferredActiveVideoId ?? ui.getActiveVideoId();
+                     if (activeVideoId) {
+                         metadataRenderSignatures.delete(normalizeVideoId(activeVideoId));
+                         void setMetadata(activeVideoId);
+                     }
+                 }
+
                  const recordingsPathChanged =
                      settings.recordingsFolder !== s.recordingsFolder ||
                      settings.clipsFolder !== s.clipsFolder;
-                 if (recordingsPathChanged) {
+                 if (recordingsPathChanged || languageChanged) {
                      setTimeout(() => {
                          void updateSidebar();
                      }, 250);
