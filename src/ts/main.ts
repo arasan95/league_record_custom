@@ -624,6 +624,9 @@ async function main() {
                          metadataRenderSignatures.delete(normalizeVideoId(activeVideoId));
                          void setMetadata(activeVideoId);
                      }
+                     setTimeout(() => {
+                         window.location.reload();
+                     }, 350);
                  }
 
                  const recordingsPathChanged =
