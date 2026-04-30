@@ -1,6 +1,10 @@
 use riot_datatypes::*;
 use serde::{Deserialize, Serialize};
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 // allow large difference in enum Variant size because the big variant is the more common one
 #[allow(clippy::large_enum_variant)]
 #[cfg_attr(test, derive(specta::Type))]
@@ -45,6 +49,10 @@ pub struct Participant {
     pub role: String,
     #[serde(default)]
     pub summoner_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summoner_id: Option<SummonerId>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub honor_received: bool,
     #[serde(default)]
     pub lane_score: f64,
     #[serde(default)]

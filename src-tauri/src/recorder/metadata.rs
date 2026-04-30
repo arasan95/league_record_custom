@@ -140,12 +140,14 @@ pub async fn process_data(
         .participants
         .iter()
         .map(|p| {
-            let name = game
+            let identity = game
                 .participant_identities
                 .iter()
-                .find(|pi| pi.participant_id == p.participant_id)
+                .find(|pi| pi.participant_id == p.participant_id);
+            let name = identity
                 .map(|pi| format!("{}#{}", pi.player.game_name, pi.player.tag_line))
                 .unwrap_or_else(|| "Unknown".to_string());
+            let summoner_id = identity.and_then(|pi| pi.player.summoner_id);
 
             Participant {
                 participant_id: p.participant_id,
@@ -165,6 +167,8 @@ pub async fn process_data(
                     .map(|t| t.role.clone())
                     .unwrap_or_else(|| "NONE".to_string()),
                 summoner_name: name,
+                summoner_id,
+                honor_received: false,
                 lane_score: *lane_scores.get(&p.participant_id).unwrap_or(&0.0),
                 champ_level: Some(0),
                 summoner_level: pid_to_meta.get(&p.participant_id).map(|m| m.1),
@@ -400,12 +404,14 @@ pub async fn process_data_with_retry(
         .participants
         .iter()
         .map(|p| {
-            let name = game
+            let identity = game
                 .participant_identities
                 .iter()
-                .find(|pi| pi.participant_id == p.participant_id)
+                .find(|pi| pi.participant_id == p.participant_id);
+            let name = identity
                 .map(|pi| format!("{}#{}", pi.player.game_name, pi.player.tag_line))
                 .unwrap_or_else(|| "Unknown".to_string());
+            let summoner_id = identity.and_then(|pi| pi.player.summoner_id);
 
             Participant {
                 participant_id: p.participant_id,
@@ -425,6 +431,8 @@ pub async fn process_data_with_retry(
                     .map(|t| t.role.clone())
                     .unwrap_or_else(|| "NONE".to_string()),
                 summoner_name: name,
+                summoner_id,
+                honor_received: false,
                 lane_score: *lane_scores.get(&p.participant_id).unwrap_or(&0.0),
                 champ_level: Some(0),
                 summoner_level: pid_to_meta.get(&p.participant_id).map(|m| m.1),
@@ -527,6 +535,12 @@ async fn process_tft_fallback(
             } else {
                 "Unknown".to_string()
             },
+            summoner_id: if p.participant_id == participant_id {
+                player.summoner_id
+            } else {
+                None
+            },
+            honor_received: false,
             lane_score: 0.0,
             champ_level: None,
             summoner_level: None,
