@@ -24,7 +24,7 @@ use super::highlight_task::HighlightTask;
 use super::metadata;
 use super::recording_task::{GameCtx, Metadata, RecordingTask};
 use super::window;
-use crate::app::{action, AppEvent, EventManager, SystemTrayManager};
+use crate::app::{AppEvent, EventManager, SystemTrayManager, action};
 use crate::recorder::MetadataFile;
 use crate::state::{CurrentlyRecording, SettingsWrapper};
 
@@ -56,6 +56,13 @@ fn build_live_player_fallback_key(player: &shaco::model::ingame::Player) -> Stri
         normalize_identity_key(&player.champion_name),
         riot_key
     )
+}
+
+fn terminal_live_event_reason(event: &LiveGameEvent) -> Option<String> {
+    match event {
+        LiveGameEvent::GameEnd(e) => Some(format!("Live Client GameEnd ({:?})", e.result)),
+        _ => None,
+    }
 }
 
 #[derive(Clone)]
@@ -114,6 +121,7 @@ pub struct GameListener {
     last_stopped_game_id: Option<GameId>,
     last_manual_prewarm_game_id: Option<GameId>,
     missing_window_ticks: u8,
+    terminal_live_event: Arc<Mutex<Option<String>>>,
     latest_session_game_id: Option<GameId>,
     end_of_game_since: Option<Instant>,
     end_of_game_finalize_requested: bool,
@@ -132,6 +140,7 @@ impl GameListener {
             last_stopped_game_id: None,
             last_manual_prewarm_game_id: None,
             missing_window_ticks: 0,
+            terminal_live_event: Arc::new(Mutex::new(None)),
             latest_session_game_id: None,
             end_of_game_since: None,
             end_of_game_finalize_requested: false,
@@ -170,6 +179,7 @@ impl GameListener {
         live_events: Arc<Mutex<Vec<LiveGameEvent>>>,
         player_map: Arc<Mutex<HashMap<String, i32>>>,
         last_game_data: Arc<Mutex<Option<shaco::model::ingame::AllGameData>>>,
+        terminal_live_event: Arc<Mutex<Option<String>>>,
         app_handle: AppHandle,
     ) -> Vec<LiveGameEvent> {
         let client = shaco::ingame::IngameClient::new();
@@ -325,6 +335,17 @@ impl GameListener {
                         *old_items = current_items;
                     }
 
+                    for event in &new_events {
+                        if let Some(reason) = terminal_live_event_reason(event) {
+                            log::info!("Terminal live event detected: {reason}");
+                            if let Ok(mut terminal) = terminal_live_event.lock() {
+                                if terminal.is_none() {
+                                    *terminal = Some(reason);
+                                }
+                            }
+                        }
+                    }
+
                     if !new_events.is_empty() {
                         if let Ok(mut events) = live_events.lock() {
                             events.extend(new_events);
@@ -362,9 +383,10 @@ impl GameListener {
         }
 
         // Prime manual recorder once at startup so first manual hotkey press can start faster.
-        let prewarm_ctx = self
-            .ctx
-            .game_ctx(self.latest_session_game_id.unwrap_or_else(|| Utc::now().timestamp_millis()));
+        let prewarm_ctx = self.ctx.game_ctx(
+            self.latest_session_game_id
+                .unwrap_or_else(|| Utc::now().timestamp_millis()),
+        );
         async_runtime::spawn(async move {
             if let Err(e) = RecordingTask::prewarm(prewarm_ctx).await {
                 log::warn!("startup manual prewarm failed: {e}");
@@ -387,7 +409,23 @@ impl GameListener {
                                     self.latest_session_game_id = Some(session.game_data.game_id);
                                 }
                             }
-                            self.state_transition(event_data, false).await;
+                            let transition_event =
+                                if matches!(event_data, SubscriptionResponse::EogStatsBlock {})
+                                    && matches!(self.state, State::Recording(..))
+                                {
+                                    log::info!("LCU EOG stats block detected while recording. Stopping recording...");
+                                    SubscriptionResponse::Session(SessionEventData {
+                                        phase: GamePhase::EndOfGame,
+                                        game_data: GameData {
+                                            game_id: self.latest_session_game_id.unwrap_or(0),
+                                            queue: Queue { id: 0, is_ranked: false, name: "".into() },
+                                            game_mode: None,
+                                        },
+                                    })
+                                } else {
+                                    event_data
+                                };
+                            self.state_transition(transition_event, false).await;
                             self.maybe_trigger_end_of_game_finalize().await;
                         }
                         Err(e) => {
@@ -434,10 +472,14 @@ impl GameListener {
                         let live_events_clone = live_events.clone();
                         let player_map_clone = player_map.clone();
                         let last_game_data = Arc::new(Mutex::new(None));
+                        if let Ok(mut terminal) = self.terminal_live_event.lock() {
+                            *terminal = None;
+                        }
                         let live_task = async_runtime::spawn(Self::run_info_poller(
                             live_events_clone,
                             player_map_clone,
                             last_game_data.clone(),
+                            self.terminal_live_event.clone(),
                             self.ctx.app_handle.clone(),
                         ));
 
@@ -457,14 +499,24 @@ impl GameListener {
                     }
                 }
                 _ = health_tick.tick() => {
-                    // Alt+F4 fallback:
-                    // Sometimes gameflow phase updates are missed when the game is force-closed.
-                    // If the LoL window disappears for several consecutive ticks while recording,
-                    // force-stop the recording to prevent it from being stuck forever.
                     if let State::Recording(..) = self.state {
-                        // Only apply this fallback after recording has actually started.
-                        // During auto-record startup we can be in State::Recording while still waiting
-                        // for in-game readiness, and the window may legitimately be unavailable.
+                        let terminal_reason = self.terminal_live_event.lock().ok().and_then(|mut terminal| terminal.take());
+                        if let Some(reason) = terminal_reason {
+                            log::info!("Stopping recording due to terminal live event: {reason}");
+                            self.state_transition(SubscriptionResponse::Session(SessionEventData {
+                                phase: GamePhase::PreEndOfGame,
+                                game_data: GameData {
+                                    game_id: 0,
+                                    queue: Queue { id: 0, is_ranked: false, name: "".into() },
+                                    game_mode: None,
+                                },
+                            }), false).await;
+                            self.maybe_trigger_end_of_game_finalize().await;
+                            continue;
+                        }
+
+                        // Missing LoL window can happen when the game client drops mid-match.
+                        // Keep recording until LCU or Live Client reports the actual game end.
                         let is_actually_recording = self.ctx.app_handle.state::<CurrentlyRecording>().get().is_some();
                         if !is_actually_recording {
                             self.missing_window_ticks = 0;
@@ -473,21 +525,11 @@ impl GameListener {
 
                         if window::get_lol_window().is_none() {
                             self.missing_window_ticks = self.missing_window_ticks.saturating_add(1);
-                            if self.missing_window_ticks >= 3 {
+                            if self.missing_window_ticks == 3 {
                                 log::warn!(
-                                    "LoL window missing for {}s during recording. Forcing stop.",
+                                    "LoL window missing for {}s during recording. Keeping recording until LCU/live event reports game end.",
                                     self.missing_window_ticks
                                 );
-                                self.missing_window_ticks = 0;
-                                self.state_transition(SubscriptionResponse::Session(SessionEventData {
-                                    phase: GamePhase::PreEndOfGame,
-                                    game_data: GameData {
-                                        game_id: 0,
-                                        queue: Queue { id: 0, is_ranked: false, name: "".into() },
-                                        game_mode: None,
-                                    },
-                                }), false).await;
-                                self.maybe_trigger_end_of_game_finalize().await;
                             }
                         } else {
                             self.missing_window_ticks = 0;
@@ -623,6 +665,9 @@ impl GameListener {
                         let live_events_clone = live_events.clone();
                         let player_map_clone = player_map.clone();
                         let last_game_data = Arc::new(Mutex::new(None));
+                        if let Ok(mut terminal) = self.terminal_live_event.lock() {
+                            *terminal = None;
+                        }
 
                         // Fetch Session for PID->CID
                         let mut pid_to_cid = HashMap::new();
@@ -669,7 +714,10 @@ impl GameListener {
                                                         if !riot_id_full.is_empty() {
                                                             let riot_key = normalize_identity_key(riot_id_full);
                                                             map.insert(format!("riot:{}", riot_key), pid32);
-                                                            map.insert(format!("team:{}|riot:{}", team_id, riot_key), pid32);
+                                                            map.insert(
+                                                                format!("team:{}|riot:{}", team_id, riot_key),
+                                                                pid32,
+                                                            );
                                                         }
 
                                                         let riot_game_name = p
@@ -683,10 +731,14 @@ impl GameListener {
                                                             .unwrap_or("")
                                                             .trim();
                                                         if !riot_game_name.is_empty() && !riot_tag_line.is_empty() {
-                                                            let riot_joined = format!("{}#{}", riot_game_name, riot_tag_line);
+                                                            let riot_joined =
+                                                                format!("{}#{}", riot_game_name, riot_tag_line);
                                                             let riot_key = normalize_identity_key(&riot_joined);
                                                             map.insert(format!("riot:{}", riot_key), pid32);
-                                                            map.insert(format!("team:{}|riot:{}", team_id, riot_key), pid32);
+                                                            map.insert(
+                                                                format!("team:{}|riot:{}", team_id, riot_key),
+                                                                pid32,
+                                                            );
                                                         }
                                                     }
                                                 }
@@ -702,6 +754,7 @@ impl GameListener {
                             live_events_clone,
                             player_map_clone,
                             last_game_data.clone(),
+                            self.terminal_live_event.clone(),
                             self.ctx.app_handle.clone(),
                         ));
 
@@ -751,7 +804,9 @@ impl GameListener {
                             loop {
                                 tokio::time::sleep(Duration::from_secs(1)).await;
                                 if client.all_game_data(None).await.is_ok() {
-                                    log::info!("In-game API responded (non-recorded mode). Emitting GameStarted for Auto Stop.");
+                                    log::info!(
+                                        "In-game API responded (non-recorded mode). Emitting GameStarted for Auto Stop."
+                                    );
                                     if let Err(e) = app_handle_clone.send_event(AppEvent::GameStarted) {
                                         log::error!("Failed to emit GameStarted (non-recorded): {}", e);
                                     }
@@ -786,9 +841,10 @@ impl GameListener {
                     SubscriptionResponse::Session(SessionEventData {
                         phase:
                             phase @ (GamePhase::FailedToLaunch
-                            | GamePhase::Reconnect
                             | GamePhase::WaitingForStats
-                            | GamePhase::PreEndOfGame),
+                            | GamePhase::PreEndOfGame
+                            | GamePhase::EndOfGame
+                            | GamePhase::TerminatedInError),
                         ..
                     }) => {
                         log::debug!("Game listener detected phase: {phase:?}. Stopping recording...");
@@ -849,12 +905,14 @@ impl GameListener {
                                                 let team_id = team_and_rest.split('#').next().unwrap_or_default();
                                                 let summoner_key = normalize_identity_key(real_name);
                                                 if !summoner_key.is_empty() {
-                                                    if let Some(id) =
-                                                        name_to_id.get(&format!("team:{team_id}|summoner:{summoner_key}"))
+                                                    if let Some(id) = name_to_id
+                                                        .get(&format!("team:{team_id}|summoner:{summoner_key}"))
                                                     {
                                                         return Some(*id);
                                                     }
-                                                    if let Some(id) = name_to_id.get(&format!("summoner:{summoner_key}")) {
+                                                    if let Some(id) =
+                                                        name_to_id.get(&format!("summoner:{summoner_key}"))
+                                                    {
                                                         return Some(*id);
                                                     }
                                                     if let Some(id) = name_to_id.get(real_name) {
@@ -866,7 +924,9 @@ impl GameListener {
                                             if let Some(real_name) = name.split('#').next() {
                                                 if !real_name.is_empty() {
                                                     let summoner_key = normalize_identity_key(real_name);
-                                                    if let Some(id) = name_to_id.get(&format!("summoner:{summoner_key}")) {
+                                                    if let Some(id) =
+                                                        name_to_id.get(&format!("summoner:{summoner_key}"))
+                                                    {
                                                         return Some(*id);
                                                     }
                                                     if let Some(id) = name_to_id.get(real_name) {
