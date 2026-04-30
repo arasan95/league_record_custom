@@ -68,6 +68,15 @@ impl AppManager for AppHandle {
             log::info!("settings loaded");
         }
 
+        async_runtime::spawn({
+            let app_handle = self.clone();
+            async move {
+                if let Err(error) = crate::commands::prepare_ffmpeg_runtime(app_handle).await {
+                    log::warn!("failed to prepare FFmpeg runtime: {error}");
+                }
+            }
+        });
+
         // create system tray-icon
         self.init_tray_menu();
 
