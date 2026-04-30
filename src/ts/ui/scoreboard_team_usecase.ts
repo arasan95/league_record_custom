@@ -25,6 +25,7 @@ import {
 } from "../tooltip";
 import { isTooltipPerfDebugEnabled } from "./tooltip_debug";
 import { applyScoreboardRowLayout } from "./scoreboard_row_layout_usecase";
+import honorHeartIcon from "../../assets/match-history-icons/voting_heart.png";
 
 let globalTooltipRenderTicket = 0;
 const timeoutTooltipKeys = new Set<string>();
@@ -482,6 +483,18 @@ export async function renderScoreboardTeam(params: {
         row.dataset.pid = p.participantId.toString();
         const nameStr = p.summonerName || (isMe ? `${data.player.gameName}#${data.player.tagLine}` : `P${p.participantId}`);
         const name = createEl("div", {}, { class: "player-name" }, nameStr) as HTMLElement;
+        if (p.honorReceived) {
+            const heartIcon = createEl("img", {
+                src: honorHeartIcon,
+                alt: "Honor received",
+                title: "Honor received",
+            }, { class: "honor-heart-icon" }) as HTMLImageElement;
+            if (teamId === 100) {
+                name.prepend(heartIcon);
+            } else {
+                name.append(heartIcon);
+            }
+        }
 
         if (settings.matchHistoryBaseUrl) {
             name.style.cursor = "pointer";

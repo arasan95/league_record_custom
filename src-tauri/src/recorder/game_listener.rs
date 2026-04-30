@@ -8,10 +8,12 @@ use riot_datatypes::lcu::{GameData, GamePhase, SessionEventData, SubscriptionRes
 use riot_datatypes::{GameId, MatchId, Queue};
 use riot_local_auth::Credentials;
 
+use serde::Deserialize;
 use shaco::model::ingame::GameEvent as LiveGameEvent;
 use shaco::model::ws::{EventType, LcuSubscriptionType};
 use shaco::{rest::LcuRestClient, ws::LcuWebsocketClient};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::async_runtime;
@@ -63,6 +65,145 @@ fn terminal_live_event_reason(event: &LiveGameEvent) -> Option<String> {
         LiveGameEvent::GameEnd(e) => Some(format!("Live Client GameEnd ({:?})", e.result)),
         _ => None,
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HonorRecognition {
+    sender_puuid: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HonorRecognitionHistoryEntry {
+    game_id: GameId,
+    puuid: String,
+    summoner_id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HonorBallotPlayer {
+    puuid: String,
+    summoner_id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HonorBallot {
+    eligible_allies: Vec<HonorBallotPlayer>,
+}
+
+async fn fetch_honor_sender_summoner_ids(lcu_rest_client: &LcuRestClient, game_id: GameId) -> Result<HashSet<i64>> {
+    let recognitions = lcu_rest_client
+        .get::<Vec<HonorRecognition>>("/lol-honor-v2/v1/recognition")
+        .await?;
+    let sender_puuids: HashSet<String> = recognitions
+        .into_iter()
+        .filter_map(|recognition| {
+            let puuid = recognition.sender_puuid.trim();
+            (!puuid.is_empty()).then(|| puuid.to_string())
+        })
+        .collect();
+
+    if sender_puuids.is_empty() {
+        return Ok(HashSet::new());
+    }
+
+    let mut sender_summoner_ids = HashSet::new();
+
+    if let Ok(history) = lcu_rest_client
+        .get::<Vec<HonorRecognitionHistoryEntry>>("/lol-honor-v2/v1/recognition-history")
+        .await
+    {
+        for entry in history {
+            if entry.game_id == game_id && sender_puuids.contains(&entry.puuid) {
+                sender_summoner_ids.insert(entry.summoner_id);
+            }
+        }
+    }
+
+    if let Ok(ballot) = lcu_rest_client.get::<HonorBallot>("/lol-honor-v2/v1/ballot").await {
+        for ally in ballot.eligible_allies {
+            if sender_puuids.contains(&ally.puuid) {
+                sender_summoner_ids.insert(ally.summoner_id);
+            }
+        }
+    }
+
+    Ok(sender_summoner_ids)
+}
+
+fn mark_honor_received(metadata_file: &mut MetadataFile, sender_summoner_ids: &HashSet<i64>) -> bool {
+    let participants = match metadata_file {
+        MetadataFile::Metadata(metadata) => &mut metadata.participants,
+        MetadataFile::Deferred(deferred) => &mut deferred.participants,
+        MetadataFile::NoData(_) => return false,
+    };
+
+    let mut changed = false;
+    for participant in participants {
+        let received = participant
+            .summoner_id
+            .is_some_and(|summoner_id| sender_summoner_ids.contains(&summoner_id));
+        if received && !participant.honor_received {
+            participant.honor_received = true;
+            changed = true;
+        }
+    }
+    changed
+}
+
+async fn append_honor_received_metadata(ctx: ApiCtx, metadata_filepath: PathBuf, video_id: String, game_id: GameId) {
+    let lcu_rest_client = LcuRestClient::from(&ctx.credentials);
+
+    for attempt in 1..=10 {
+        if ctx.cancel_token.is_cancelled() {
+            return;
+        }
+
+        match fetch_honor_sender_summoner_ids(&lcu_rest_client, game_id).await {
+            Ok(sender_summoner_ids) if !sender_summoner_ids.is_empty() => {
+                match action::get_recording_metadata(&metadata_filepath, false) {
+                    Ok(mut metadata_file) => {
+                        if mark_honor_received(&mut metadata_file, &sender_summoner_ids) {
+                            if let Err(e) = action::save_recording_metadata(&metadata_filepath, &metadata_file) {
+                                log::warn!("failed to append honor metadata: {e}");
+                                return;
+                            }
+
+                            log::info!(
+                                "Appended honor metadata for {} sender(s) to {:?}",
+                                sender_summoner_ids.len(),
+                                metadata_filepath
+                            );
+                            if let Err(e) = ctx
+                                .app_handle
+                                .send_event(AppEvent::MetadataChanged { payload: vec![video_id] })
+                            {
+                                log::error!("GameListener failed to send honor metadata event: {e}");
+                            }
+                        }
+                        return;
+                    }
+                    Err(e) => {
+                        log::warn!("failed to read metadata before appending honor data: {e}");
+                        return;
+                    }
+                }
+            }
+            Ok(_) => {
+                log::debug!("Honor recognition not ready yet (attempt {attempt}/10)");
+            }
+            Err(e) => {
+                log::debug!("Honor recognition fetch failed (attempt {attempt}/10): {e}");
+            }
+        }
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+
+    log::info!("Honor recognition was not available for game_id={game_id}");
 }
 
 #[derive(Clone)]
@@ -1015,6 +1156,8 @@ impl GameListener {
                                                 lane: "NONE".into(),
                                                 role: "NONE".into(),
                                                 summoner_name: player.summoner_name.clone(),
+                                                summoner_id: None,
+                                                honor_received: false,
                                                 lane_score: 0.0,
                                                 champ_level: Some(player.level),
                                                 summoner_level: None,
@@ -1114,6 +1257,7 @@ impl GameListener {
                             output_filepath,
                             ingame_time_rec_start_offset,
                         } = metadata;
+                        let honor_game_id = match_id.game_id;
 
                         let mut metadata_filepath = output_filepath;
                         let video_id = metadata_filepath.file_name().and_then(OsStr::to_str).map(str::to_owned);
@@ -1167,12 +1311,24 @@ impl GameListener {
                         }
 
                         if let Some(video_id) = video_id {
-                            if let Err(e) = ctx
-                                .app_handle
-                                .send_event(AppEvent::MetadataChanged { payload: vec![video_id] })
-                            {
+                            if let Err(e) = ctx.app_handle.send_event(AppEvent::MetadataChanged {
+                                payload: vec![video_id.clone()],
+                            }) {
                                 log::error!("GameListener failed to send event: {e}");
                             }
+
+                            let honor_ctx = ctx.clone();
+                            let honor_metadata_filepath = metadata_filepath.clone();
+                            let honor_video_id = video_id.clone();
+                            async_runtime::spawn(async move {
+                                append_honor_received_metadata(
+                                    honor_ctx,
+                                    honor_metadata_filepath,
+                                    honor_video_id,
+                                    honor_game_id,
+                                )
+                                .await;
+                            });
                         }
                     });
 
