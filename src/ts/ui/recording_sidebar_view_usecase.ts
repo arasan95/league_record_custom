@@ -1,12 +1,12 @@
 import type { Recording } from "../bindings";
-import type { ServerFilter } from "./recording_filters_usecase";
+import type { ClipFilterMode, ServerFilter } from "./recording_filters_usecase";
 import { shouldHideBySearchFilters } from "./search_filters";
 import { buildSidebarStatsSummary, buildStorageUsageState } from "./recordings_usecase";
 import { isRecordingVisibleByUiFilters } from "./recording_filters_usecase";
 
 export type SidebarSearchState = {
     filterStar: boolean;
-    filterClip: boolean;
+    clipFilterMode: ClipFilterMode;
     filterRanked: boolean;
     filterSearch: boolean;
     filterServer: ServerFilter;
@@ -170,7 +170,7 @@ export function updateRecordingSidebarView(params: {
             const isVisible = isRecordingVisibleByUiFilters({
                 recording,
                 filterStar: search.filterStar,
-                filterClip: search.filterClip,
+                clipFilterMode: search.clipFilterMode,
                 filterRanked: search.filterRanked,
                 filterServer: search.filterServer,
                 filterRole: search.filterRole ?? "",
