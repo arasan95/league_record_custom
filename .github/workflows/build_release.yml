@@ -49,7 +49,61 @@ jobs:
           $path = "src-tauri/Cargo.toml"
           (Get-Content $path) -replace '^version = ".*"', "version = `"$version`"" | Set-Content $path
 
-      - name: Bundle FFmpeg for build
+      - run: bun install --linker=isolated
+
+      - name: Prepare updater-only Tauri config (without bundled FFmpeg runtime)
+        shell: pwsh
+        run: |
+          $sourcePath = "src-tauri/tauri.conf.json"
+          $targetPath = "src-tauri/tauri.updater.conf.json"
+          $cfg = Get-Content $sourcePath -Raw -Encoding UTF8 | ConvertFrom-Json
+          if ($null -eq $cfg.bundle -or $null -eq $cfg.bundle.resources) {
+            Write-Error "bundle.resources not found in $sourcePath"
+            exit 1
+          }
+          if ($cfg.bundle.resources.PSObject.Properties.Name -contains "resources/tools/ffmpeg/*") {
+            $cfg.bundle.resources.PSObject.Properties.Remove("resources/tools/ffmpeg/*")
+            Write-Host "Removed FFmpeg runtime resource entry for updater build."
+          } else {
+            Write-Host "FFmpeg runtime resource entry not found; updater build already excludes it."
+          }
+          $cfg | ConvertTo-Json -Depth 100 | Set-Content $targetPath -Encoding UTF8
+
+      - name: Build updater package (no bundled FFmpeg)
+        run: bun run --bun tauri build --config src-tauri/tauri.updater.conf.json
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Stage updater artifacts for release and latest.json
+        id: updater_stage
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $stageDir = ".artifacts/updater"
+          $nsisDir = "src-tauri/target/release/bundle/nsis"
+          New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
+
+          $setup = Get-ChildItem -Path $nsisDir -Filter "*_x64-setup.exe" | Select-Object -First 1
+          if ($null -eq $setup) {
+            Write-Error "Could not find updater setup exe in $nsisDir"
+            exit 1
+          }
+          $sigPath = "$($setup.FullName).sig"
+          if (-not (Test-Path $sigPath)) {
+            Write-Error "Could not find updater signature: $sigPath"
+            exit 1
+          }
+
+          $updaterExeName = "LeagueRecord_${tag}_x64-updater.exe"
+          $updaterSigName = "${updaterExeName}.sig"
+          Copy-Item -Force $setup.FullName (Join-Path $stageDir $updaterExeName)
+          Copy-Item -Force $sigPath (Join-Path $stageDir $updaterSigName)
+
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "updater_exe_name=$updaterExeName"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "updater_sig_path=$(Join-Path $stageDir $updaterSigName)"
+
+      - name: Bundle FFmpeg for installer build
         shell: pwsh
         run: |
           if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
@@ -81,7 +135,8 @@ jobs:
             -SourceUrl "https://community.chocolatey.org/packages/ffmpeg" `
             -DownloadUrl "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ffmpeg-windows-x64.zip"
 
-      - run: bun install --linker=isolated && bun run --bun tauri build
+      - name: Build installer package (with bundled FFmpeg)
+        run: bun run --bun tauri build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -109,17 +164,20 @@ jobs:
           $version = "${{ github.ref_name }}"
           if ($version.StartsWith("v")) { $version = $version.Substring(1) }
 
-          $sigPaths = @(Get-ChildItem -Path "src-tauri/target/release/bundle/nsis/" -Filter "*.exe.sig")
-          if ($sigPaths.Count -eq 0) {
-              Write-Error "Failed to find .exe.sig file for auto updater"
+          $updaterSigPath = "${{ steps.updater_stage.outputs.updater_sig_path }}"
+          if (-not (Test-Path $updaterSigPath)) {
+              Write-Error "Failed to find updater .sig file for auto updater: $updaterSigPath"
               exit 1
           }
-          $sigPath = $sigPaths[0].FullName
-          $sig = Get-Content $sigPath -Raw
-          $zipName = $sigPaths[0].Name -replace "\.sig$", ""
+          $sig = Get-Content $updaterSigPath -Raw
+          $updaterExeName = "${{ steps.updater_stage.outputs.updater_exe_name }}"
+          if ([string]::IsNullOrWhiteSpace($updaterExeName)) {
+            Write-Error "updater_exe_name output is empty"
+            exit 1
+          }
 
           $date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-          $url = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$zipName"
+          $url = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$updaterExeName"
 
           $notes = "Update v$version"
           if (Test-Path "release_notes.json") {
@@ -199,6 +257,6 @@ jobs:
 
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "./src-tauri/target/release/*.zip, ./src-tauri/target/release/bundle/nsis/*, ./src-tauri/resources/tools/ffmpeg/ffmpeg-windows-x64.zip, ./src-tauri/resources/tools/ffmpeg/ffmpeg-provenance.json, latest.json"
-          prerelease: true
+          artifacts: "./src-tauri/target/release/*.zip, ./src-tauri/target/release/bundle/nsis/*, ./.artifacts/updater/*, ./src-tauri/resources/tools/ffmpeg/ffmpeg-windows-x64.zip, ./src-tauri/resources/tools/ffmpeg/ffmpeg-provenance.json, latest.json"
+          prerelease: false
           body: ${{ steps.release_body.outputs.body }}
