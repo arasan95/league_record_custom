@@ -258,5 +258,6 @@ jobs:
       - uses: ncipollo/release-action@v1
         with:
           artifacts: "./src-tauri/target/release/*.zip, ./src-tauri/target/release/bundle/nsis/*, ./.artifacts/updater/*, ./src-tauri/resources/tools/ffmpeg/ffmpeg-windows-x64.zip, ./src-tauri/resources/tools/ffmpeg/ffmpeg-provenance.json, latest.json"
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
           prerelease: false
           body: ${{ steps.release_body.outputs.body }}
