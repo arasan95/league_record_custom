@@ -2,20 +2,18 @@
     "notes": [
         "[日本語]",
         "主な変更点:",
-        "- 言語設定を変更してもスコアボードのツールチップ言語が切り替わらない問題を修正",
-        "- 言語変更後にアクティブな録画のスコアボードとサイドバー表示を更新するよう改善",
-        "- 言語設定を保存したあと、自動的に画面を更新して新しい言語を反映するよう改善",
-        "- ツールチップDBのチャンピオン名と異名を各言語の表記に修正",
-        "- LoLクライアントが途中で終了しても録画を継続し、LCUまたはゲーム内終了イベントで録画を停止するよう修正",
-        "- 試合後に受け取った名誉を後追いで集計し、スコアボードのプレイヤー名横にハートアイコンを表示するよう追加",
+        "- スコアボードの各リンク(トラッキング/Wiki/マッチアップ/ビルド)でメインURLとサブURLの2つを設定可能に追加",
+        "- スコアボードリンク用の装飾キー設定を追加し、装飾キー押下クリックでサブURLを開くよう対応",
+        "- リンク設定を保存した際、表示中スコアボードへ即時反映されるよう自動更新を追加",
+        "- サイドバーのボタンホバー文言を言語連動に改善 (日本語設定時は日本語、それ以外は英語)",
+        "- アップデート版にはFFmpegを同梱しない運用に変更 (必要時のみ自動取得/展開)",
         "",
         "[English]",
         "Highlights:",
-        "- Fixed an issue where scoreboard tooltips did not switch language after changing the language setting",
-        "- Improved refresh behavior for the active recording scoreboard and sidebar after language changes",
-        "- Automatically refresh the screen after saving a language setting change",
-        "- Fixed champion names and titles in the tooltip DB to use each selected language",
-        "- Keep recording if the LoL client exits mid-game, and stop recording from LCU or live game-end events",
-        "- Add delayed post-game Honor collection and show a heart icon next to players who honored you"
+        "- Added dual URL support (main/sub) for scoreboard links: Tracking, Champion Wiki, Matchup, and Build",
+        "- Added a dedicated modifier-key setting for scoreboard links; modifier-click now opens the sub URL",
+        "- Scoreboard now refreshes immediately after saving link settings",
+        "- Improved sidebar hover tooltips to follow language policy (Japanese in `ja`, English otherwise)",
+        "- Updated release packaging policy: FFmpeg is no longer bundled in updater packages (fetched/extracted only when needed)"
     ]
 }
