@@ -616,6 +616,24 @@ async function main() {
                      changeMarkers();
                  }
 
+                 const scoreboardLinksChanged =
+                     settings.matchHistoryBaseUrl !== s.matchHistoryBaseUrl ||
+                     (settings as any).matchHistorySubUrl !== (s as any).matchHistorySubUrl ||
+                     settings.championWikiBaseUrl !== s.championWikiBaseUrl ||
+                     (settings as any).championWikiSubUrl !== (s as any).championWikiSubUrl ||
+                     settings.championMatchupUrl !== s.championMatchupUrl ||
+                     (settings as any).championMatchupSubUrl !== (s as any).championMatchupSubUrl ||
+                     settings.championBuildUrl !== s.championBuildUrl ||
+                     (settings as any).championBuildSubUrl !== (s as any).championBuildSubUrl ||
+                     (settings as any).scoreboardLinkModifier !== (s as any).scoreboardLinkModifier;
+                 if (scoreboardLinksChanged) {
+                     const activeVideoId = preferredActiveVideoId ?? ui.getActiveVideoId();
+                     if (activeVideoId) {
+                         metadataRenderSignatures.delete(normalizeVideoId(activeVideoId));
+                         void setMetadata(activeVideoId);
+                     }
+                 }
+
                  const languageChanged = previousLanguage !== (s.language || "en");
                  if (languageChanged) {
                      ui.setCurrentLanguage(s.language || "en");

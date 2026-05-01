@@ -307,7 +307,9 @@ async fn ensure_app_local_ffmpeg(app_handle: &AppHandle) -> Result<(), String> {
         return Ok(());
     };
 
-    if local_exe.is_file() && local_ffmpeg_matches(&local_exe, &desired) {
+    // Keep existing runtime on app updates. We only auto-provision when missing
+    // so first install gets FFmpeg, while normal updates don't force replacement.
+    if local_exe.is_file() {
         return Ok(());
     }
 

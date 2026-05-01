@@ -39,10 +39,10 @@ function hasReplayGameId(recording: Recording): boolean {
     return false;
 }
 
-function createReplayActionButton(videoId: string): HTMLSpanElement {
+function createReplayActionButton(videoId: string, titleText: string): HTMLSpanElement {
     const button = document.createElement("span");
     button.className = "replay-action replay-play";
-    button.title = "ROFLを準備してクライアントで再生";
+    button.title = titleText;
     button.textContent = "\u25B6";
     button.addEventListener("click", async (e: MouseEvent) => {
         e.stopPropagation();
@@ -624,6 +624,8 @@ export function createRecordingSidebarItem(input: {
         filterStar,
         onRefreshForStarUnfavorite,
     } = input;
+    const tooltipLocale = (currentLanguage || "en") === "ja" ? "ja" : "en";
+    const tooltipText = (ja: string, en: string): string => (tooltipLocale === "ja" ? ja : en);
 
     const videoName = toVideoName(recording.videoId);
     const isClipRecording = recording.videoId.includes("_clip");
@@ -739,7 +741,14 @@ export function createRecordingSidebarItem(input: {
             sidebarBadges.append(clipBadge);
         }
         if (favorite) {
-            sidebarBadges.append(createEl("span", {}, { class: "sidebar-favorite-badge", title: "Favorite" }, "\u2605"));
+            sidebarBadges.append(
+                createEl(
+                    "span",
+                    {},
+                    { class: "sidebar-favorite-badge", title: tooltipText("お気に入り", "Favorite") },
+                    "\u2605",
+                ),
+            );
         }
 
         if (queueName === "TFT") {
@@ -969,7 +978,14 @@ export function createRecordingSidebarItem(input: {
                 if (badgeContainer) {
                     const existingFavoriteBadge = badgeContainer.querySelector(".sidebar-favorite-badge");
                     if (fav && !existingFavoriteBadge) {
-                        badgeContainer.append(createEl("span", {}, { class: "sidebar-favorite-badge", title: "Favorite" }, "\u2605"));
+                        badgeContainer.append(
+                            createEl(
+                                "span",
+                                {},
+                                { class: "sidebar-favorite-badge", title: tooltipText("お気に入り", "Favorite") },
+                                "\u2605",
+                            ),
+                        );
                     } else if (!fav && existingFavoriteBadge) {
                         existingFavoriteBadge.remove();
                     }
@@ -977,18 +993,24 @@ export function createRecordingSidebarItem(input: {
                 if (filterStar && !fav && onRefreshForStarUnfavorite) onRefreshForStarUnfavorite();
             });
         },
-    }, { class: "favorite", ...(favorite ? { style: "color: gold" } : {}) }, favorite ? "\u2605" : "\u2606") as HTMLSpanElement;
+    }, {
+        class: "favorite",
+        title: tooltipText("お気に入り", "Favorite"),
+        ...(favorite ? { style: "color: gold" } : {}),
+    }, favorite ? "\u2605" : "\u2606") as HTMLSpanElement;
 
     const shareBtn = createEl("span", {
         onclick: (e: MouseEvent) => {
             e.stopPropagation();
             void showShareModal(recording.videoId);
         },
-    }, { class: "share", title: getText(currentLanguage as any, "share" as any) || "Share" }, "\u21AA");
-    const replayButtons = hasReplayGameId(recording) ? [createReplayActionButton(recording.videoId)] : [];
-    const renameBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onRename(recording.videoId); } }, { class: "rename" }, "\u270E");
-    const deleteBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onDelete(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete", title: getText(currentLanguage as any, "delete" as any) || "Delete" }, "\u2716");
-    const deleteVideoOnlyBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); if (onDeleteVideoOnly) onDeleteVideoOnly(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete-video-only", title: getText(currentLanguage as any, "deleteVideoOnly" as any) || "Delete Video Only" }, "\uD83D\uDDD1");
+    }, { class: "share", title: tooltipText("共有", "Share") }, "\u21AA");
+    const replayButtons = hasReplayGameId(recording)
+        ? [createReplayActionButton(recording.videoId, tooltipText("ROFLを準備してクライアントで再生", "Prepare ROFL and play in client"))]
+        : [];
+    const renameBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onRename(recording.videoId); } }, { class: "rename", title: tooltipText("名前変更", "Rename") }, "\u270E");
+    const deleteBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onDelete(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete", title: tooltipText("削除", "Delete") }, "\u2716");
+    const deleteVideoOnlyBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); if (onDeleteVideoOnly) onDeleteVideoOnly(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete-video-only", title: tooltipText("動画のみ削除", "Delete Video Only") }, "\uD83D\uDDD1");
     const actionsDiv = createEl("div", {}, { class: "sidebar-actions" }, [favoriteBtn, shareBtn, ...replayButtons, renameBtn, deleteVideoOnlyBtn, deleteBtn]);
 
     if (recording.metadata && "Metadata" in recording.metadata) {
