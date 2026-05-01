@@ -374,13 +374,18 @@ pub struct Settings {
     pub ffmpeg_path: Option<String>,
     pub developer_mode: bool,
     pub match_history_base_url: Option<String>,
+    pub match_history_sub_url: Option<String>,
     pub scroll_frame_step_modifier: Option<String>,
+    pub scoreboard_link_modifier: Option<String>,
     pub scoreboard_scale: Option<f64>,
     pub play_recording_sounds: bool,
     pub language: String,
     pub champion_wiki_base_url: Option<String>,
+    pub champion_wiki_sub_url: Option<String>,
     pub champion_matchup_url: Option<String>,
+    pub champion_matchup_sub_url: Option<String>,
     pub champion_build_url: Option<String>,
+    pub champion_build_sub_url: Option<String>,
     pub check_updates_on_startup: bool,
     pub keep_video_json_on_auto_delete: bool,
     pub auto_delete_clips: bool,
@@ -401,9 +406,14 @@ const DEFAULT_AUTO_SELECT_RECORDING: bool = true;
 const DEFAULT_AUTO_POPUP_ON_END: bool = false;
 const DEFAULT_FFMPEG_PATH: Option<String> = None;
 const DEFAULT_MATCH_HISTORY_BASE_URL: &str = "https://www.deeplol.gg/summoner/jp/{q}";
+const DEFAULT_MATCH_HISTORY_SUB_URL: &str = "https://www.deeplol.gg/summoner/jp/{q}";
 const DEFAULT_CHAMPION_WIKI_BASE_URL: &str = "https://www.loljp-wiki.jp/wiki/?Champion%2F{nameEsc}";
+const DEFAULT_CHAMPION_WIKI_SUB_URL: &str = "https://wiki.leagueoflegends.com/en-us/{nameEsc}";
 const DEFAULT_CHAMPION_MATCHUP_URL: &str = "https://dpm.lol/champions/{My}/matchups?opponent={Opponent}";
+const DEFAULT_CHAMPION_MATCHUP_SUB_URL: &str =
+    "https://www.onetricks.gg/ja/champions/builds/{My}?matchup={Opponent}";
 const DEFAULT_CHAMPION_BUILD_URL: &str = "https://lolalytics.com/lol/{q}/build/";
+const DEFAULT_CHAMPION_BUILD_SUB_URL: &str = "https://www.onetricks.gg/ja/champions/builds/{nameEsc}";
 const DEFAULT_CHECK_UPDATES_ON_STARTUP: bool = true;
 const DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE: bool = true;
 const DEFAULT_AUTO_DELETE_CLIPS: bool = false;
@@ -462,13 +472,18 @@ impl Default for Settings {
             ffmpeg_path: DEFAULT_FFMPEG_PATH,
             developer_mode: false,
             match_history_base_url: Some(DEFAULT_MATCH_HISTORY_BASE_URL.to_string()),
+            match_history_sub_url: Some(DEFAULT_MATCH_HISTORY_SUB_URL.to_string()),
             scroll_frame_step_modifier: Some("Shift".to_string()),
+            scoreboard_link_modifier: Some("Shift".to_string()),
             scoreboard_scale: None,
             play_recording_sounds: DEFAULT_PLAY_RECORDING_SOUNDS,
             language: "en".to_string(),
             champion_wiki_base_url: Some(DEFAULT_CHAMPION_WIKI_BASE_URL.to_string()),
+            champion_wiki_sub_url: Some(DEFAULT_CHAMPION_WIKI_SUB_URL.to_string()),
             champion_matchup_url: Some(DEFAULT_CHAMPION_MATCHUP_URL.to_string()),
+            champion_matchup_sub_url: Some(DEFAULT_CHAMPION_MATCHUP_SUB_URL.to_string()),
             champion_build_url: Some(DEFAULT_CHAMPION_BUILD_URL.to_string()),
+            champion_build_sub_url: Some(DEFAULT_CHAMPION_BUILD_SUB_URL.to_string()),
             check_updates_on_startup: DEFAULT_CHECK_UPDATES_ON_STARTUP,
             keep_video_json_on_auto_delete: DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE,
             auto_delete_clips: DEFAULT_AUTO_DELETE_CLIPS,
@@ -609,8 +624,15 @@ impl<'de> Deserialize<'de> for Settings {
                             settings.match_history_base_url =
                                 map.next_value().unwrap_or(Some(DEFAULT_MATCH_HISTORY_BASE_URL.to_string()));
                         }
+                        "matchHistorySubUrl" => {
+                            settings.match_history_sub_url =
+                                map.next_value().unwrap_or(Some(DEFAULT_MATCH_HISTORY_SUB_URL.to_string()));
+                        }
                         "scrollFrameStepModifier" => {
                             settings.scroll_frame_step_modifier = map.next_value().ok();
+                        }
+                        "scoreboardLinkModifier" => {
+                            settings.scoreboard_link_modifier = map.next_value().ok();
                         }
                         "scoreboardScale" => {
                             settings.scoreboard_scale = map.next_value().ok();
@@ -626,13 +648,25 @@ impl<'de> Deserialize<'de> for Settings {
                             settings.champion_wiki_base_url =
                                 map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_WIKI_BASE_URL.to_string()));
                         }
+                        "championWikiSubUrl" => {
+                            settings.champion_wiki_sub_url =
+                                map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_WIKI_SUB_URL.to_string()));
+                        }
                         "championMatchupUrl" => {
                             settings.champion_matchup_url =
                                 map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_MATCHUP_URL.to_string()));
                         }
+                        "championMatchupSubUrl" => {
+                            settings.champion_matchup_sub_url =
+                                map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_MATCHUP_SUB_URL.to_string()));
+                        }
                         "championBuildUrl" => {
                             settings.champion_build_url =
                                 map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_BUILD_URL.to_string()));
+                        }
+                        "championBuildSubUrl" => {
+                            settings.champion_build_sub_url =
+                                map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_BUILD_SUB_URL.to_string()));
                         }
                         "checkUpdatesOnStartup" => {
                             settings.check_updates_on_startup =

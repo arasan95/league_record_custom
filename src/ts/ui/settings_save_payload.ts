@@ -44,9 +44,13 @@ export type BuildSettingsPayloadInput = {
     clipsFolder: string;
     filenameFormat: string;
     matchHistoryBaseUrl: string;
+    matchHistorySubUrl: string;
     championWikiBaseUrl: string;
+    championWikiSubUrl: string;
     championMatchupUrl: string;
+    championMatchupSubUrl: string;
     championBuildUrl: string;
+    championBuildSubUrl: string;
     encodingQuality: string;
     outputResolution: string;
     framerate: string;
@@ -94,9 +98,13 @@ export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings
         clipsFolder: input.clipsFolder,
         filenameFormat: input.filenameFormat,
         matchHistoryBaseUrl: input.matchHistoryBaseUrl.trim() || null,
+        matchHistorySubUrl: input.matchHistorySubUrl.trim() || null,
         championWikiBaseUrl: input.championWikiBaseUrl.trim() || null,
+        championWikiSubUrl: input.championWikiSubUrl.trim() || null,
         championMatchupUrl: input.championMatchupUrl.trim() || null,
+        championMatchupSubUrl: input.championMatchupSubUrl.trim() || null,
         championBuildUrl: input.championBuildUrl.trim() || null,
+        championBuildSubUrl: input.championBuildSubUrl.trim() || null,
         encodingQuality: parseInt(input.encodingQuality, 10),
         outputResolution: (input.outputResolution || null) as any,
         framerate: [parseInt(framerateN, 10), parseInt(framerateD, 10)],
