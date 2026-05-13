@@ -2,22 +2,14 @@
     "notes": [
         "[日本語]",
         "主な変更点:",
-        "- スコアボードの各リンク(トラッキング/Wiki/マッチアップ/ビルド)でメインURLとサブURLの2つを設定可能に追加",
-        "- スコアボードリンク用の装飾キー設定を追加し、装飾キー押下クリックでサブURLを開くよう対応",
-        "- リンク設定を保存した際、表示中スコアボードへ即時反映されるよう自動更新を追加",
-        "- サイドバーのボタンホバー文言を言語連動に改善 (日本語設定時は日本語、それ以外は英語)",
-        "- サイドバーのクリップフィルタを3状態化 (通常/クリップのみ/クリップ除外) し、除外状態はアイコンを暗色表示",
-        "- クリップフィルタ状態を保存し、アプリ再起動後も前回状態を復元するよう対応",
-        "- アップデート版にはFFmpegを同梱しない運用に変更 (必要時のみ自動取得/展開)",
+        "- LoLアップデート後にLCUのplatformId取得APIが404になる環境で、自動録画が開始されない問題を修正",
+        "- platformIdを取得できない場合でも録画監視を継続し、region-localeからサーバーIDを推定するよう改善",
+        "- LoLゲーム画面のウィンドウ検出を強化し、固定タイトル完全一致に依存しないよう改善",
         "",
         "[English]",
         "Highlights:",
-        "- Added dual URL support (main/sub) for scoreboard links: Tracking, Champion Wiki, Matchup, and Build",
-        "- Added a dedicated modifier-key setting for scoreboard links; modifier-click now opens the sub URL",
-        "- Scoreboard now refreshes immediately after saving link settings",
-        "- Improved sidebar hover tooltips to follow language policy (Japanese in `ja`, English otherwise)",
-        "- Upgraded the sidebar clip filter to 3 states (all / clips only / exclude clips), with a dimmed icon in exclude mode",
-        "- Persisted clip-filter mode so it is restored after app restart",
-        "- Updated release packaging policy: FFmpeg is no longer bundled in updater packages (fetched/extracted only when needed)"
+        "- Fixed auto recording not starting after LoL updates when the LCU platformId endpoint returns 404",
+        "- Recording listener now continues even if platformId cannot be fetched, and infers the server ID from region-locale when possible",
+        "- Improved LoL game window detection so it no longer depends only on an exact fixed window title"
     ]
 }

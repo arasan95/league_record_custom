@@ -18,7 +18,7 @@ use crate::cancellable;
 use crate::recorder::Deferred;
 use crate::state::{CurrentlyRecording, SettingsWrapper};
 
-use super::window::{self, WINDOW_CLASS, WINDOW_PROCESS, WINDOW_TITLE};
+use super::window;
 use super::MetadataFile;
 
 #[derive(Clone)]
@@ -318,8 +318,9 @@ impl RecordingTask {
 
         let filename_path = settings_state.get_recordings_path().join(formatted_filename);
 
+        let (capture_title, capture_class, capture_process) = window::get_lol_window_capture_target();
         let mut settings = RecorderSettings::new(
-            Window::new(WINDOW_TITLE, Some(WINDOW_CLASS.into()), Some(WINDOW_PROCESS.into())),
+            Window::new(capture_title, Some(capture_class), Some(capture_process)),
             window_size,
             output_resolution,
             &filename_path,
