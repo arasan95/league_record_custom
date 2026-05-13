@@ -718,6 +718,9 @@ export default class UI {
     };
 
     public clearVideoMetadata() {
+        if (this.player) {
+            (this.player.el() as HTMLElement).classList.remove("lr-tft-mode");
+        }
         clearVideoMetadataView({
             emptyEl: this.vjs.dom.emptyEl,
         });
@@ -750,6 +753,7 @@ export default class UI {
         resetScoreboardRuntimeState(this, data);
 
         const playerEl = this.player.el() as HTMLElement;
+        playerEl.classList.toggle("lr-tft-mode", isTftMatch);
         this.timeline = new InventoryTimeline(this.events, data.participants.map(p => p.participantId), undefined);
 
         const prepared = prepareScoreboardView({
