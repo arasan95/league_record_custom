@@ -19,6 +19,30 @@ body {
     --lr-lane-self-top: calc(var(--lr-team-bar-height) + var(--lr-seekbar-gap));
 }
 
+.video-js.lr-tft-mode,
+#video_player.lr-tft-mode {
+    --lr-team-bar-height: 0px;
+    --lr-seekbar-gap: 0px;
+    --lr-seekbar-height: var(--lr-self-bar-height);
+    --lr-lane-blue-height: 0px;
+    --lr-lane-red-height: 0px;
+    --lr-lane-self-top: 0px;
+}
+
+.video-js.lr-tft-mode .vjs-progress-holder::before,
+.video-js.lr-tft-mode .vjs-play-progress::before {
+    display: none !important;
+}
+
+.video-js.lr-tft-mode .vjs-marker.lane-blue,
+.video-js.lr-tft-mode .vjs-marker.lane-red {
+    display: none !important;
+}
+
+.video-js.lr-tft-mode .vjs-play-progress .lr-playhead-indicator {
+    background: rgba(255, 255, 255, 0.95);
+}
+
 /* hide videojs player outline when focused */
 video {
     outline: none !important;
