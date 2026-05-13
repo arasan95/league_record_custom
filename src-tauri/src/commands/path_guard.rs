@@ -85,7 +85,11 @@ pub(super) fn resolve_existing_video_base(video_id: &str, settings: &SettingsWra
             if let Ok(entries) = fs::read_dir(&root) {
                 for entry in entries.flatten() {
                     let p = entry.path();
-                    if p.extension().and_then(OsStr::to_str).map(|e| e.eq_ignore_ascii_case("mp4")) != Some(true) {
+                    if p.extension()
+                        .and_then(OsStr::to_str)
+                        .map(|e| e.eq_ignore_ascii_case("mp4"))
+                        != Some(true)
+                    {
                         continue;
                     }
                     let stem = p

@@ -172,12 +172,22 @@ pub struct GoldFrame {
 #[cfg_attr(test, derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TftRoundMarker {
+    pub round: String,
+    pub timestamp: f64,
+}
+
+#[cfg_attr(test, derive(specta::Type))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GameMetadata {
     pub favorite: bool,
     pub match_id: MatchId,
     pub ingame_time_rec_start_offset: f64,
     #[serde(default)]
     pub highlights: Vec<f64>,
+    #[serde(default)]
+    pub tft_round_markers: Vec<TftRoundMarker>,
     pub queue: Queue,
     pub player: lcu::Player,
     pub champion_name: String,
@@ -205,6 +215,8 @@ pub struct Deferred {
     pub ingame_time_rec_start_offset: f64,
     #[serde(default)]
     pub highlights: Vec<f64>,
+    #[serde(default)]
+    pub tft_round_markers: Vec<TftRoundMarker>,
     #[serde(default)]
     pub events: Vec<GameEvent>,
     #[serde(default)]

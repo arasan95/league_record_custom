@@ -23,6 +23,14 @@ type ApplicationAudioTrackControl = {
     volumeInput: HTMLInputElement;
 };
 
+type TftRoundOcrControls = {
+    xInput: HTMLInputElement;
+    yInput: HTMLInputElement;
+    widthInput: HTMLInputElement;
+    heightInput: HTMLInputElement;
+    intervalInput: HTMLInputElement;
+};
+
 export type SettingsGeneralControlsResult = {
     groups: {
         languageGroup: HTMLDivElement;
@@ -34,6 +42,7 @@ export type SettingsGeneralControlsResult = {
         framerateGroup: HTMLDivElement;
         recordAudioGroup: HTMLDivElement;
         applicationAudioTracksGroup: HTMLDivElement;
+        tftRoundOcrGroup: HTMLDivElement;
         maxAgeGroup: HTMLDivElement;
         maxSizeGroup: HTMLDivElement;
         troubleshootingGroup: HTMLDivElement;
@@ -48,6 +57,7 @@ export type SettingsGeneralControlsResult = {
         frSelect: HTMLSelectElement;
         audioSelect: HTMLSelectElement;
         appAudioTrackControls: [ApplicationAudioTrackControl, ApplicationAudioTrackControl, ApplicationAudioTrackControl];
+        tftRoundOcrControls: TftRoundOcrControls;
         maxAgeInput: HTMLInputElement;
         maxSizeInput: HTMLInputElement;
     };
@@ -309,6 +319,169 @@ export function createSettingsGeneralControls({
     audioSelect.addEventListener("change", updateApplicationTracksVisibility);
     updateApplicationTracksVisibility();
 
+    const tftRoundOcrRegion = (settings as any).tftRoundOcrRegion || {};
+    const percentValue = (value: unknown, fallback: number) => {
+        const n = typeof value === "number" && Number.isFinite(value) ? value : fallback;
+        return (n * 100).toFixed(1);
+    };
+    const createPercentInput = (value: string): HTMLInputElement =>
+        createEl("input", {}, {
+            class: "settings-input",
+            type: "number",
+            min: "0",
+            max: "100",
+            step: "0.1",
+            value,
+            style: "width: 86px;",
+        }) as HTMLInputElement;
+    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+    const parsePercentInput = (input: HTMLInputElement, fallback: number) => {
+        const parsed = parseFloat(input.value);
+        return Number.isFinite(parsed) ? parsed / 100 : fallback;
+    };
+
+    const tftRoundOcrControls: TftRoundOcrControls = {
+        xInput: createPercentInput(percentValue(tftRoundOcrRegion.centerOffsetX ?? -0.0905, -0.0905)),
+        yInput: createPercentInput(percentValue(tftRoundOcrRegion.y, 0.009)),
+        widthInput: createPercentInput(percentValue(tftRoundOcrRegion.width, 0.12)),
+        heightInput: createPercentInput(percentValue(tftRoundOcrRegion.height, 0.024)),
+        intervalInput: createEl("input", {}, {
+            class: "settings-input",
+            type: "number",
+            min: "0.5",
+            max: "10",
+            step: "0.5",
+            value: String((settings as any).tftRoundOcrIntervalSeconds ?? 2),
+            style: "width: 86px;",
+        }) as HTMLInputElement,
+    };
+
+    const tftRoundOcrPreview = createEl("div", {}, { class: "tft-ocr-preview" }, [
+        createEl("div", {}, { class: "tft-ocr-preview-centerline tft-ocr-preview-centerline-x" }),
+        createEl("div", {}, { class: "tft-ocr-preview-centerline tft-ocr-preview-centerline-y" }),
+    ]) as HTMLDivElement;
+    const tftRoundOcrBox = createEl("div", {}, { class: "tft-ocr-box" }, [
+        createEl("span", {}, {}, "2-3"),
+        createEl("i", {}, { class: "tft-ocr-resize-handle" }),
+    ]) as HTMLDivElement;
+    tftRoundOcrPreview.append(tftRoundOcrBox);
+
+    const getOcrRegionFromInputs = () => {
+        let centerOffsetX = parsePercentInput(tftRoundOcrControls.xInput, -0.0905);
+        let y = parsePercentInput(tftRoundOcrControls.yInput, 0.009);
+        let width = parsePercentInput(tftRoundOcrControls.widthInput, 0.12);
+        let height = parsePercentInput(tftRoundOcrControls.heightInput, 0.024);
+        width = clamp(width, 0.01, 1);
+        height = clamp(height, 0.01, 1);
+        centerOffsetX = clamp(centerOffsetX, -0.5, 0.5);
+        const x = clamp(0.5 + centerOffsetX - width / 2, 0, 1 - width);
+        y = clamp(y, 0, 1 - height);
+        return { x, centerOffsetX, y, width, height };
+    };
+
+    const setOcrRegionInputs = (region: { x: number; centerOffsetX: number; y: number; width: number; height: number }) => {
+        tftRoundOcrControls.xInput.value = (region.centerOffsetX * 100).toFixed(1);
+        tftRoundOcrControls.yInput.value = (region.y * 100).toFixed(1);
+        tftRoundOcrControls.widthInput.value = (region.width * 100).toFixed(1);
+        tftRoundOcrControls.heightInput.value = (region.height * 100).toFixed(1);
+    };
+
+    const updateOcrPreviewBox = () => {
+        const region = getOcrRegionFromInputs();
+        setOcrRegionInputs(region);
+        tftRoundOcrBox.style.left = `${region.x * 100}%`;
+        tftRoundOcrBox.style.top = `${region.y * 100}%`;
+        tftRoundOcrBox.style.width = `${region.width * 100}%`;
+        tftRoundOcrBox.style.height = `${region.height * 100}%`;
+    };
+
+    const bindOcrPreviewPointer = () => {
+        let dragMode: "move" | "resize" | null = null;
+        let startX = 0;
+        let startY = 0;
+        let startRegion = getOcrRegionFromInputs();
+
+        const applyPointerDelta = (event: PointerEvent) => {
+            if (!dragMode) return;
+            const rect = tftRoundOcrPreview.getBoundingClientRect();
+            const dx = (event.clientX - startX) / rect.width;
+            const dy = (event.clientY - startY) / rect.height;
+            const next = { ...startRegion };
+            if (dragMode === "move") {
+                next.x = clamp(startRegion.x + dx, 0, 1 - startRegion.width);
+                next.centerOffsetX = next.x + startRegion.width / 2 - 0.5;
+                next.y = clamp(startRegion.y + dy, 0, 1 - startRegion.height);
+            } else {
+                next.width = clamp(startRegion.width + dx, 0.01, 1 - startRegion.x);
+                next.height = clamp(startRegion.height + dy, 0.01, 1 - startRegion.y);
+                next.centerOffsetX = startRegion.x + next.width / 2 - 0.5;
+            }
+            setOcrRegionInputs(next);
+            updateOcrPreviewBox();
+        };
+
+        tftRoundOcrBox.addEventListener("pointerdown", (event) => {
+            const target = event.target as HTMLElement;
+            dragMode = target.classList.contains("tft-ocr-resize-handle") ? "resize" : "move";
+            startX = event.clientX;
+            startY = event.clientY;
+            startRegion = getOcrRegionFromInputs();
+            tftRoundOcrBox.setPointerCapture(event.pointerId);
+            event.preventDefault();
+        });
+        tftRoundOcrBox.addEventListener("pointermove", applyPointerDelta);
+        tftRoundOcrBox.addEventListener("pointerup", (event) => {
+            dragMode = null;
+            tftRoundOcrBox.releasePointerCapture(event.pointerId);
+        });
+        tftRoundOcrBox.addEventListener("pointercancel", () => {
+            dragMode = null;
+        });
+    };
+
+    const resetTftRoundOcrBtn = createEl("button", {
+        onclick: () => {
+            tftRoundOcrControls.xInput.value = "-9.1";
+            tftRoundOcrControls.yInput.value = "0.9";
+            tftRoundOcrControls.widthInput.value = "12.0";
+            tftRoundOcrControls.heightInput.value = "2.4";
+            tftRoundOcrControls.intervalInput.value = "2";
+            updateOcrPreviewBox();
+        },
+    }, { class: "btn-browse", type: "button", style: "margin-left: 0;" }, "Reset") as HTMLButtonElement;
+
+    const createOcrField = (label: string, input: HTMLInputElement) =>
+        createEl("label", {}, { class: "tft-ocr-field" }, [
+            createEl("span", {}, {}, label),
+            input,
+        ]);
+
+    const tftRoundOcrContainer = createEl("div", {}, { class: "tft-ocr-settings" }, [
+        tftRoundOcrPreview,
+        createEl("div", {}, { class: "tft-ocr-fields" }, [
+            createOcrField("Center X %", tftRoundOcrControls.xInput),
+            createOcrField("Y %", tftRoundOcrControls.yInput),
+            createOcrField("W %", tftRoundOcrControls.widthInput),
+            createOcrField("H %", tftRoundOcrControls.heightInput),
+            createOcrField("Every sec", tftRoundOcrControls.intervalInput),
+            resetTftRoundOcrBtn,
+        ]),
+    ]) as HTMLDivElement;
+    const tftRoundOcrGroup = createGroup(
+        createEl,
+        "TFT Round OCR Region",
+        tftRoundOcrContainer,
+        true,
+    );
+    [
+        tftRoundOcrControls.xInput,
+        tftRoundOcrControls.yInput,
+        tftRoundOcrControls.widthInput,
+        tftRoundOcrControls.heightInput,
+    ].forEach((input) => input.addEventListener("input", updateOcrPreviewBox));
+    bindOcrPreviewPointer();
+    updateOcrPreviewBox();
+
     const maxAgeInput = createEl("input", {}, {
         class: "settings-input",
         type: "number",
@@ -348,6 +521,7 @@ export function createSettingsGeneralControls({
             framerateGroup: createGroup(createEl, getText(lang, "framerate"), frSelect),
             recordAudioGroup: createGroup(createEl, getText(lang, "recordAudio"), audioSelect),
             applicationAudioTracksGroup,
+            tftRoundOcrGroup,
             maxAgeGroup: createGroup(createEl, getText(lang, "maxAge"), maxAgeInput),
             maxSizeGroup: createGroup(createEl, getText(lang, "maxSize"), maxSizeInput),
             troubleshootingGroup: createGroup(createEl, "Troubleshooting", clearCacheBtn as HTMLElement, true),
@@ -367,6 +541,7 @@ export function createSettingsGeneralControls({
                 volumeRange: control.volumeRange,
                 volumeInput: control.volumeInput,
             })) as [ApplicationAudioTrackControl, ApplicationAudioTrackControl, ApplicationAudioTrackControl],
+            tftRoundOcrControls,
             maxAgeInput,
             maxSizeInput,
         },

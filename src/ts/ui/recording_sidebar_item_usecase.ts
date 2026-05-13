@@ -810,14 +810,15 @@ export function createRecordingSidebarItem(input: {
                                 );
                             }
                             const itemImgs = wrapper.querySelectorAll(".tft-unit-item-img");
-                            if (itemImgs && unit.itemNames) {
-                                for (let j = 0; j < Math.min(itemImgs.length, unit.itemNames.length); j++) {
+                            const itemNames = unit.itemNames;
+                            if (itemImgs && itemNames) {
+                                for (let j = 0; j < Math.min(itemImgs.length, itemNames.length); j++) {
                                     const itemImg = itemImgs[j] as HTMLImageElement;
                                     tasks.push(
                                         enqueueSidebarImageTask(() => resolveAndApplyImage({
                                             stats: perfStats,
                                             label: "tft_item_icon",
-                                            resolver: async () => getTftItemIconUrl(unit.itemNames[j]),
+                                            resolver: async () => getTftItemIconUrl(itemNames[j]),
                                             apply: (url) => {
                                                 itemImg.src = url;
                                                 itemImg.onerror = () => { itemImg.style.display = "none"; };

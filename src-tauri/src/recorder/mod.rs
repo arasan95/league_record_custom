@@ -7,6 +7,8 @@ mod lp_helper_meta;
 mod metadata;
 mod recording_task;
 #[cfg(target_os = "windows")]
+mod tft_round_ocr;
+#[cfg(target_os = "windows")]
 mod window;
 
 pub use data::*;

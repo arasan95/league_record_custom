@@ -1,4 +1,4 @@
-import type { GameEvent, MarkerFlags, Participant } from "./bindings";
+import type { GameEvent, MarkerFlags, Participant, TftRoundMarker } from "./bindings";
 import type { MarkerOptions } from "@fffffffxxxxxxx/videojs-markers";
 
 export type RecordingEvents = {
@@ -11,6 +11,11 @@ export type RecordingEvents = {
 export type HighlightEvents = {
     recordingOffset: number;
     events: Array<number>;
+};
+
+export type TftRoundEvents = {
+    recordingOffset: number;
+    events: Array<TftRoundMarker>;
 };
 
 export type EventType =
@@ -29,16 +34,19 @@ export type EventType =
     | "Hextech-Dragon"
     | "Chemtech-Dragon"
     | "Elder-Dragon"
-    | "Highlight";
+    | "Highlight"
+    | "TFT-Round";
 
 type MarkerLane = "blue" | "red" | "self";
+type ChampionKillMarkerType = "Kill" | "Death" | "Assist";
+type OtherMarkerType = Exclude<EventType, ChampionKillMarkerType> | "Highlight";
 type TeamId = 100 | 200;
 
 export type MarkerDetail =
     | {
         id: number;
         kind: "ChampionKill";
-        markerType: "Kill" | "Death" | "Assist";
+        markerType: ChampionKillMarkerType;
         lane: MarkerLane;
         timestampMs: number;
         killerParticipantId: number;
@@ -48,7 +56,7 @@ export type MarkerDetail =
     | {
         id: number;
         kind: "Other";
-        markerType: Exclude<EventType, "Kill" | "Death" | "Assist"> | "Highlight";
+        markerType: OtherMarkerType;
         lane: MarkerLane;
         timestampMs: number;
         label: string;
@@ -148,7 +156,7 @@ function resolveTeamLaneMarker(
     gameEvent: GameEvent,
     checkbox: MarkerFlags | null,
     participantTeamMap: Map<number, TeamId>,
-): { lane: Exclude<MarkerLane, "self">; type: EventType } | null {
+): { lane: Exclude<MarkerLane, "self">; type: ChampionKillMarkerType | OtherMarkerType } | null {
     if ("ChampionKill" in gameEvent) {
         if (!(checkbox?.kill ?? true)) return null;
         const teamId = resolveParticipantTeamId(gameEvent.ChampionKill.killer_id, participantTeamMap);
@@ -210,7 +218,7 @@ function resolveSelfObjectiveMarker(
     gameEvent: GameEvent,
     participantId: number,
     checkbox: MarkerFlags | null,
-): EventType | null {
+): OtherMarkerType | null {
     if ("BuildingKill" in gameEvent) {
         if (!(checkbox?.structure ?? true)) return null;
         if (gameEvent.BuildingKill.building_type.buildingType !== "TOWER_BUILDING") return null;
@@ -283,6 +291,7 @@ function createMarker(
 export function buildMarkers(
     currentEvents: RecordingEvents | null,
     highlightEvents: HighlightEvents | null,
+    tftRoundEvents: TftRoundEvents | null,
     markerFlags: MarkerFlags | null,
     eventDelay: number,
 ): BuiltMarkers {
@@ -293,7 +302,7 @@ export function buildMarkers(
     const pushChampionKillMarker = (
         event: Extract<GameEvent, { ChampionKill: any }>,
         recordingOffset: number,
-        markerType: "Kill" | "Death" | "Assist",
+        markerType: ChampionKillMarkerType,
         lane: MarkerLane,
     ) => {
         const id = nextDetailId++;
@@ -313,7 +322,7 @@ export function buildMarkers(
     const pushOtherMarker = (
         timestampMs: number,
         recordingOffset: number,
-        markerType: Exclude<EventType, "Kill" | "Death" | "Assist"> | "Highlight",
+        markerType: OtherMarkerType,
         lane: MarkerLane,
         label: string,
     ) => {
@@ -378,6 +387,11 @@ export function buildMarkers(
             pushOtherMarker(event, highlightEvents.recordingOffset, "Highlight", "self", "Highlight");
         }
     }
+    if (tftRoundEvents !== null) {
+        for (const event of tftRoundEvents.events) {
+            pushOtherMarker(event.timestamp, tftRoundEvents.recordingOffset, "TFT-Round", "self", event.round);
+        }
+    }
     if (currentEvents !== null) {
         const { participantId, recordingOffset } = currentEvents;
         const participantTeamMap = buildParticipantTeamMap(currentEvents.participants);
@@ -385,7 +399,7 @@ export function buildMarkers(
         for (const event of currentEvents.events) {
             const name = markerEventName(event, participantId, markerFlags);
             if (name !== null && "ChampionKill" in event) {
-                pushChampionKillMarker(event, recordingOffset, name, "self");
+                pushChampionKillMarker(event, recordingOffset, name as ChampionKillMarkerType, "self");
             } else if (name !== null) {
                 // Defensive fallback: markerEventName currently only returns K/D/A (ChampionKill).
                 pushOtherMarker(event.timestamp, recordingOffset, name as any, "self", name);
@@ -408,7 +422,8 @@ export function buildMarkers(
                     if ("BuildingKill" in event && teamLaneMarker.type === "Turret") {
                         pushOtherMarker(event.timestamp, recordingOffset, teamLaneMarker.type, teamLaneMarker.lane, buildTowerLabel(event));
                     } else {
-                        pushOtherMarker(event.timestamp, recordingOffset, teamLaneMarker.type, teamLaneMarker.lane, teamLaneMarker.type);
+                        const markerType = teamLaneMarker.type as OtherMarkerType;
+                        pushOtherMarker(event.timestamp, recordingOffset, markerType, teamLaneMarker.lane, markerType);
                     }
                 }
             }
