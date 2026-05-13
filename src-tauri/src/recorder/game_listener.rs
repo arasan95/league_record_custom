@@ -26,7 +26,7 @@ use super::highlight_task::HighlightTask;
 use super::metadata;
 use super::recording_task::{GameCtx, Metadata, RecordingTask};
 use super::window;
-use crate::app::{AppEvent, EventManager, SystemTrayManager, action};
+use crate::app::{action, AppEvent, EventManager, SystemTrayManager};
 use crate::recorder::MetadataFile;
 use crate::state::{CurrentlyRecording, SettingsWrapper};
 
@@ -1278,6 +1278,7 @@ impl GameListener {
                                 {
                                     game_metadata.favorite = deferred.favorite;
                                     game_metadata.highlights = deferred.highlights;
+                                    game_metadata.tft_round_markers = deferred.tft_round_markers;
                                 }
 
                                 // Calculate LP Diff
@@ -1306,6 +1307,32 @@ impl GameListener {
                                     &crate::recorder::MetadataFile::Metadata(game_metadata),
                                 );
                                 log::info!("writing game metadata to ({metadata_filepath:?}): {result:?}");
+                                if result.is_ok() {
+                                    let video_path = metadata_filepath.with_extension("mp4");
+                                    let backfill_metadata_path = metadata_filepath.clone();
+                                    let backfill_app_handle = ctx.app_handle.clone();
+                                    let backfill_video_id = video_id.clone();
+                                    async_runtime::spawn(async move {
+                                        match super::tft_round_ocr::backfill_from_recording(
+                                            backfill_app_handle.clone(),
+                                            video_path,
+                                            backfill_metadata_path,
+                                        )
+                                        .await
+                                        {
+                                            Ok(count) if count > 0 => {
+                                                log::info!("backfilled {count} TFT round markers");
+                                                if let Some(video_id) = backfill_video_id {
+                                                    let _ = backfill_app_handle.send_event(AppEvent::MetadataChanged {
+                                                        payload: vec![video_id],
+                                                    });
+                                                }
+                                            }
+                                            Ok(_) => {}
+                                            Err(e) => log::warn!("failed to backfill TFT round markers: {e}"),
+                                        }
+                                    });
+                                }
                             }
                             Err(e) => log::error!("unable to process data: {e}"),
                         }

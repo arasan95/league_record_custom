@@ -350,3 +350,97 @@ input[type="range"] {
 .settings-section-title:first-of-type {
   margin-top: 0;
 }
+
+.tft-ocr-settings {
+  width: 100%;
+}
+
+.tft-ocr-preview {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 12px;
+  overflow: hidden;
+  border: 1px solid #444;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    #101318;
+  background-size: 12.5% 12.5%;
+}
+
+.tft-ocr-preview::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-top: 28px solid rgba(255, 255, 255, 0.06);
+  pointer-events: none;
+}
+
+.tft-ocr-preview-centerline {
+  position: absolute;
+  background: rgba(0, 210, 255, 0.25);
+  pointer-events: none;
+}
+
+.tft-ocr-preview-centerline-x {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.tft-ocr-preview-centerline-y {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+}
+
+.tft-ocr-box {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 18px;
+  border: 2px solid #00d2ff;
+  background: rgba(0, 210, 255, 0.14);
+  color: #eafaff;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+  box-sizing: border-box;
+  font-weight: 700;
+}
+
+.tft-ocr-resize-handle {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 10px;
+  height: 10px;
+  border: 1px solid #061018;
+  background: #00d2ff;
+  cursor: nwse-resize;
+}
+
+.tft-ocr-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
+.tft-ocr-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #ddd;
+  font-size: 0.85em;
+}
+
+.tft-ocr-field .settings-input {
+  box-sizing: border-box;
+}

@@ -1,5 +1,5 @@
 import type { Deferred, GameMetadata, MetadataFile } from "./bindings";
-import type { HighlightEvents, RecordingEvents } from "./main_markers_usecase";
+import type { HighlightEvents, RecordingEvents, TftRoundEvents } from "./main_markers_usecase";
 
 type MetadataUiLike = {
     showMarkerFlags(show: boolean): void;
@@ -13,6 +13,7 @@ export type MetadataRenderResult = {
     clearRetry: boolean;
     currentEvents: RecordingEvents | null;
     highlightEvents: HighlightEvents | null;
+    tftRoundEvents: TftRoundEvents | null;
 };
 
 function buildDeferredSyntheticMetadata(def: Deferred): GameMetadata | null {
@@ -24,6 +25,7 @@ function buildDeferredSyntheticMetadata(def: Deferred): GameMetadata | null {
         matchId: def.matchId,
         ingameTimeRecStartOffset: def.ingameTimeRecStartOffset,
         highlights: def.highlights ?? [],
+        tftRoundMarkers: def.tftRoundMarkers ?? [],
         queue: { id: 0, name: "Deferred", isRanked: false },
         player: { gameName: "Unknown", tagLine: "LOC", summonerId: 0 },
         championName: "Unknown",
@@ -74,6 +76,10 @@ async function applyMetadataBranch(ui: MetadataUiLike, metadata: GameMetadata): 
             recordingOffset: metadata.ingameTimeRecStartOffset,
             events: metadata.highlights ?? [],
         },
+        tftRoundEvents: {
+            recordingOffset: metadata.ingameTimeRecStartOffset,
+            events: metadata.tftRoundMarkers ?? [],
+        },
     };
 }
 
@@ -110,6 +116,10 @@ async function applyDeferredBranch(ui: MetadataUiLike, deferred: Deferred): Prom
             recordingOffset: deferred.ingameTimeRecStartOffset,
             events: deferred.highlights ?? [],
         },
+        tftRoundEvents: {
+            recordingOffset: deferred.ingameTimeRecStartOffset,
+            events: deferred.tftRoundMarkers ?? [],
+        },
     };
 }
 
@@ -136,5 +146,6 @@ export async function renderMetadataState(input: {
         clearRetry: false,
         currentEvents: null,
         highlightEvents: null,
+        tftRoundEvents: null,
     };
 }

@@ -297,6 +297,7 @@ body:has(.vjs-fullscreen) {
 .vjs-marker.herald { color: rgb(234, 0, 255); z-index: 13 !important; --marker-core-width: 6px; }
 .vjs-marker.baron { color: rgb(123, 0, 255); z-index: 13; --marker-core-width: 6px; opacity: 0.7 !important; }
 .vjs-marker.highlight { color: rgb(255, 170, 0); z-index: 12; }
+.vjs-marker.tft-round { color: rgb(0, 210, 255); z-index: 14; --marker-core-width: 7px; opacity: 0.85 !important; }
 
 /* =========================================================================
    6. VIDEO.JS CONTROL BAR

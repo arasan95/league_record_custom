@@ -20,7 +20,7 @@ import { buildMetadataCandidates, normalizeVideoId, toAssetPath, videoIdsMatch }
 import { getLatestRetryVideoId, getRetryState } from "./main_sidebar_usecase";
 import { getMetadataFromRecordingsList, getMetadataWithFallback } from "./main_metadata_usecase";
 import { renderMetadataState } from "./main_metadata_render_usecase";
-import { buildMarkers, markerEventName, type HighlightEvents, type MarkerDetail, type RecordingEvents } from "./main_markers_usecase";
+import { buildMarkers, markerEventName, type HighlightEvents, type MarkerDetail, type RecordingEvents, type TftRoundEvents } from "./main_markers_usecase";
 import { initializeProgressTooltips } from "./main_progress_tooltip_usecase";
 import { initializeMarkerHoverTooltips } from "./main_marker_tooltip_usecase";
 import { createKeyboardHandlers } from "./main_keyboard_usecase";
@@ -54,6 +54,7 @@ export function reloadKeybinds() {
 
 let currentEvents: RecordingEvents | null = null;
 let highlightEvents: HighlightEvents | null = null;
+let tftRoundEvents: TftRoundEvents | null = null;
 let markerDetails: Array<MarkerDetail | undefined> = [];
 let preferredActiveVideoId: string | null = null;
 const metadataRetryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
@@ -96,7 +97,9 @@ function metadataDataSignature(data: any): string {
             ? m.participants.map((p: any) => `${p.participantId}:${p.championId}:${p.honorReceived ? 1 : 0}`).join("|")
             : "";
         const highlightsCount = Array.isArray(m.highlights) ? m.highlights.length : 0;
-        return `Metadata|pid=${m.participantId}|pc=${m.participants?.length ?? 0}|p=${participantKey}|ev=${eventCount}|last=${lastEventTs}|hi=${highlightsCount}|q=${m.queue?.id ?? 0}|gv=${m.gameVersion ?? ""}`;
+        const tftRoundCount = Array.isArray(m.tftRoundMarkers) ? m.tftRoundMarkers.length : 0;
+        const lastTftRound = tftRoundCount > 0 ? `${m.tftRoundMarkers[tftRoundCount - 1]?.round}:${m.tftRoundMarkers[tftRoundCount - 1]?.timestamp}` : "";
+        return `Metadata|pid=${m.participantId}|pc=${m.participants?.length ?? 0}|p=${participantKey}|ev=${eventCount}|last=${lastEventTs}|hi=${highlightsCount}|tft=${tftRoundCount}:${lastTftRound}|q=${m.queue?.id ?? 0}|gv=${m.gameVersion ?? ""}`;
     }
     if ("Deferred" in data) {
         const d = data.Deferred;
@@ -106,7 +109,9 @@ function metadataDataSignature(data: any): string {
             ? d.participants.map((p: any) => `${p.participantId}:${p.championId}:${p.honorReceived ? 1 : 0}`).join("|")
             : "";
         const highlightsCount = Array.isArray(d.highlights) ? d.highlights.length : 0;
-        return `Deferred|pc=${d.participants?.length ?? 0}|p=${participantKey}|ev=${eventCount}|last=${lastEventTs}|hi=${highlightsCount}|off=${d.ingameTimeRecStartOffset ?? 0}`;
+        const tftRoundCount = Array.isArray(d.tftRoundMarkers) ? d.tftRoundMarkers.length : 0;
+        const lastTftRound = tftRoundCount > 0 ? `${d.tftRoundMarkers[tftRoundCount - 1]?.round}:${d.tftRoundMarkers[tftRoundCount - 1]?.timestamp}` : "";
+        return `Deferred|pc=${d.participants?.length ?? 0}|p=${participantKey}|ev=${eventCount}|last=${lastEventTs}|hi=${highlightsCount}|tft=${tftRoundCount}:${lastTftRound}|off=${d.ingameTimeRecStartOffset ?? 0}`;
     }
     return "unknown";
 }
@@ -411,9 +416,13 @@ if (createClipBtn) {
                 selectedAudioTrackIndex = tracksResult.data[0].index;
             }
 
-            const clipResult = selectedAudioTrackIndex === null
-                ? await commands.createClip(videoId, loopStart, loopEnd, null)
-                : await commands.createClipWithAudioTrack(videoId, loopStart, loopEnd, selectedAudioTrackIndex);
+            const clipResult = await commands.createClip(
+                videoId,
+                loopStart,
+                loopEnd,
+                selectedAudioTrackIndex === null ? null : false,
+                selectedAudioTrackIndex,
+            );
             if (clipResult.status === "error") {
                 throw clipResult.error;
             }
@@ -1137,13 +1146,14 @@ async function setMetadata(videoId: string): Promise<boolean> {
     }
     currentEvents = rendered.currentEvents;
     highlightEvents = rendered.highlightEvents;
+    tftRoundEvents = rendered.tftRoundEvents;
     changeMarkers();
     logPerf(`setMetadata(total kind=${kind})`, startedAt);
     return rendered.completed;
 }
 
 function changeMarkers() {
-    const built = buildMarkers(currentEvents, highlightEvents, ui.getMarkerFlags(), EVENT_DELAY);
+    const built = buildMarkers(currentEvents, highlightEvents, tftRoundEvents, ui.getMarkerFlags(), EVENT_DELAY);
     const markers = built.markers;
     markerDetails = built.details;
 
@@ -1153,6 +1163,7 @@ function changeMarkers() {
         markers: markers.length,
         currentEvents: currentEvents?.events.length ?? 0,
         highlightEvents: highlightEvents?.events.length ?? 0,
+        tftRoundEvents: tftRoundEvents?.events.length ?? 0,
         markerFlags: ui.getMarkerFlags(),
     });
     if (currentEvents !== null && currentEvents.events.length > 0 && markers.length === 0) {
@@ -1239,6 +1250,7 @@ async function showTimestamps() {
     const timelineEvents = buildTimelineRows({
         currentEvents,
         highlightEvents,
+        tftRoundEvents,
         markerEventName: markerEventNameForTimeline,
     });
 
