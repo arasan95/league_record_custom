@@ -718,12 +718,15 @@ export default class UI {
     };
 
     public clearVideoMetadata() {
-        if (this.player) {
-            (this.player.el() as HTMLElement).classList.remove("lr-tft-mode");
-        }
+        this.setTftMode(false);
         clearVideoMetadataView({
             emptyEl: this.vjs.dom.emptyEl,
         });
+    }
+
+    public setTftMode(enabled: boolean) {
+        if (!this.player) return;
+        (this.player.el() as HTMLElement).classList.toggle("lr-tft-mode", enabled);
     }
 
     public async setVideoDescriptionMetadata(data: GameMetadata) {
@@ -752,6 +755,7 @@ export default class UI {
 
         resetScoreboardRuntimeState(this, data);
 
+        this.setTftMode(isTftMatch);
         const playerEl = this.player.el() as HTMLElement;
         playerEl.classList.toggle("lr-tft-mode", isTftMatch);
         this.timeline = new InventoryTimeline(this.events, data.participants.map(p => p.participantId), undefined);

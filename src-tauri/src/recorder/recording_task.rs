@@ -26,6 +26,7 @@ pub struct GameCtx {
     pub app_handle: AppHandle,
     pub match_id: MatchId,
     pub cancel_token: CancellationToken,
+    pub is_tft: bool,
 }
 
 #[derive(Debug)]
@@ -265,11 +266,23 @@ impl RecordingTask {
             match_id: ctx.match_id.clone(),
             ingame_time_rec_start_offset,
             highlights: vec![],
+            tft_round_markers: vec![],
             events: vec![],
             participants: vec![],
         });
         if let Err(e) = action::save_recording_metadata(&output_filepath, &metadata_file) {
             log::info!("failed to save MetadataFile: {e}")
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            if ctx.is_tft {
+                super::tft_round_ocr::spawn(
+                    ctx.app_handle.clone(),
+                    output_filepath.with_extension("json"),
+                    ctx.cancel_token.child_token(),
+                );
+            }
         }
 
         let metadata = Metadata {

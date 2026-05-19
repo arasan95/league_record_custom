@@ -171,13 +171,12 @@ impl SettingsWrapper {
         }
 
         // Recording cleanup can scan many files and should not block UI save flows.
-        let cleanup_settings_changed =
-            self.max_recording_age() != old_max_recording_age
-                || self.max_recordings_size() != old_max_recordings_size
-                || self.auto_delete_clips() != old_auto_delete_clips
-                || self.keep_video_json_on_auto_delete() != old_keep_video_json_on_auto_delete
-                || self.get_recordings_path() != old_recordings_path
-                || self.get_clips_path() != old_clips_path;
+        let cleanup_settings_changed = self.max_recording_age() != old_max_recording_age
+            || self.max_recordings_size() != old_max_recordings_size
+            || self.auto_delete_clips() != old_auto_delete_clips
+            || self.keep_video_json_on_auto_delete() != old_keep_video_json_on_auto_delete
+            || self.get_recordings_path() != old_recordings_path
+            || self.get_clips_path() != old_clips_path;
         if cleanup_settings_changed {
             let app_handle = app_handle.clone();
             async_runtime::spawn_blocking(move || {
@@ -346,6 +345,70 @@ impl Default for ApplicationAudioTrackSetting {
 #[cfg_attr(test, derive(specta::Type))]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TftRoundOcrRegion {
+    #[serde(default)]
+    pub anchor: String,
+    pub x: f64,
+    #[serde(default)]
+    pub center_offset_x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl Default for TftRoundOcrRegion {
+    fn default() -> Self {
+        Self {
+            anchor: "center".to_string(),
+            x: 0.3495,
+            center_offset_x: -0.0905,
+            y: 0.009,
+            width: 0.12,
+            height: 0.024,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for TftRoundOcrRegion {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct RawRegion {
+            anchor: Option<String>,
+            x: Option<f64>,
+            center_offset_x: Option<f64>,
+            y: Option<f64>,
+            width: Option<f64>,
+            height: Option<f64>,
+        }
+
+        let defaults = TftRoundOcrRegion::default();
+        let raw = RawRegion::deserialize(deserializer)?;
+        let anchor = raw.anchor.unwrap_or(defaults.anchor);
+        let width = raw.width.unwrap_or(defaults.width).clamp(0.01, 1.0);
+        let center_offset_x = raw.center_offset_x.unwrap_or(defaults.center_offset_x).clamp(-0.5, 0.5);
+        let x = if anchor == "center" {
+            (0.5 + center_offset_x - width / 2.0).clamp(0.0, 1.0)
+        } else {
+            raw.x.unwrap_or(defaults.x).clamp(0.0, 1.0)
+        };
+        Ok(TftRoundOcrRegion {
+            anchor,
+            x,
+            center_offset_x,
+            y: raw.y.unwrap_or(defaults.y).clamp(0.0, 1.0),
+            width,
+            height: raw.height.unwrap_or(defaults.height).clamp(0.01, 1.0),
+        })
+    }
+}
+
+#[cfg_attr(test, derive(specta::Type))]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub marker_flags: MarkerFlags,
 
@@ -389,6 +452,9 @@ pub struct Settings {
     pub check_updates_on_startup: bool,
     pub keep_video_json_on_auto_delete: bool,
     pub auto_delete_clips: bool,
+    pub tft_round_ocr_enabled: bool,
+    pub tft_round_ocr_region: TftRoundOcrRegion,
+    pub tft_round_ocr_interval_seconds: f64,
 }
 
 const DEFAULT_DEBUG_LOG: bool = false;
@@ -410,14 +476,15 @@ const DEFAULT_MATCH_HISTORY_SUB_URL: &str = "https://www.deeplol.gg/summoner/jp/
 const DEFAULT_CHAMPION_WIKI_BASE_URL: &str = "https://www.loljp-wiki.jp/wiki/?Champion%2F{nameEsc}";
 const DEFAULT_CHAMPION_WIKI_SUB_URL: &str = "https://wiki.leagueoflegends.com/en-us/{nameEsc}";
 const DEFAULT_CHAMPION_MATCHUP_URL: &str = "https://dpm.lol/champions/{My}/matchups?opponent={Opponent}";
-const DEFAULT_CHAMPION_MATCHUP_SUB_URL: &str =
-    "https://www.onetricks.gg/ja/champions/builds/{My}?matchup={Opponent}";
+const DEFAULT_CHAMPION_MATCHUP_SUB_URL: &str = "https://www.onetricks.gg/ja/champions/builds/{My}?matchup={Opponent}";
 const DEFAULT_CHAMPION_BUILD_URL: &str = "https://lolalytics.com/lol/{q}/build/";
 const DEFAULT_CHAMPION_BUILD_SUB_URL: &str = "https://www.onetricks.gg/ja/champions/builds/{nameEsc}";
 const DEFAULT_CHECK_UPDATES_ON_STARTUP: bool = true;
 const DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE: bool = true;
 const DEFAULT_AUTO_DELETE_CLIPS: bool = false;
 const DEFAULT_PLAY_RECORDING_SOUNDS: bool = true;
+const DEFAULT_TFT_ROUND_OCR_ENABLED: bool = true;
+const DEFAULT_TFT_ROUND_OCR_INTERVAL_SECONDS: f64 = 2.0;
 
 #[inline]
 fn default_recordings_folder() -> PathBuf {
@@ -487,6 +554,9 @@ impl Default for Settings {
             check_updates_on_startup: DEFAULT_CHECK_UPDATES_ON_STARTUP,
             keep_video_json_on_auto_delete: DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE,
             auto_delete_clips: DEFAULT_AUTO_DELETE_CLIPS,
+            tft_round_ocr_enabled: DEFAULT_TFT_ROUND_OCR_ENABLED,
+            tft_round_ocr_region: TftRoundOcrRegion::default(),
+            tft_round_ocr_interval_seconds: DEFAULT_TFT_ROUND_OCR_INTERVAL_SECONDS,
         }
     }
 }
@@ -553,16 +623,14 @@ impl<'de> Deserialize<'de> for Settings {
                                         continue;
                                     }
                                     if let Some(obj) = item.as_object() {
-                                        let application = obj
-                                            .get("application")
-                                            .and_then(|v| v.as_str())
-                                            .map(ToString::to_string);
+                                        let application =
+                                            obj.get("application").and_then(|v| v.as_str()).map(ToString::to_string);
                                         let enabled = obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
-                                        let volume_percent = obj
-                                            .get("volumePercent")
-                                            .and_then(|v| v.as_u64())
-                                            .unwrap_or(100)
-                                            .min(100) as u8;
+                                        let volume_percent =
+                                            obj.get("volumePercent")
+                                                .and_then(|v| v.as_u64())
+                                                .unwrap_or(100)
+                                                .min(100) as u8;
                                         converted.push(ApplicationAudioTrackSetting {
                                             application,
                                             enabled,
@@ -621,12 +689,14 @@ impl<'de> Deserialize<'de> for Settings {
                             settings.developer_mode = map.next_value().unwrap_or(false);
                         }
                         "matchHistoryBaseUrl" => {
-                            settings.match_history_base_url =
-                                map.next_value().unwrap_or(Some(DEFAULT_MATCH_HISTORY_BASE_URL.to_string()));
+                            settings.match_history_base_url = map
+                                .next_value()
+                                .unwrap_or(Some(DEFAULT_MATCH_HISTORY_BASE_URL.to_string()));
                         }
                         "matchHistorySubUrl" => {
-                            settings.match_history_sub_url =
-                                map.next_value().unwrap_or(Some(DEFAULT_MATCH_HISTORY_SUB_URL.to_string()));
+                            settings.match_history_sub_url = map
+                                .next_value()
+                                .unwrap_or(Some(DEFAULT_MATCH_HISTORY_SUB_URL.to_string()));
                         }
                         "scrollFrameStepModifier" => {
                             settings.scroll_frame_step_modifier = map.next_value().ok();
@@ -638,35 +708,39 @@ impl<'de> Deserialize<'de> for Settings {
                             settings.scoreboard_scale = map.next_value().ok();
                         }
                         "playRecordingSounds" => {
-                            settings.play_recording_sounds =
-                                map.next_value().unwrap_or(DEFAULT_PLAY_RECORDING_SOUNDS);
+                            settings.play_recording_sounds = map.next_value().unwrap_or(DEFAULT_PLAY_RECORDING_SOUNDS);
                         }
                         "language" => {
                             settings.language = map.next_value().unwrap_or_else(|_| "en".to_string());
                         }
                         "championWikiBaseUrl" => {
-                            settings.champion_wiki_base_url =
-                                map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_WIKI_BASE_URL.to_string()));
+                            settings.champion_wiki_base_url = map
+                                .next_value()
+                                .unwrap_or(Some(DEFAULT_CHAMPION_WIKI_BASE_URL.to_string()));
                         }
                         "championWikiSubUrl" => {
-                            settings.champion_wiki_sub_url =
-                                map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_WIKI_SUB_URL.to_string()));
+                            settings.champion_wiki_sub_url = map
+                                .next_value()
+                                .unwrap_or(Some(DEFAULT_CHAMPION_WIKI_SUB_URL.to_string()));
                         }
                         "championMatchupUrl" => {
-                            settings.champion_matchup_url =
-                                map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_MATCHUP_URL.to_string()));
+                            settings.champion_matchup_url = map
+                                .next_value()
+                                .unwrap_or(Some(DEFAULT_CHAMPION_MATCHUP_URL.to_string()));
                         }
                         "championMatchupSubUrl" => {
-                            settings.champion_matchup_sub_url =
-                                map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_MATCHUP_SUB_URL.to_string()));
+                            settings.champion_matchup_sub_url = map
+                                .next_value()
+                                .unwrap_or(Some(DEFAULT_CHAMPION_MATCHUP_SUB_URL.to_string()));
                         }
                         "championBuildUrl" => {
                             settings.champion_build_url =
                                 map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_BUILD_URL.to_string()));
                         }
                         "championBuildSubUrl" => {
-                            settings.champion_build_sub_url =
-                                map.next_value().unwrap_or(Some(DEFAULT_CHAMPION_BUILD_SUB_URL.to_string()));
+                            settings.champion_build_sub_url = map
+                                .next_value()
+                                .unwrap_or(Some(DEFAULT_CHAMPION_BUILD_SUB_URL.to_string()));
                         }
                         "checkUpdatesOnStartup" => {
                             settings.check_updates_on_startup =
@@ -678,6 +752,16 @@ impl<'de> Deserialize<'de> for Settings {
                         }
                         "autoDeleteClips" => {
                             settings.auto_delete_clips = map.next_value().unwrap_or(DEFAULT_AUTO_DELETE_CLIPS);
+                        }
+                        "tftRoundOcrEnabled" => {
+                            settings.tft_round_ocr_enabled = map.next_value().unwrap_or(DEFAULT_TFT_ROUND_OCR_ENABLED);
+                        }
+                        "tftRoundOcrRegion" => {
+                            settings.tft_round_ocr_region = map.next_value().unwrap_or_default();
+                        }
+                        "tftRoundOcrIntervalSeconds" => {
+                            let interval = map.next_value().unwrap_or(DEFAULT_TFT_ROUND_OCR_INTERVAL_SECONDS);
+                            settings.tft_round_ocr_interval_seconds = interval.clamp(0.5, 10.0);
                         }
                         _ => { /* ignored */ }
                     }
