@@ -258,5 +258,5 @@ jobs:
         with:
           artifacts: "./src-tauri/target/release/*.zip, ./src-tauri/target/release/bundle/nsis/*, ./.artifacts/updater/*, latest.json"
           draft: ${{ github.event_name == 'workflow_dispatch' }}
-          prerelease: false
+          prerelease: true
           body: ${{ steps.release_body.outputs.body }}
