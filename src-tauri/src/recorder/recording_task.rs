@@ -26,6 +26,7 @@ pub struct GameCtx {
     pub app_handle: AppHandle,
     pub match_id: MatchId,
     pub cancel_token: CancellationToken,
+    pub is_tft: bool,
 }
 
 #[derive(Debug)]
@@ -275,11 +276,13 @@ impl RecordingTask {
 
         #[cfg(target_os = "windows")]
         {
-            super::tft_round_ocr::spawn(
-                ctx.app_handle.clone(),
-                output_filepath.with_extension("json"),
-                ctx.cancel_token.child_token(),
-            );
+            if ctx.is_tft {
+                super::tft_round_ocr::spawn(
+                    ctx.app_handle.clone(),
+                    output_filepath.with_extension("json"),
+                    ctx.cancel_token.child_token(),
+                );
+            }
         }
 
         let metadata = Metadata {

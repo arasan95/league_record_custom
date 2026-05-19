@@ -52,6 +52,7 @@
   "checkUpdatesOnStartup": true,
   "keepVideoJsonOnAutoDelete": true,
   "autoDeleteClips": false,
+  "tftRoundOcrEnabled": true,
   "tftRoundOcrRegion": {
     "anchor": "center",
     "x": 0.3495,

@@ -60,13 +60,7 @@ export type BuildSettingsPayloadInput = {
         enabled: boolean;
         volumePercent: number;
     }>;
-    tftRoundOcrRegion: {
-        x: string;
-        y: string;
-        width: string;
-        height: string;
-    };
-    tftRoundOcrIntervalSeconds: string;
+    tftRoundOcrEnabled: boolean;
     maxRecordingAgeDays: string;
     maxRecordingsSizeGb: string;
     highlightHotkeyValue: string | null;
@@ -97,16 +91,6 @@ export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings
     }
 
     const [framerateN, framerateD] = input.framerate.split("/");
-    const parseRatioPercent = (value: string, fallback: number, min = 0, max = 1) => {
-        const parsed = parseFloat(value);
-        const ratio = Number.isFinite(parsed) ? parsed / 100 : fallback;
-        return Math.max(min, Math.min(max, ratio));
-    };
-    const parseInterval = (value: string) => {
-        const parsed = parseFloat(value);
-        return Math.max(0.5, Math.min(10, Number.isFinite(parsed) ? parsed : 2));
-    };
-
     return {
         ...input.base,
         language: input.language as any,
@@ -130,15 +114,7 @@ export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings
             enabled: !!track.enabled,
             volumePercent: Math.max(0, Math.min(100, Math.round(track.volumePercent))),
         })),
-        tftRoundOcrRegion: {
-            anchor: "center",
-            centerOffsetX: parseRatioPercent(input.tftRoundOcrRegion.x, -0.0905, -0.5, 0.5),
-            x: 0.5 + parseRatioPercent(input.tftRoundOcrRegion.x, -0.0905, -0.5, 0.5) - parseRatioPercent(input.tftRoundOcrRegion.width, 0.12, 0.01) / 2,
-            y: parseRatioPercent(input.tftRoundOcrRegion.y, 0.009),
-            width: parseRatioPercent(input.tftRoundOcrRegion.width, 0.12, 0.01),
-            height: parseRatioPercent(input.tftRoundOcrRegion.height, 0.024, 0.01),
-        },
-        tftRoundOcrIntervalSeconds: parseInterval(input.tftRoundOcrIntervalSeconds),
+        tftRoundOcrEnabled: input.tftRoundOcrEnabled,
         maxRecordingAgeDays: input.maxRecordingAgeDays === "" ? null : parseInt(input.maxRecordingAgeDays, 10),
         maxRecordingsSizeGb: input.maxRecordingsSizeGb === "" ? null : parseInt(input.maxRecordingsSizeGb, 10),
         hightlightHotkey: input.highlightHotkeyValue,
