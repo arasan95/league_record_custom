@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use anyhow::{bail, Context, Result};
 use riot_datatypes::lcu::{Game, Player};
@@ -11,6 +11,10 @@ use tokio_util::sync::CancellationToken;
 
 use super::{GameEvent, GameMetadata, GoldFrame, Participant, ParticipantGold};
 use crate::cancellable;
+
+fn is_tft_queue_id(queue_id: i64) -> bool {
+    matches!(queue_id, 1090 | 1100 | 1110 | 1130 | 1160 | 1220)
+}
 
 pub async fn process_data(
     ingame_time_rec_start_offset: f64,
@@ -29,6 +33,12 @@ pub async fn process_data(
         Some((p, g)) => (p, g),
         None => {
             // ==== TFT Fallback ====
+            if let Some(dummy_game) = fetch_tft_eog_fallback_if_exists(&lcu_rest_client, &match_id).await {
+                let p = lcu_rest_client
+                    .get::<Player>("/lol-summoner/v1/current-summoner")
+                    .await?;
+                return process_tft_fallback(ingame_time_rec_start_offset, match_id, p, dummy_game).await;
+            }
             if let Some(dummy_game) = fetch_tft_fallback_if_exists(&lcu_rest_client, &match_id).await {
                 let p = lcu_rest_client
                     .get::<Player>("/lol-summoner/v1/current-summoner")
@@ -38,6 +48,20 @@ pub async fn process_data(
             bail!("unable to collect game data (TFT fallback also failed)");
         }
     };
+
+    if is_tft_queue_id(game.queue_id) {
+        if let Some(dummy_game) = fetch_tft_eog_fallback_if_exists(&lcu_rest_client, &match_id).await {
+            return process_tft_fallback(ingame_time_rec_start_offset, match_id, player, dummy_game).await;
+        }
+        if let Some(dummy_game) = fetch_tft_fallback_if_exists(&lcu_rest_client, &match_id).await {
+            return process_tft_fallback(ingame_time_rec_start_offset, match_id, player, dummy_game).await;
+        }
+        log::warn!(
+            "TFT products match data was not available for {}; falling back to generic match data",
+            match_id.game_id
+        );
+    }
+
     let timeline = lcu_rest_client
         .get::<Timeline>(format!("/lol-match-history/v1/game-timelines/{}", match_id.game_id))
         .await
@@ -220,6 +244,7 @@ pub async fn process_data(
         match_id,
         ingame_time_rec_start_offset,
         highlights: vec![],
+        tft_round_markers: vec![],
         queue,
         player,
         champion_name,
@@ -246,6 +271,12 @@ pub async fn process_data_with_retry(
     const MAX_ATTEMPTS: usize = 8;
     const MAX_RETRY_DELAY: Duration = Duration::from_secs(3);
 
+    if let Ok(player) = lcu_rest_client.get::<Player>("/lol-summoner/v1/current-summoner").await {
+        if let Some(dummy_game) = fetch_tft_eog_fallback_if_exists(&lcu_rest_client, &match_id).await {
+            return process_tft_fallback(ingame_time_rec_start_offset, match_id, player, dummy_game).await;
+        }
+    }
+
     let mut player_info = None;
     let mut timeline_data = None;
     let mut retry_delay = Duration::from_millis(500);
@@ -265,7 +296,7 @@ pub async fn process_data_with_retry(
             // If it's a TFT game (or game without timeline), we don't necessarily need timeline_data to be Some
             if let Some((_, ref game)) = player_info {
                 let qid = game.queue_id;
-                let is_tft = qid == 1090 || qid == 1100 || qid == 1110 || qid == 1130 || qid == 1160;
+                let is_tft = is_tft_queue_id(qid);
 
                 if timeline_data.is_some() || is_tft {
                     break;
@@ -290,6 +321,9 @@ pub async fn process_data_with_retry(
             // ==== TFT Fallback ====
             let p_res = lcu_rest_client.get::<Player>("/lol-summoner/v1/current-summoner").await;
             if let Ok(p) = p_res {
+                if let Some(dummy_game) = fetch_tft_eog_fallback_if_exists(&lcu_rest_client, &match_id).await {
+                    return process_tft_fallback(ingame_time_rec_start_offset, match_id, p, dummy_game).await;
+                }
                 if let Some(dummy_game) = fetch_tft_fallback_if_exists(&lcu_rest_client, &match_id).await {
                     return process_tft_fallback(ingame_time_rec_start_offset, match_id, p, dummy_game).await;
                 }
@@ -297,6 +331,39 @@ pub async fn process_data_with_retry(
             bail!("unable to collect game data (TFT fallback also failed)");
         }
     };
+
+    if is_tft_queue_id(game.queue_id) {
+        const TFT_FALLBACK_MAX_ATTEMPTS: usize = 24;
+        const TFT_FALLBACK_MAX_RETRY_DELAY: Duration = Duration::from_secs(1);
+
+        let mut retry_delay = Duration::from_millis(500);
+        for attempt in 0..TFT_FALLBACK_MAX_ATTEMPTS {
+            if let Some(dummy_game) = fetch_tft_eog_fallback_if_exists(&lcu_rest_client, &match_id).await {
+                return process_tft_fallback(ingame_time_rec_start_offset, match_id, player, dummy_game).await;
+            }
+            if let Some(dummy_game) = fetch_tft_fallback_if_exists(&lcu_rest_client, &match_id).await {
+                return process_tft_fallback(ingame_time_rec_start_offset, match_id, player, dummy_game).await;
+            }
+            if attempt + 1 < TFT_FALLBACK_MAX_ATTEMPTS {
+                log::info!(
+                    "TFT products match data not available yet for {}; retrying ({}/{})",
+                    match_id.game_id,
+                    attempt + 1,
+                    TFT_FALLBACK_MAX_ATTEMPTS
+                );
+                let cancelled = cancellable!(sleep(retry_delay), cancel_token, ());
+                if cancelled {
+                    bail!("task cancelled (process_data TFT fallback)");
+                }
+                retry_delay = std::cmp::min(retry_delay.saturating_mul(2), TFT_FALLBACK_MAX_RETRY_DELAY);
+            }
+        }
+        log::warn!(
+            "TFT products match data was not available for {}; falling back to generic match data",
+            match_id.game_id
+        );
+    }
+
     let timeline = timeline_data.unwrap_or_default();
 
     let queue = match game.queue_id {
@@ -484,6 +551,7 @@ pub async fn process_data_with_retry(
         match_id,
         ingame_time_rec_start_offset,
         highlights: vec![],
+        tft_round_markers: vec![],
         queue,
         player,
         champion_name,
@@ -530,16 +598,17 @@ async fn process_tft_fallback(
             stats: p.stats.clone(),
             lane: "NONE".to_string(),
             role: "NONE".to_string(),
-            summoner_name: if p.participant_id == participant_id {
-                format!("{}#{}", player.game_name, player.tag_line)
-            } else {
-                "Unknown".to_string()
-            },
-            summoner_id: if p.participant_id == participant_id {
-                player.summoner_id
-            } else {
-                None
-            },
+            summoner_name: game
+                .participant_identities
+                .iter()
+                .find(|pi| pi.participant_id == p.participant_id)
+                .map(|pi| format!("{}#{}", pi.player.game_name, pi.player.tag_line))
+                .unwrap_or_else(|| "Unknown".to_string()),
+            summoner_id: game
+                .participant_identities
+                .iter()
+                .find(|pi| pi.participant_id == p.participant_id)
+                .and_then(|pi| pi.player.summoner_id),
             honor_received: false,
             lane_score: 0.0,
             champ_level: None,
@@ -565,6 +634,7 @@ async fn process_tft_fallback(
         match_id,
         ingame_time_rec_start_offset,
         highlights: vec![],
+        tft_round_markers: vec![],
         queue,
         player,
         champion_name: "TFT Champion".into(),
@@ -577,6 +647,177 @@ async fn process_tft_fallback(
         game_version: game.game_version,
         game_duration: game.game_duration,
         lp_diff: None,
+    })
+}
+
+async fn fetch_tft_eog_fallback_if_exists(lcu_rest_client: &LcuRestClient, match_id: &MatchId) -> Option<Game> {
+    let eog = lcu_rest_client
+        .get::<serde_json::Value>("/lol-end-of-game/v1/tft-eog-stats")
+        .await
+        .ok()?;
+
+    if eog.get("gameId").and_then(|v| v.as_i64()) != Some(match_id.game_id) {
+        return None;
+    }
+
+    let players = eog.get("players").and_then(|v| v.as_array())?;
+    let current_player = lcu_rest_client
+        .get::<Player>("/lol-summoner/v1/current-summoner")
+        .await
+        .unwrap_or_else(|_| Player {
+            summoner_id: None,
+            game_name: "Unknown".into(),
+            tag_line: "TFT".into(),
+        });
+
+    let current_puuid = lcu_rest_client
+        .get::<serde_json::Value>("/lol-summoner/v1/current-summoner")
+        .await
+        .ok()
+        .and_then(|v| v["puuid"].as_str().map(String::from));
+
+    let mut participants = Vec::new();
+    let mut participant_identities = Vec::new();
+    for (i, eog_player) in players.iter().enumerate() {
+        let participant_id = (i + 1) as i64;
+        let puuid = eog_player.get("puuid").and_then(|v| v.as_str());
+        let is_self = eog_player
+            .get("isLocalPlayer")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+            || current_puuid.as_deref().is_some_and(|current| puuid == Some(current));
+
+        let game_name = eog_player
+            .get("riotIdGameName")
+            .and_then(|v| v.as_str())
+            .unwrap_or(if is_self { &current_player.game_name } else { "Unknown" });
+        let tag_line = eog_player
+            .get("riotIdTagLine")
+            .and_then(|v| v.as_str())
+            .unwrap_or(if is_self { &current_player.tag_line } else { "TFT" });
+        let summoner_id = eog_player.get("summonerId").and_then(|v| v.as_i64()).or(if is_self {
+            current_player.summoner_id
+        } else {
+            None
+        });
+
+        participant_identities.push(riot_datatypes::lcu::ParticipantIdentity {
+            participant_id,
+            player: Player {
+                game_name: game_name.to_string(),
+                tag_line: tag_line.to_string(),
+                summoner_id,
+            },
+        });
+
+        let mut trait_counts: HashMap<String, i64> = HashMap::new();
+        let units = eog_player
+            .get("boardPieces")
+            .and_then(|v| v.as_array())
+            .map(|board_pieces| {
+                board_pieces
+                    .iter()
+                    .map(|unit| {
+                        for trait_value in unit.get("traits").and_then(|v| v.as_array()).into_iter().flatten() {
+                            if let Some(name) = trait_value
+                                .get("id")
+                                .and_then(|v| v.as_str())
+                                .or_else(|| trait_value.get("name").and_then(|v| v.as_str()))
+                            {
+                                *trait_counts.entry(name.to_string()).or_default() += 1;
+                            }
+                        }
+
+                        let item_names = unit
+                            .get("items")
+                            .and_then(|v| v.as_array())
+                            .map(|items| {
+                                items
+                                    .iter()
+                                    .filter_map(|item| item.get("nameId").and_then(|v| v.as_str()).map(str::to_string))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+
+                        riot_datatypes::lcu::TftUnit {
+                            character_id: unit
+                                .get("championId")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_default()
+                                .to_string(),
+                            name: unit
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_default()
+                                .to_string(),
+                            rarity: unit
+                                .get("price")
+                                .and_then(|v| v.as_i64())
+                                .unwrap_or(1)
+                                .saturating_sub(1),
+                            tier: unit.get("level").and_then(|v| v.as_i64()).unwrap_or(1),
+                            item_names,
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let traits = trait_counts
+            .into_iter()
+            .map(|(name, num_units)| riot_datatypes::lcu::TftTrait {
+                name,
+                num_units,
+                style: 0,
+                tier_current: 1,
+                tier_total: 3,
+            })
+            .collect::<Vec<_>>();
+
+        participants.push(riot_datatypes::lcu::Participant {
+            participant_id,
+            team_id: if is_self { 100 } else { 200 },
+            champion_id: 0,
+            spell1_id: 0,
+            spell2_id: 0,
+            stats: Default::default(),
+            timeline: None,
+            placement: eog_player.get("ffaStanding").and_then(|v| v.as_i64()),
+            players_eliminated: Some(0),
+            level: Some(units.len() as i64),
+            r#traits: Some(traits),
+            units: Some(units),
+            companion: Some(riot_datatypes::lcu::TftCompanion {
+                content_i_d: String::new(),
+                skin_i_d: 0,
+                species: eog_player
+                    .get("companion")
+                    .and_then(|v| v.get("speciesName"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+            }),
+        });
+    }
+
+    log::info!(
+        "TFT Match {} found in end-of-game stats endpoint. Emulating standard Match Data.",
+        match_id.game_id
+    );
+
+    Some(Game {
+        game_version: players
+            .iter()
+            .find_map(|p| p.get("setCoreName").and_then(|v| v.as_str()))
+            .unwrap_or("TFT_EOG_Fallback")
+            .to_string(),
+        game_id: match_id.game_id,
+        map_id: 22,
+        queue_id: eog.get("queueId").and_then(|v| v.as_i64()).unwrap_or(1090),
+        game_duration: eog.get("gameLength").and_then(|v| v.as_i64()).unwrap_or_default() * 1000,
+        participant_identities,
+        participants,
+        teams: vec![],
     })
 }
 
@@ -647,6 +888,12 @@ async fn fetch_tft_fallback_if_exists(lcu_rest_client: &LcuRestClient, match_id:
                 };
                 return Some(dummy_game);
             }
+            log::info!(
+                "TFT products history loaded but match {} was not present",
+                match_id.game_id
+            );
+        } else if let Err(e) = tft_history_res {
+            log::warn!("failed to fetch/parse TFT products history: {e}");
         }
     }
     None

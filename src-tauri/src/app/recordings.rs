@@ -192,7 +192,7 @@ pub mod action {
     use tauri::async_runtime;
 
     use crate::recorder::MetadataFile;
-    use crate::recorder::{self, Deferred, GameMetadata, NoData, Participant};
+    use crate::recorder::{self, Deferred, GameMetadata, NoData, Participant, TftRoundMarker};
 
     #[derive(Debug, Deserialize)]
     enum MetadataFileList {
@@ -209,6 +209,8 @@ pub mod action {
         ingame_time_rec_start_offset: f64,
         #[serde(default)]
         highlights: Vec<f64>,
+        #[serde(default)]
+        tft_round_markers: Vec<TftRoundMarker>,
         queue: Queue,
         player: lcu::Player,
         champion_name: String,
@@ -235,6 +237,8 @@ pub mod action {
         #[serde(default)]
         highlights: Vec<f64>,
         #[serde(default)]
+        tft_round_markers: Vec<TftRoundMarker>,
+        #[serde(default)]
         participants: Vec<Participant>,
     }
 
@@ -246,6 +250,7 @@ pub mod action {
                     match_id: meta.match_id,
                     ingame_time_rec_start_offset: meta.ingame_time_rec_start_offset,
                     highlights: meta.highlights,
+                    tft_round_markers: meta.tft_round_markers,
                     queue: meta.queue,
                     player: meta.player,
                     champion_name: meta.champion_name,
@@ -264,6 +269,7 @@ pub mod action {
                     match_id: def.match_id,
                     ingame_time_rec_start_offset: def.ingame_time_rec_start_offset,
                     highlights: def.highlights,
+                    tft_round_markers: def.tft_round_markers,
                     events: vec![],
                     participants: def.participants,
                 }),
@@ -338,6 +344,7 @@ pub mod action {
                 ingame_time_rec_start_offset,
                 favorite,
                 highlights,
+                tft_round_markers,
                 events: _,
                 participants: _,
             }) if fetch => {
@@ -345,6 +352,7 @@ pub mod action {
                     async_runtime::block_on(recorder::process_data(ingame_time_rec_start_offset, match_id, vec![]))?;
                 metadata.favorite = favorite;
                 metadata.highlights = highlights;
+                metadata.tft_round_markers = tft_round_markers;
                 let metadata_file = MetadataFile::Metadata(metadata);
                 if let Err(e) = save_recording_metadata(&metadata_path, &metadata_file) {
                     log::error!("failed to save re-processed game metadata: {e}");

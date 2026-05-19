@@ -321,6 +321,24 @@ body:has(.vjs-fullscreen) {
 .vjs-marker.herald { color: rgb(234, 0, 255); z-index: 13 !important; --marker-core-width: 6px; }
 .vjs-marker.baron { color: rgb(123, 0, 255); z-index: 13; --marker-core-width: 6px; opacity: 0.7 !important; }
 .vjs-marker.highlight { color: rgb(255, 170, 0); z-index: 12; }
+.vjs-marker.tft-round { color: rgb(0, 210, 255); z-index: 14; --marker-core-width: 7px; opacity: 0.85 !important; }
+.vjs-marker.tft-round.tft-stage-1 { color: rgb(0, 210, 255); }
+.vjs-marker.tft-round.tft-stage-2 { color: rgb(72, 255, 150); }
+.vjs-marker.tft-round.tft-stage-3 { color: rgb(255, 214, 64); }
+.vjs-marker.tft-round.tft-stage-4 { color: rgb(255, 128, 64); }
+.vjs-marker.tft-round.tft-stage-5 { color: rgb(255, 82, 170); }
+.vjs-marker.tft-round.tft-stage-6 { color: rgb(176, 115, 255); }
+.vjs-marker.tft-round.tft-stage-7 { color: rgb(255, 255, 255); }
+
+.video-js.lr-tft-mode .vjs-marker.tft-round {
+    width: var(--marker-core-width) !important;
+    margin-left: 0 !important;
+}
+
+.video-js.lr-tft-mode .vjs-marker.tft-round::after {
+    left: 0;
+    transform: none;
+}
 
 /* =========================================================================
    6. VIDEO.JS CONTROL BAR
