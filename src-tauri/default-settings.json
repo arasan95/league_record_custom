@@ -51,5 +51,15 @@
   "championBuildSubUrl": "https://www.onetricks.gg/ja/champions/builds/{nameEsc}",
   "checkUpdatesOnStartup": true,
   "keepVideoJsonOnAutoDelete": true,
-  "autoDeleteClips": false
+  "autoDeleteClips": false,
+  "tftRoundOcrEnabled": true,
+  "tftRoundOcrRegion": {
+    "anchor": "center",
+    "x": 0.3495,
+    "centerOffsetX": -0.0905,
+    "y": 0.009,
+    "width": 0.12,
+    "height": 0.024
+  },
+  "tftRoundOcrIntervalSeconds": 2.0
 }

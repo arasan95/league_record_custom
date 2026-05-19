@@ -105,6 +105,7 @@ export function showSettingsModalView(input: {
         generalControls.groups.framerateGroup,
         generalControls.groups.recordAudioGroup,
         generalControls.groups.applicationAudioTracksGroup,
+        generalControls.groups.tftRoundOcrGroup,
         generalControls.groups.maxAgeGroup,
         generalControls.groups.maxSizeGroup,
     );
@@ -176,6 +177,7 @@ export function showSettingsModalView(input: {
                     enabled: control.enabledToggle.dataset.enabled === "1",
                     volumePercent: Math.max(0, Math.min(100, parseInt(control.volumeInput.value || "100", 10) || 0)),
                 })),
+                tftRoundOcrEnabled: generalControls.refs.tftRoundOcrControls.enabledSwitch.input.checked,
                 maxRecordingAgeDays: generalControls.refs.maxAgeInput.value,
                 maxRecordingsSizeGb: generalControls.refs.maxSizeInput.value,
                 highlightHotkeyValue,

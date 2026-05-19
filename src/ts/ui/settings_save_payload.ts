@@ -60,6 +60,7 @@ export type BuildSettingsPayloadInput = {
         enabled: boolean;
         volumePercent: number;
     }>;
+    tftRoundOcrEnabled: boolean;
     maxRecordingAgeDays: string;
     maxRecordingsSizeGb: string;
     highlightHotkeyValue: string | null;
@@ -90,7 +91,6 @@ export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings
     }
 
     const [framerateN, framerateD] = input.framerate.split("/");
-
     return {
         ...input.base,
         language: input.language as any,
@@ -114,6 +114,7 @@ export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings
             enabled: !!track.enabled,
             volumePercent: Math.max(0, Math.min(100, Math.round(track.volumePercent))),
         })),
+        tftRoundOcrEnabled: input.tftRoundOcrEnabled,
         maxRecordingAgeDays: input.maxRecordingAgeDays === "" ? null : parseInt(input.maxRecordingAgeDays, 10),
         maxRecordingsSizeGb: input.maxRecordingsSizeGb === "" ? null : parseInt(input.maxRecordingsSizeGb, 10),
         hightlightHotkey: input.highlightHotkeyValue,
