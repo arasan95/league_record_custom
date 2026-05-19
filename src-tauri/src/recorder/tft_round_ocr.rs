@@ -143,6 +143,9 @@ async fn run_loop(app_handle: AppHandle, metadata_path: PathBuf, cancel_token: C
             let settings_state = app_handle.state::<SettingsWrapper>();
             let settings_wrapper: &SettingsWrapper = &settings_state;
             let settings = settings_wrapper.inner();
+            if !settings.tft_round_ocr_enabled {
+                return Ok(());
+            }
             (
                 settings.tft_round_ocr_region,
                 settings.tft_round_ocr_interval_seconds.clamp(0.5, 10.0),
@@ -158,7 +161,7 @@ async fn run_loop(app_handle: AppHandle, metadata_path: PathBuf, cancel_token: C
                     stable_count = 1;
                 }
 
-                if stable_count >= 1 && last_round.as_deref() != Some(round.as_str()) {
+                if stable_count >= 2 && last_round.as_deref() != Some(round.as_str()) {
                     match append_round_marker(&metadata_path, round.clone()).await {
                         Ok(true) => {
                             last_round = Some(round.clone());
@@ -226,6 +229,13 @@ fn backfill_from_recording_blocking(
         bail!("video file not found: {}", video_path.display());
     }
 
+    let settings_state = app_handle.state::<SettingsWrapper>();
+    let settings_wrapper: &SettingsWrapper = &settings_state;
+    let settings = settings_wrapper.inner();
+    if !settings.tft_round_ocr_enabled {
+        return Ok(0);
+    }
+
     let mut metadata = action::get_recording_metadata(&metadata_path, false)?;
     let (offset_ms, existing_markers) = match &metadata {
         MetadataFile::Metadata(m) => (m.ingame_time_rec_start_offset * 1000.0, m.tft_round_markers.clone()),
@@ -233,13 +243,11 @@ fn backfill_from_recording_blocking(
         MetadataFile::NoData(_) => return Ok(0),
     };
 
-    let settings_state = app_handle.state::<SettingsWrapper>();
-    let settings_wrapper: &SettingsWrapper = &settings_state;
     let ffmpeg_cmd = settings_wrapper
         .ffmpeg_path()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| "ffmpeg".to_string());
-    let region = settings_wrapper.inner().tft_round_ocr_region;
+    let region = settings.tft_round_ocr_region;
     let filter = format!(
         "fps=1/{OFFLINE_SAMPLE_SECONDS},crop=iw*{w}:ih*{h}:iw*{x}:ih*{y},scale={OFFLINE_CROP_WIDTH}:{OFFLINE_CROP_HEIGHT}:flags=neighbor,format=rgb24",
         w = region.width.clamp(0.01, 1.0),
@@ -283,11 +291,26 @@ fn backfill_from_recording_blocking(
     let mut scanned_markers = Vec::new();
     let mut last_round: Option<String> = None;
     let mut last_key = (0u32, 0u32);
+    let mut stable_round: Option<String> = None;
+    let mut stable_count = 0u8;
+    let mut stable_first_index = 0usize;
     for (frame_index, frame) in output.stdout.chunks_exact(frame_size).enumerate() {
         let capture = capture_from_rgb_frame(OFFLINE_CROP_WIDTH, OFFLINE_CROP_HEIGHT, frame);
         let Some(round) = recognize_round(&capture)? else {
+            stable_round = None;
+            stable_count = 0;
             continue;
         };
+        if stable_round.as_deref() == Some(round.as_str()) {
+            stable_count = stable_count.saturating_add(1);
+        } else {
+            stable_round = Some(round.clone());
+            stable_count = 1;
+            stable_first_index = frame_index;
+        }
+        if stable_count < 2 {
+            continue;
+        }
         if last_round.as_deref() == Some(round.as_str()) {
             continue;
         }
@@ -298,7 +321,7 @@ fn backfill_from_recording_blocking(
             continue;
         }
 
-        let timestamp = offset_ms + frame_index as f64 * OFFLINE_SAMPLE_SECONDS * 1000.0;
+        let timestamp = offset_ms + stable_first_index as f64 * OFFLINE_SAMPLE_SECONDS * 1000.0;
         scanned_markers.push(TftRoundMarker {
             round: round.clone(),
             timestamp,
@@ -342,6 +365,25 @@ fn round_key(round: &str) -> Option<(u32, u32)> {
     Some((stage.parse().ok()?, round.parse().ok()?))
 }
 
+fn is_plausible_first_marker(key: (u32, u32), timestamp: f64) -> bool {
+    if timestamp < 90_000.0 {
+        return key.0 == 1 && key.1 <= 4;
+    }
+    if timestamp < 180_000.0 {
+        return key.0 <= 2;
+    }
+    true
+}
+
+fn is_plausible_transition(previous: (u32, u32), next: (u32, u32), elapsed_ms: f64) -> bool {
+    if next <= previous {
+        return false;
+    }
+    let nearby = (next.0 == previous.0 && next.1 <= previous.1 + 2)
+        || (next.0 == previous.0 + 1 && previous.1 >= 3 && next.1 <= 2);
+    nearby || elapsed_ms >= 300_000.0
+}
+
 fn merge_markers(mut existing: Vec<TftRoundMarker>, scanned: Vec<TftRoundMarker>) -> Vec<TftRoundMarker> {
     existing.extend(scanned);
     existing.sort_by(|a, b| {
@@ -351,17 +393,25 @@ fn merge_markers(mut existing: Vec<TftRoundMarker>, scanned: Vec<TftRoundMarker>
     });
 
     let mut seen = Vec::<String>::new();
-    let mut last_key = (0u32, 0u32);
-    let mut merged = Vec::new();
+    let mut merged: Vec<TftRoundMarker> = Vec::new();
     for marker in existing {
         let Some(key) = round_key(&marker.round) else {
             continue;
         };
-        if key < last_key || seen.iter().any(|round| round == &marker.round) {
+        if seen.iter().any(|round| round == &marker.round) {
+            continue;
+        }
+        if let Some(last) = merged.last() {
+            let Some(last_key) = round_key(&last.round) else {
+                continue;
+            };
+            if !is_plausible_transition(last_key, key, marker.timestamp - last.timestamp) {
+                continue;
+            }
+        } else if !is_plausible_first_marker(key, marker.timestamp) {
             continue;
         }
         seen.push(marker.round.clone());
-        last_key = key;
         merged.push(marker);
     }
     merged
@@ -374,11 +424,14 @@ fn append_marker(markers: &mut Vec<TftRoundMarker>, marker: TftRoundMarker) -> b
     let Some(next_key) = round_key(&marker.round) else {
         return false;
     };
-    if markers
-        .last()
-        .and_then(|last| round_key(&last.round))
-        .is_some_and(|last_key| next_key <= last_key)
-    {
+    if let Some(last) = markers.last() {
+        let Some(last_key) = round_key(&last.round) else {
+            return false;
+        };
+        if !is_plausible_transition(last_key, next_key, marker.timestamp - last.timestamp) {
+            return false;
+        }
+    } else if !is_plausible_first_marker(next_key, marker.timestamp) {
         return false;
     }
 
@@ -509,14 +562,10 @@ fn foreground_mask(capture: &Capture) -> Vec<bool> {
             let min = r.min(g).min(b);
             let lum = (r * 30 + g * 59 + b * 11) / 100;
 
-            mask[y * capture.width + x] = (r > 120
-                && g > 105
-                && b < 150
-                && r >= g - 25
-                && r > b + 25
-                && max - min > 20)
-                || (r > 185 && g > 170 && b > 130 && b < 235)
-                || lum > 220;
+            mask[y * capture.width + x] =
+                (r > 120 && g > 105 && b < 150 && r >= g - 25 && r > b + 25 && max - min > 20)
+                    || (r > 185 && g > 170 && b > 130 && b < 235)
+                    || lum > 220;
         }
     }
     mask
@@ -579,7 +628,10 @@ fn split_components(
     let mut merged: Vec<(usize, usize)> = Vec::new();
     for run in runs {
         if let Some(prev) = merged.last_mut() {
-            if run.0.saturating_sub(prev.1) <= 2 {
+            let gap = run.0.saturating_sub(prev.1);
+            let prev_width = prev.1.saturating_sub(prev.0) + 1;
+            let run_width = run.1.saturating_sub(run.0) + 1;
+            if gap <= 1 || (gap <= 5 && (prev_width <= 5 || run_width <= 5)) {
                 prev.1 = run.1;
                 continue;
             }
@@ -591,6 +643,9 @@ fn split_components(
         .into_iter()
         .filter_map(|(x1, x2)| {
             if x2.saturating_sub(x1) + 1 < 2 {
+                return None;
+            }
+            if x2 < width / 4 {
                 return None;
             }
 
@@ -610,10 +665,10 @@ fn split_components(
             let component_w = x2.saturating_sub(x1) + 1;
             let component_h = y2.saturating_sub(y1) + 1;
             let is_hyphen = component_h <= 3 && component_w >= 2 && pixels >= 4;
-            let is_icon_like = component_h as f64 > image_height as f64 * 0.55;
+            let is_icon_like =
+                component_h as f64 > image_height as f64 * 0.75 && component_w as f64 > component_h as f64 * 0.45;
             if is_icon_like
-                || (!is_hyphen
-                    && (pixels < MIN_FOREGROUND_PIXELS || component_h < 5 || component_w > component_h * 3))
+                || (!is_hyphen && (pixels < MIN_FOREGROUND_PIXELS || component_h < 5 || component_w > component_h * 3))
             {
                 return None;
             }
@@ -658,7 +713,7 @@ fn recognize_glyph(glyph: &[[bool; 5]; 7], source_w: usize, source_h: usize) -> 
     if source_w >= source_h * 2 {
         return Some('-');
     }
-    if source_w * 100 < source_h * 45 {
+    if source_w * 100 < source_h * 60 {
         return Some('1');
     }
 
@@ -672,7 +727,7 @@ fn recognize_glyph(glyph: &[[bool; 5]; 7], source_w: usize, source_h: usize) -> 
         }
     }
 
-    if best_score > 12 {
+    if best_score > 15 {
         return None;
     }
     best
@@ -700,7 +755,7 @@ fn normalize_round_text(text: &str) -> Option<String> {
                 round_text.push(chars[i + 3]);
             }
             let round = round_text.parse::<u32>().ok()?;
-    if (1..=7).contains(&stage) && (1..=10).contains(&round) {
+            if (1..=7).contains(&stage) && (1..=10).contains(&round) {
                 return Some(format!("{}-{}", chars[i], round_text));
             }
         }
@@ -753,12 +808,28 @@ fn templates() -> Vec<(char, [[bool; 5]; 7])> {
             template([".####", "...#.", ".....", "...##", ".....", "....#", "####."]),
         ),
         (
+            '3',
+            template(["...##", "...#.", "..#..", ".###.", "....#", "....#", "##.##"]),
+        ),
+        (
+            '3',
+            template(["....#", "...#.", "..#..", "....#", "....#", "#....", "#.#.."]),
+        ),
+        (
             '4',
             template(["#...#", "#...#", "#...#", "#####", "....#", "....#", "....#"]),
         ),
         (
+            '4',
+            template(["...#.", ".####", ".#.##", "...##", "#####", ".####", "...##"]),
+        ),
+        (
             '5',
             template(["#####", "#....", "#....", "#####", "....#", "....#", "#####"]),
+        ),
+        (
+            '5',
+            template([".###.", "#...#", "#...#", "....#", "...#.", "..##.", ".####"]),
         ),
         (
             '6',
