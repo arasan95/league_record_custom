@@ -8,6 +8,7 @@ import {
     getChampionIconUrlById,
     getTftItemIconUrl,
     getTftTraitIconUrl,
+    getTftTraitStyleClass,
     getTftUnitIconUrl,
 } from "../datadragon";
 import { getText } from "../i18n";
@@ -578,7 +579,7 @@ async function resolveAndApplyMask(params: {
     stats: SidebarImagePerfStats;
     label: string;
     resolver: () => Promise<string>;
-    apply: (url: string) => void;
+    apply: (url: string) => void | Promise<void>;
 }): Promise<void> {
     const { stats, label, resolver, apply } = params;
     const resolveStarted = perfNowMs();
@@ -595,9 +596,8 @@ async function resolveAndApplyMask(params: {
     }
     if (!url) {
         stats.errorCount += 1;
-        return;
     }
-    apply(url);
+    await apply(url);
 }
 
 export function createRecordingSidebarItem(input: {
@@ -638,8 +638,10 @@ export function createRecordingSidebarItem(input: {
     const mainContent = document.createElement("div");
     mainContent.className = "recording-content";
     let scheduleImageLoadForItem: ((el: HTMLElement) => void) | null = null;
+    let hasSidebarMetadata = false;
 
     if (recording.metadata && "Metadata" in recording.metadata) {
+        hasSidebarMetadata = true;
         liClass += " has-metadata";
         const meta = recording.metadata.Metadata;
         const dateStr = formatSidebarDate(videoName);
@@ -837,17 +839,33 @@ export function createRecordingSidebarItem(input: {
                             .slice(0, 7);
                         for (let i = 0; i < Math.min(traitImgs.length, activeTraits.length); i++) {
                             const el = traitImgs[i] as HTMLElement;
+                            const trait = activeTraits[i];
                             tasks.push(
                                 enqueueSidebarImageTask(() => resolveAndApplyMask({
                                     stats: perfStats,
                                     label: "tft_trait_icon",
-                                    resolver: async () => getTftTraitIconUrl(activeTraits[i].name),
-                                    apply: (url) => {
-                                    el.style.webkitMaskImage = `url("${url}")`;
-                                    el.style.webkitMaskSize = "contain";
-                                    el.style.webkitMaskRepeat = "no-repeat";
-                                    el.style.webkitMaskPosition = "center";
-                                    el.style.backgroundColor = "currentColor";
+                                    resolver: async () => getTftTraitIconUrl(trait.name),
+                                    apply: async (url) => {
+                                        if (url) {
+                                            el.style.webkitMaskImage = `url("${url}")`;
+                                            el.style.webkitMaskSize = "contain";
+                                            el.style.webkitMaskRepeat = "no-repeat";
+                                            el.style.webkitMaskPosition = "center";
+                                            el.style.backgroundColor = "currentColor";
+                                        }
+                                        const correctedClass = await getTftTraitStyleClass(trait.name, trait.numUnits);
+                                        const wrapper = el.closest(".tft-trait-wrapper");
+                                        if (wrapper && correctedClass) {
+                                            wrapper.classList.remove(
+                                                "tft-prismatic",
+                                                "tft-gold",
+                                                "tft-silver",
+                                                "tft-bronze",
+                                                "tft-inactive",
+                                                "tft-unique",
+                                            );
+                                            wrapper.classList.add(correctedClass);
+                                        }
                                     },
                                 })),
                             );
@@ -949,6 +967,48 @@ export function createRecordingSidebarItem(input: {
         };
 
         displayContent = [mainContent];
+    } else if (recording.metadata && "Deferred" in recording.metadata && (recording.metadata.Deferred.tftRoundMarkers?.length ?? 0) > 0) {
+        hasSidebarMetadata = true;
+        liClass += " has-metadata tft-match";
+        const deferred = recording.metadata.Deferred;
+        const markers = deferred.tftRoundMarkers ?? [];
+        const dateStr = formatSidebarDate(videoName);
+        const durationSec = Math.max(0, Math.floor(((markers.at(-1)?.timestamp ?? 0) / 1000) - deferred.ingameTimeRecStartOffset));
+        const timeStr = formatDurationMmSs(durationSec);
+        const lastRound = markers.at(-1)?.round ?? "-";
+
+        const mainCol = createEl("div", {}, { class: "sidebar-main" });
+        const headerRow = createEl("div", {}, { class: "sidebar-header-row" });
+        headerRow.append(
+            createEl("span", {}, { class: "sidebar-time" }, timeStr),
+            createEl("span", {}, { class: "sidebar-mode" }, "TFT"),
+            createEl("span", {}, { class: "sidebar-placement tft-top4" }, lastRound),
+            createEl("div", {}, { class: "sidebar-date" }, dateStr),
+        );
+
+        const bodyRow = createEl("div", {}, { class: "sidebar-body-row" });
+        const statsCol = createEl("div", {}, { class: "sidebar-stats tft-stats" });
+        statsCol.append(
+            createEl("span", {}, { class: "sidebar-kda" }, `${markers.length} rounds`),
+            createEl("span", {}, { class: "sidebar-cs" }, `Game ${deferred.matchId.platformId}-${deferred.matchId.gameId}`),
+        );
+        bodyRow.append(statsCol);
+
+        const sidebarBadges = createEl("div", {}, { class: "sidebar-badges" });
+        if (favorite) {
+            sidebarBadges.append(
+                createEl(
+                    "span",
+                    {},
+                    { class: "sidebar-favorite-badge", title: tooltipText("お気に入り", "Favorite") },
+                    "\u2605",
+                ),
+            );
+        }
+
+        mainCol.append(headerRow, bodyRow, sidebarBadges);
+        mainContent.append(mainCol);
+        displayContent = [mainContent];
     } else if (isClipRecording) {
         const clipName = createEl("span", {}, { class: "video-name" }) as HTMLSpanElement;
         clipName.append(createClipIconElement(), document.createTextNode(` ${videoName}`));
@@ -1018,7 +1078,7 @@ export function createRecordingSidebarItem(input: {
         li.dataset.hasMetadata = recording.metadata.Metadata.queue.name !== "Unknown Queue" ? "true" : "false";
         li.append(mainContent);
     } else {
-        li.dataset.hasMetadata = "false";
+        li.dataset.hasMetadata = hasSidebarMetadata ? "true" : "false";
         li.append(...displayContent);
     }
     li.append(actionsDiv);

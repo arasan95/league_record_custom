@@ -277,15 +277,22 @@ function createMarker(
     lane: MarkerLane,
     eventDelay: number,
     detailId?: number,
+    extraClass = "",
 ): MarkerOptions {
     const laneLabel = lane === "self" ? "" : lane === "blue" ? "Blue " : "Red ";
     const detailClass = typeof detailId === "number" ? ` lr-ev-${detailId}` : "";
+    const normalizedExtraClass = extraClass ? ` ${extraClass}` : "";
     return {
         time: timestamp / 1000 - recordingOffset - eventDelay,
         text: `${laneLabel}${eventType}`,
-        class: `${eventType.toLowerCase()} lane-${lane} ${lane === "self" ? "self-marker" : "team-marker"}${detailClass}`,
+        class: `${eventType.toLowerCase()} lane-${lane} ${lane === "self" ? "self-marker" : "team-marker"}${detailClass}${normalizedExtraClass}`,
         duration: 2 * eventDelay,
     };
+}
+
+function tftRoundStageClass(round: string): string {
+    const stage = round.split("-", 1)[0];
+    return /^[1-7]$/.test(stage) ? `tft-stage-${stage}` : "";
 }
 
 export function buildMarkers(
@@ -325,9 +332,11 @@ export function buildMarkers(
         markerType: OtherMarkerType,
         lane: MarkerLane,
         label: string,
+        markerEventDelay = eventDelay,
+        extraClass = "",
     ) => {
         const id = nextDetailId++;
-        markers.push(createMarker(timestampMs, recordingOffset, markerType as EventType, lane, eventDelay, id));
+        markers.push(createMarker(timestampMs, recordingOffset, markerType as EventType, lane, markerEventDelay, id, extraClass));
         details[id] = {
             id,
             kind: "Other",
@@ -389,7 +398,15 @@ export function buildMarkers(
     }
     if (tftRoundEvents !== null) {
         for (const event of tftRoundEvents.events) {
-            pushOtherMarker(event.timestamp, tftRoundEvents.recordingOffset, "TFT-Round", "self", event.round);
+            pushOtherMarker(
+                event.timestamp,
+                tftRoundEvents.recordingOffset,
+                "TFT-Round",
+                "self",
+                event.round,
+                0,
+                tftRoundStageClass(event.round),
+            );
         }
     }
     if (currentEvents !== null) {

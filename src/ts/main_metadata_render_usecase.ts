@@ -4,6 +4,7 @@ import type { HighlightEvents, RecordingEvents, TftRoundEvents } from "./main_ma
 type MetadataUiLike = {
     showMarkerFlags(show: boolean): void;
     setRecordingOffset(offset: number): void;
+    setTftMode(enabled: boolean): void;
     setVideoDescriptionMetadata(data: GameMetadata): Promise<void>;
     clearVideoMetadata(): void;
 };
@@ -88,6 +89,7 @@ async function applyDeferredBranch(ui: MetadataUiLike, deferred: Deferred): Prom
         `[diagnose] deferred-summary events=${deferred.events?.length ?? 0} highlights=${deferred.highlights?.length ?? 0} participants=${deferred.participants?.length ?? 0}`,
     );
     ui.setRecordingOffset(deferred.ingameTimeRecStartOffset);
+    ui.setTftMode((deferred.tftRoundMarkers?.length ?? 0) > 0);
 
     const synthesized = buildDeferredSyntheticMetadata(deferred);
     if (synthesized) {

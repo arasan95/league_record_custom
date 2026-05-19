@@ -2,14 +2,10 @@
     "notes": [
         "[日本語]",
         "主な変更点:",
-        "- LoLアップデート後にLCUのplatformId取得APIが404になる環境で、自動録画が開始されない問題を修正",
-        "- platformIdを取得できない場合でも録画監視を継続し、region-localeからサーバーIDを推定するよう改善",
-        "- LoLゲーム画面のウィンドウ検出を強化し、固定タイトル完全一致に依存しないよう改善",
+        "- TFTの録画にマーカーを追加できるようになりました",
         "",
         "[English]",
         "Highlights:",
-        "- Fixed auto recording not starting after LoL updates when the LCU platformId endpoint returns 404",
-        "- Recording listener now continues even if platformId cannot be fetched, and infers the server ID from region-locale when possible",
-        "- Improved LoL game window detection so it no longer depends only on an exact fixed window title"
+        "- Added marker support for TFT recordings"
     ]
 }

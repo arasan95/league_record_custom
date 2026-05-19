@@ -44,6 +44,10 @@ fn team_id_str(team: &shaco::model::ingame::TeamId) -> &'static str {
     }
 }
 
+fn is_tft_queue_id(queue_id: i64) -> bool {
+    matches!(queue_id, 1090 | 1100 | 1110 | 1130 | 1160 | 1220)
+}
+
 fn build_live_player_fallback_key(player: &shaco::model::ingame::Player) -> String {
     let riot_key = player
         .riot_id
@@ -215,7 +219,7 @@ pub struct ApiCtx {
 }
 
 impl ApiCtx {
-    fn game_ctx(&self, game_id: GameId) -> GameCtx {
+    fn game_ctx(&self, game_id: GameId, is_tft: bool) -> GameCtx {
         GameCtx {
             app_handle: self.app_handle.clone(),
             match_id: MatchId {
@@ -223,6 +227,7 @@ impl ApiCtx {
                 platform_id: self.platform_id.clone(),
             },
             cancel_token: self.cancel_token.child_token(),
+            is_tft,
         }
     }
 }
@@ -264,6 +269,7 @@ pub struct GameListener {
     missing_window_ticks: u8,
     terminal_live_event: Arc<Mutex<Option<String>>>,
     latest_session_game_id: Option<GameId>,
+    latest_session_is_tft: bool,
     end_of_game_since: Option<Instant>,
     end_of_game_finalize_requested: bool,
 }
@@ -283,6 +289,7 @@ impl GameListener {
             missing_window_ticks: 0,
             terminal_live_event: Arc::new(Mutex::new(None)),
             latest_session_game_id: None,
+            latest_session_is_tft: false,
             end_of_game_since: None,
             end_of_game_finalize_requested: false,
         }
@@ -515,6 +522,8 @@ impl GameListener {
             Ok(init_event_data) => {
                 if init_event_data.game_data.game_id > 0 {
                     self.latest_session_game_id = Some(init_event_data.game_data.game_id);
+                    self.latest_session_is_tft = is_tft_queue_id(init_event_data.game_data.queue.id)
+                        || init_event_data.game_data.game_mode.as_deref() == Some("TFT");
                 }
                 self.state_transition(SubscriptionResponse::Session(init_event_data), false)
                     .await;
@@ -527,6 +536,7 @@ impl GameListener {
         let prewarm_ctx = self.ctx.game_ctx(
             self.latest_session_game_id
                 .unwrap_or_else(|| Utc::now().timestamp_millis()),
+            self.latest_session_is_tft,
         );
         async_runtime::spawn(async move {
             if let Err(e) = RecordingTask::prewarm(prewarm_ctx).await {
@@ -548,6 +558,8 @@ impl GameListener {
                             if let SubscriptionResponse::Session(session) = &event_data {
                                 if session.game_data.game_id > 0 {
                                     self.latest_session_game_id = Some(session.game_data.game_id);
+                                    self.latest_session_is_tft = is_tft_queue_id(session.game_data.queue.id)
+                                        || session.game_data.game_mode.as_deref() == Some("TFT");
                                 }
                             }
                             let transition_event =
@@ -625,7 +637,7 @@ impl GameListener {
                         ));
 
                         self.state = State::Recording(
-                            RecordingTask::new_manual(self.ctx.game_ctx(game_id)),
+                            RecordingTask::new_manual(self.ctx.game_ctx(game_id, self.latest_session_is_tft)),
                             HighlightTask::new(self.ctx.app_handle.clone()),
                             live_task,
                             live_events,
@@ -730,6 +742,7 @@ impl GameListener {
                         queue.is_ranked,
                         game_mode
                     );
+                    let is_tft_game = is_tft_queue_id(queue.id) || game_mode.as_deref() == Some("TFT");
 
                     let settings = self.ctx.app_handle.state::<SettingsWrapper>();
 
@@ -906,7 +919,7 @@ impl GameListener {
                         }
 
                         State::Recording(
-                            RecordingTask::new(self.ctx.game_ctx(game_id)),
+                            RecordingTask::new(self.ctx.game_ctx(game_id, is_tft_game)),
                             HighlightTask::new(self.ctx.app_handle.clone()),
                             live_task,
                             live_events,
@@ -921,7 +934,7 @@ impl GameListener {
                         // manual hotkey start doesn't pay the full initialization cost later.
                         if Some(game_id) != self.last_manual_prewarm_game_id {
                             self.last_manual_prewarm_game_id = Some(game_id);
-                            let prewarm_ctx = self.ctx.game_ctx(game_id);
+                            let prewarm_ctx = self.ctx.game_ctx(game_id, is_tft_game);
                             let app_handle_clone = self.ctx.app_handle.clone();
                             async_runtime::spawn(async move {
                                 app_handle_clone.set_tray_menu_preparing(true);
@@ -1281,24 +1294,28 @@ impl GameListener {
                                     game_metadata.tft_round_markers = deferred.tft_round_markers;
                                 }
 
+                                let is_tft_metadata = is_tft_queue_id(game_metadata.queue.id);
+
                                 // Calculate LP Diff
-                                if let Some(s_lp) = start_lp {
-                                    // Wait a bit for LCU to update before fetching end LP?
-                                    // Actually process_dataWithRetry already takes some time.
-                                    // But user asked for "wait a few seconds after game end".
-                                    // The EndOfGame state transition happens immediately on EOG session event.
-                                    // process_data_with_retry does retries, but maybe we should explicitly wait/fetch here?
-                                    // Let's try fetching current LP now.
+                                if !is_tft_metadata {
+                                    if let Some(s_lp) = start_lp {
+                                        // Wait a bit for LCU to update before fetching end LP?
+                                        // Actually process_dataWithRetry already takes some time.
+                                        // But user asked for "wait a few seconds after game end".
+                                        // The EndOfGame state transition happens immediately on EOG session event.
+                                        // process_data_with_retry does retries, but maybe we should explicitly wait/fetch here?
+                                        // Let's try fetching current LP now.
 
-                                    // Wait 3 seconds to be safe (User requested wait)
-                                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                                        // Wait 3 seconds to be safe (User requested wait)
+                                        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
-                                    if let Some(end_lp) = fetch_current_lp(&ctx.credentials).await {
-                                        let diff = end_lp - s_lp;
-                                        log::info!("LP Update: Start={}, End={}, Diff={}", s_lp, end_lp, diff);
-                                        game_metadata.lp_diff = Some(diff);
-                                    } else {
-                                        log::warn!("Could not fetch End LP");
+                                        if let Some(end_lp) = fetch_current_lp(&ctx.credentials).await {
+                                            let diff = end_lp - s_lp;
+                                            log::info!("LP Update: Start={}, End={}, Diff={}", s_lp, end_lp, diff);
+                                            game_metadata.lp_diff = Some(diff);
+                                        } else {
+                                            log::warn!("Could not fetch End LP");
+                                        }
                                     }
                                 }
 
@@ -1307,7 +1324,7 @@ impl GameListener {
                                     &crate::recorder::MetadataFile::Metadata(game_metadata),
                                 );
                                 log::info!("writing game metadata to ({metadata_filepath:?}): {result:?}");
-                                if result.is_ok() {
+                                if result.is_ok() && is_tft_metadata {
                                     let video_path = metadata_filepath.with_extension("mp4");
                                     let backfill_metadata_path = metadata_filepath.clone();
                                     let backfill_app_handle = ctx.app_handle.clone();
