@@ -30,7 +30,7 @@ use crate::app::{action, AppEvent, EventManager, SystemTrayManager};
 use crate::recorder::MetadataFile;
 use crate::state::{CurrentlyRecording, SettingsWrapper};
 
-use super::lp_helper::fetch_current_lp;
+use super::lp_helper::{fetch_current_lp, RankedLpSnapshot};
 
 fn normalize_identity_key(raw: &str) -> String {
     raw.trim().to_lowercase()
@@ -242,11 +242,11 @@ enum State {
         JoinHandle<Vec<LiveGameEvent>>,
         Arc<Mutex<Vec<LiveGameEvent>>>,
         Arc<Mutex<HashMap<String, i32>>>,                      // player_map
-        Option<i32>,                                           // start_lp
+        Option<RankedLpSnapshot>,                              // start_lp
         Arc<Mutex<Option<shaco::model::ingame::AllGameData>>>, // last_game_data
         HashMap<i64, i32>,                                     // pid_to_cid (ParticipantId -> ChampionId)
     ),
-    EndOfGame(Metadata, Vec<LiveGameEvent>, Option<i32>), // start_lp
+    EndOfGame(Metadata, Vec<LiveGameEvent>, Option<RankedLpSnapshot>), // start_lp
 }
 
 impl Display for State {
@@ -913,9 +913,15 @@ impl GameListener {
                         ));
 
                         // Try to fetch LP
-                        let start_lp = fetch_current_lp(&self.ctx.credentials).await;
-                        if let Some(lp) = start_lp {
-                            log::info!("Fetched initial LP: {}", lp);
+                        let start_lp = fetch_current_lp(&self.ctx.credentials, queue.id).await;
+                        if let Some(lp) = &start_lp {
+                            log::info!(
+                                "Fetched initial LP: queue={}, rank={} {}, lp={}",
+                                lp.queue_type,
+                                lp.tier,
+                                lp.division,
+                                lp.league_points
+                            );
                         }
 
                         State::Recording(
@@ -1295,36 +1301,42 @@ impl GameListener {
                                 }
 
                                 let is_tft_metadata = is_tft_queue_id(game_metadata.queue.id);
+                                if !is_tft_metadata {
+                                    game_metadata.tft_round_markers.clear();
+                                }
 
                                 // Calculate LP Diff
                                 if !is_tft_metadata {
-                                    if let Some(s_lp) = start_lp {
-                                        // Wait a bit for LCU to update before fetching end LP?
-                                        // Actually process_dataWithRetry already takes some time.
-                                        // But user asked for "wait a few seconds after game end".
-                                        // The EndOfGame state transition happens immediately on EOG session event.
-                                        // process_data_with_retry does retries, but maybe we should explicitly wait/fetch here?
-                                        // Let's try fetching current LP now.
-
-                                        // Wait 3 seconds to be safe (User requested wait)
+                                    if let Some(s_lp) = &start_lp {
                                         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
-                                        if let Some(end_lp) = fetch_current_lp(&ctx.credentials).await {
-                                            let diff = end_lp - s_lp;
-                                            log::info!("LP Update: Start={}, End={}, Diff={}", s_lp, end_lp, diff);
-                                            game_metadata.lp_diff = Some(diff);
+                                        if let Some(end_lp) =
+                                            fetch_current_lp(&ctx.credentials, game_metadata.queue.id).await
+                                        {
+                                            if let Some(diff) = end_lp.lp_diff_from(s_lp) {
+                                                log::info!(
+                                                    "LP Update: Start={:?}, End={:?}, Diff={}",
+                                                    s_lp,
+                                                    end_lp,
+                                                    diff
+                                                );
+                                                game_metadata.lp_diff = Some(diff);
+                                            }
                                         } else {
                                             log::warn!("Could not fetch End LP");
                                         }
                                     }
                                 }
 
+                                let tft_round_markers_empty = game_metadata.tft_round_markers.is_empty();
                                 let result = action::save_recording_metadata(
                                     &metadata_filepath,
                                     &crate::recorder::MetadataFile::Metadata(game_metadata),
                                 );
                                 log::info!("writing game metadata to ({metadata_filepath:?}): {result:?}");
-                                if result.is_ok() && is_tft_metadata {
+                                let should_backfill_tft_rounds =
+                                    result.is_ok() && is_tft_metadata && tft_round_markers_empty;
+                                if should_backfill_tft_rounds {
                                     let video_path = metadata_filepath.with_extension("mp4");
                                     let backfill_metadata_path = metadata_filepath.clone();
                                     let backfill_app_handle = ctx.app_handle.clone();

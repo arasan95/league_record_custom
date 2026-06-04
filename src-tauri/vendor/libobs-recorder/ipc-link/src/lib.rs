@@ -18,10 +18,23 @@ pub enum IpcCommand {
     Encoders,
     Adapter,
     StartRecording,
+    CaptureVideoRegion {
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    },
     StopRecording,
     IsRecording,
     Shutdown,
     Exit,
+}
+
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct VideoRegionFrame {
+    pub width: u32,
+    pub height: u32,
+    pub bgra: Vec<u8>,
 }
 
 #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -30,6 +43,7 @@ pub enum IpcResponse {
     Encoders { available: Vec<Encoder>, selected: Encoder },
     Adapter(Adapter),
     Recording(bool),
+    VideoRegion(Option<VideoRegionFrame>),
     Err(String),
 }
 

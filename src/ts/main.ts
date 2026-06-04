@@ -731,27 +731,7 @@ async function main() {
     );
     listenerManager.listen_app("MetadataChanged", async ({ payload }) => {
         const activeVideoId = preferredActiveVideoId ?? ui.getActiveVideoId();
-
-        // Resolve payload IDs (which may be filename-only) to actual sidebar IDs (absolute path/base id).
-        const recordings = await commands.getRecordingsList();
-        const resolvedIds: string[] = [];
-
-        for (const changedId of payload) {
-            const matched = recordings.find((r) => videoIdsMatch(r.videoId, changedId));
-            if (matched) {
-                resolvedIds.push(matched.videoId);
-                ui.updateRecordingItem(matched);
-                continue;
-            }
-
-            // Fallback path when matching list item is not found yet.
-            const metadata = await commands.getMetadata(changedId);
-            ui.updateRecordingItem({ videoId: changedId, metadata, videoExists: true });
-        }
-
-        if (resolvedIds.length > 0) {
-            await updateSidebar(resolvedIds);
-        }
+        scheduleRecordingsChangedRefresh(1500);
 
         // 2. Active Video Update (Refresh Detail View)
         // Backend sends filename (e.g. "video.mp4"), Frontend activeVideoId is Full Path.
@@ -804,6 +784,8 @@ async function main() {
 
     listenerManager.listen_app("RecordingFinished", ({ payload }) => {
         const [videoId, isManualStop] = payload;
+        suppressRecordingsChangedEventsFor(8000);
+        scheduleRecordingsChangedRefresh(2500);
         commands.getSettings().then(settings => {
             if (settings.playRecordingSounds && !isManualStop) playNotificationSound('stop');
         });

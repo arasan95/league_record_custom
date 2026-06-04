@@ -292,7 +292,7 @@ function createMarker(
 
 function tftRoundStageClass(round: string): string {
     const stage = round.split("-", 1)[0];
-    return /^[1-7]$/.test(stage) ? `tft-stage-${stage}` : "";
+    return /^[1-9]$/.test(stage) ? `tft-stage-${stage}` : "";
 }
 
 export function buildMarkers(
