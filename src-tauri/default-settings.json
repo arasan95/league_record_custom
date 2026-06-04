@@ -37,14 +37,30 @@
   "ffmpegPath": null,
   "developerMode": false,
   "matchHistoryBaseUrl": "https://www.deeplol.gg/summoner/jp/{q}",
+  "matchHistorySubUrl": "https://www.deeplol.gg/summoner/jp/{q}",
   "scrollFrameStepModifier": "Shift",
+  "scoreboardLinkModifier": "Shift",
   "scoreboardScale": null,
   "playRecordingSounds": true,
   "language": "en",
   "championWikiBaseUrl": "https://www.loljp-wiki.jp/wiki/?Champion%2F{nameEsc}",
+  "championWikiSubUrl": "https://wiki.leagueoflegends.com/en-us/{nameEsc}",
   "championMatchupUrl": "https://dpm.lol/champions/{My}/matchups?opponent={Opponent}",
+  "championMatchupSubUrl": "https://www.onetricks.gg/ja/champions/builds/{My}?matchup={Opponent}",
   "championBuildUrl": "https://lolalytics.com/lol/{q}/build/",
+  "championBuildSubUrl": "https://www.onetricks.gg/ja/champions/builds/{nameEsc}",
   "checkUpdatesOnStartup": true,
   "keepVideoJsonOnAutoDelete": true,
-  "autoDeleteClips": false
+  "autoDeleteClips": false,
+  "tftRoundOcrEnabled": true,
+  "tftRoundLiveOcrEnabled": true,
+  "tftRoundOcrRegion": {
+    "anchor": "center",
+    "x": 0.401,
+    "centerOffsetX": -0.0845,
+    "y": 0.009,
+    "width": 0.038,
+    "height": 0.024
+  },
+  "tftRoundOcrIntervalSeconds": 2.0
 }

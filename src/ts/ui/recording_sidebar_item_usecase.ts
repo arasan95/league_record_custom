@@ -8,6 +8,7 @@ import {
     getChampionIconUrlById,
     getTftItemIconUrl,
     getTftTraitIconUrl,
+    getTftTraitStyleClass,
     getTftUnitIconUrl,
 } from "../datadragon";
 import { getText } from "../i18n";
@@ -39,10 +40,10 @@ function hasReplayGameId(recording: Recording): boolean {
     return false;
 }
 
-function createReplayActionButton(videoId: string): HTMLSpanElement {
+function createReplayActionButton(videoId: string, titleText: string): HTMLSpanElement {
     const button = document.createElement("span");
     button.className = "replay-action replay-play";
-    button.title = "ROFLを準備してクライアントで再生";
+    button.title = titleText;
     button.textContent = "\u25B6";
     button.addEventListener("click", async (e: MouseEvent) => {
         e.stopPropagation();
@@ -578,7 +579,7 @@ async function resolveAndApplyMask(params: {
     stats: SidebarImagePerfStats;
     label: string;
     resolver: () => Promise<string>;
-    apply: (url: string) => void;
+    apply: (url: string) => void | Promise<void>;
 }): Promise<void> {
     const { stats, label, resolver, apply } = params;
     const resolveStarted = perfNowMs();
@@ -595,9 +596,8 @@ async function resolveAndApplyMask(params: {
     }
     if (!url) {
         stats.errorCount += 1;
-        return;
     }
-    apply(url);
+    await apply(url);
 }
 
 export function createRecordingSidebarItem(input: {
@@ -624,6 +624,8 @@ export function createRecordingSidebarItem(input: {
         filterStar,
         onRefreshForStarUnfavorite,
     } = input;
+    const tooltipLocale = (currentLanguage || "en") === "ja" ? "ja" : "en";
+    const tooltipText = (ja: string, en: string): string => (tooltipLocale === "ja" ? ja : en);
 
     const videoName = toVideoName(recording.videoId);
     const isClipRecording = recording.videoId.includes("_clip");
@@ -636,8 +638,10 @@ export function createRecordingSidebarItem(input: {
     const mainContent = document.createElement("div");
     mainContent.className = "recording-content";
     let scheduleImageLoadForItem: ((el: HTMLElement) => void) | null = null;
+    let hasSidebarMetadata = false;
 
     if (recording.metadata && "Metadata" in recording.metadata) {
+        hasSidebarMetadata = true;
         liClass += " has-metadata";
         const meta = recording.metadata.Metadata;
         const dateStr = formatSidebarDate(videoName);
@@ -739,7 +743,14 @@ export function createRecordingSidebarItem(input: {
             sidebarBadges.append(clipBadge);
         }
         if (favorite) {
-            sidebarBadges.append(createEl("span", {}, { class: "sidebar-favorite-badge", title: "Favorite" }, "\u2605"));
+            sidebarBadges.append(
+                createEl(
+                    "span",
+                    {},
+                    { class: "sidebar-favorite-badge", title: tooltipText("お気に入り", "Favorite") },
+                    "\u2605",
+                ),
+            );
         }
 
         if (queueName === "TFT") {
@@ -801,14 +812,15 @@ export function createRecordingSidebarItem(input: {
                                 );
                             }
                             const itemImgs = wrapper.querySelectorAll(".tft-unit-item-img");
-                            if (itemImgs && unit.itemNames) {
-                                for (let j = 0; j < Math.min(itemImgs.length, unit.itemNames.length); j++) {
+                            const itemNames = unit.itemNames;
+                            if (itemImgs && itemNames) {
+                                for (let j = 0; j < Math.min(itemImgs.length, itemNames.length); j++) {
                                     const itemImg = itemImgs[j] as HTMLImageElement;
                                     tasks.push(
                                         enqueueSidebarImageTask(() => resolveAndApplyImage({
                                             stats: perfStats,
                                             label: "tft_item_icon",
-                                            resolver: async () => getTftItemIconUrl(unit.itemNames[j]),
+                                            resolver: async () => getTftItemIconUrl(itemNames[j]),
                                             apply: (url) => {
                                                 itemImg.src = url;
                                                 itemImg.onerror = () => { itemImg.style.display = "none"; };
@@ -827,17 +839,33 @@ export function createRecordingSidebarItem(input: {
                             .slice(0, 7);
                         for (let i = 0; i < Math.min(traitImgs.length, activeTraits.length); i++) {
                             const el = traitImgs[i] as HTMLElement;
+                            const trait = activeTraits[i];
                             tasks.push(
                                 enqueueSidebarImageTask(() => resolveAndApplyMask({
                                     stats: perfStats,
                                     label: "tft_trait_icon",
-                                    resolver: async () => getTftTraitIconUrl(activeTraits[i].name),
-                                    apply: (url) => {
-                                    el.style.webkitMaskImage = `url("${url}")`;
-                                    el.style.webkitMaskSize = "contain";
-                                    el.style.webkitMaskRepeat = "no-repeat";
-                                    el.style.webkitMaskPosition = "center";
-                                    el.style.backgroundColor = "currentColor";
+                                    resolver: async () => getTftTraitIconUrl(trait.name),
+                                    apply: async (url) => {
+                                        if (url) {
+                                            el.style.webkitMaskImage = `url("${url}")`;
+                                            el.style.webkitMaskSize = "contain";
+                                            el.style.webkitMaskRepeat = "no-repeat";
+                                            el.style.webkitMaskPosition = "center";
+                                            el.style.backgroundColor = "currentColor";
+                                        }
+                                        const correctedClass = await getTftTraitStyleClass(trait.name, trait.numUnits);
+                                        const wrapper = el.closest(".tft-trait-wrapper");
+                                        if (wrapper && correctedClass) {
+                                            wrapper.classList.remove(
+                                                "tft-prismatic",
+                                                "tft-gold",
+                                                "tft-silver",
+                                                "tft-bronze",
+                                                "tft-inactive",
+                                                "tft-unique",
+                                            );
+                                            wrapper.classList.add(correctedClass);
+                                        }
                                     },
                                 })),
                             );
@@ -939,6 +967,48 @@ export function createRecordingSidebarItem(input: {
         };
 
         displayContent = [mainContent];
+    } else if (recording.metadata && "Deferred" in recording.metadata && (recording.metadata.Deferred.tftRoundMarkers?.length ?? 0) > 0) {
+        hasSidebarMetadata = true;
+        liClass += " has-metadata tft-match";
+        const deferred = recording.metadata.Deferred;
+        const markers = deferred.tftRoundMarkers ?? [];
+        const dateStr = formatSidebarDate(videoName);
+        const durationSec = Math.max(0, Math.floor(((markers.at(-1)?.timestamp ?? 0) / 1000) - deferred.ingameTimeRecStartOffset));
+        const timeStr = formatDurationMmSs(durationSec);
+        const lastRound = markers.at(-1)?.round ?? "-";
+
+        const mainCol = createEl("div", {}, { class: "sidebar-main" });
+        const headerRow = createEl("div", {}, { class: "sidebar-header-row" });
+        headerRow.append(
+            createEl("span", {}, { class: "sidebar-time" }, timeStr),
+            createEl("span", {}, { class: "sidebar-mode" }, "TFT"),
+            createEl("span", {}, { class: "sidebar-placement tft-top4" }, lastRound),
+            createEl("div", {}, { class: "sidebar-date" }, dateStr),
+        );
+
+        const bodyRow = createEl("div", {}, { class: "sidebar-body-row" });
+        const statsCol = createEl("div", {}, { class: "sidebar-stats tft-stats" });
+        statsCol.append(
+            createEl("span", {}, { class: "sidebar-kda" }, `${markers.length} rounds`),
+            createEl("span", {}, { class: "sidebar-cs" }, `Game ${deferred.matchId.platformId}-${deferred.matchId.gameId}`),
+        );
+        bodyRow.append(statsCol);
+
+        const sidebarBadges = createEl("div", {}, { class: "sidebar-badges" });
+        if (favorite) {
+            sidebarBadges.append(
+                createEl(
+                    "span",
+                    {},
+                    { class: "sidebar-favorite-badge", title: tooltipText("お気に入り", "Favorite") },
+                    "\u2605",
+                ),
+            );
+        }
+
+        mainCol.append(headerRow, bodyRow, sidebarBadges);
+        mainContent.append(mainCol);
+        displayContent = [mainContent];
     } else if (isClipRecording) {
         const clipName = createEl("span", {}, { class: "video-name" }) as HTMLSpanElement;
         clipName.append(createClipIconElement(), document.createTextNode(` ${videoName}`));
@@ -969,7 +1039,14 @@ export function createRecordingSidebarItem(input: {
                 if (badgeContainer) {
                     const existingFavoriteBadge = badgeContainer.querySelector(".sidebar-favorite-badge");
                     if (fav && !existingFavoriteBadge) {
-                        badgeContainer.append(createEl("span", {}, { class: "sidebar-favorite-badge", title: "Favorite" }, "\u2605"));
+                        badgeContainer.append(
+                            createEl(
+                                "span",
+                                {},
+                                { class: "sidebar-favorite-badge", title: tooltipText("お気に入り", "Favorite") },
+                                "\u2605",
+                            ),
+                        );
                     } else if (!fav && existingFavoriteBadge) {
                         existingFavoriteBadge.remove();
                     }
@@ -977,25 +1054,31 @@ export function createRecordingSidebarItem(input: {
                 if (filterStar && !fav && onRefreshForStarUnfavorite) onRefreshForStarUnfavorite();
             });
         },
-    }, { class: "favorite", ...(favorite ? { style: "color: gold" } : {}) }, favorite ? "\u2605" : "\u2606") as HTMLSpanElement;
+    }, {
+        class: "favorite",
+        title: tooltipText("お気に入り", "Favorite"),
+        ...(favorite ? { style: "color: gold" } : {}),
+    }, favorite ? "\u2605" : "\u2606") as HTMLSpanElement;
 
     const shareBtn = createEl("span", {
         onclick: (e: MouseEvent) => {
             e.stopPropagation();
             void showShareModal(recording.videoId);
         },
-    }, { class: "share", title: getText(currentLanguage as any, "share" as any) || "Share" }, "\u21AA");
-    const replayButtons = hasReplayGameId(recording) ? [createReplayActionButton(recording.videoId)] : [];
-    const renameBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onRename(recording.videoId); } }, { class: "rename" }, "\u270E");
-    const deleteBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onDelete(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete", title: getText(currentLanguage as any, "delete" as any) || "Delete" }, "\u2716");
-    const deleteVideoOnlyBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); if (onDeleteVideoOnly) onDeleteVideoOnly(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete-video-only", title: getText(currentLanguage as any, "deleteVideoOnly" as any) || "Delete Video Only" }, "\uD83D\uDDD1");
+    }, { class: "share", title: tooltipText("共有", "Share") }, "\u21AA");
+    const replayButtons = hasReplayGameId(recording)
+        ? [createReplayActionButton(recording.videoId, tooltipText("ROFLを準備してクライアントで再生", "Prepare ROFL and play in client"))]
+        : [];
+    const renameBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onRename(recording.videoId); } }, { class: "rename", title: tooltipText("名前変更", "Rename") }, "\u270E");
+    const deleteBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); onDelete(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete", title: tooltipText("削除", "Delete") }, "\u2716");
+    const deleteVideoOnlyBtn = createEl("span", { onclick: (e: MouseEvent) => { e.stopPropagation(); if (onDeleteVideoOnly) onDeleteVideoOnly(recording.videoId, isFavorite(recording.metadata)); } }, { class: "delete-video-only", title: tooltipText("動画のみ削除", "Delete Video Only") }, "\uD83D\uDDD1");
     const actionsDiv = createEl("div", {}, { class: "sidebar-actions" }, [favoriteBtn, shareBtn, ...replayButtons, renameBtn, deleteVideoOnlyBtn, deleteBtn]);
 
     if (recording.metadata && "Metadata" in recording.metadata) {
         li.dataset.hasMetadata = recording.metadata.Metadata.queue.name !== "Unknown Queue" ? "true" : "false";
         li.append(mainContent);
     } else {
-        li.dataset.hasMetadata = "false";
+        li.dataset.hasMetadata = hasSidebarMetadata ? "true" : "false";
         li.append(...displayContent);
     }
     li.append(actionsDiv);

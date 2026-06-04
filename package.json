@@ -21,7 +21,7 @@
     "@crabnebula/tauri-plugin-drag": "^2.1.0",
     "@fffffffxxxxxxx/league_record_types": "file:league_record_types/",
     "@fffffffxxxxxxx/videojs-markers": "^1.2.0",
-    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
     "@tauri-apps/plugin-dialog": "2.6.0",
     "@tauri-apps/plugin-fs": "^2.4.5",

@@ -1,4 +1,4 @@
-import type { ServerFilter } from "./recording_filters_usecase";
+import type { ClipFilterMode, ServerFilter } from "./recording_filters_usecase";
 
 export function bindRecordingFilterControls(params: {
     navFilterAllBtn: HTMLButtonElement;
@@ -26,8 +26,8 @@ export function bindRecordingFilterControls(params: {
         setFilterRole: (value: string | null) => void;
         getFilterStar: () => boolean;
         setFilterStar: (value: boolean) => void;
-        getFilterClip: () => boolean;
-        setFilterClip: (value: boolean) => void;
+        getClipFilterMode: () => ClipFilterMode;
+        setClipFilterMode: (value: ClipFilterMode) => void;
         getFilterRanked: () => boolean;
         setFilterRanked: (value: boolean) => void;
         getFilterSearch: () => boolean;
@@ -155,11 +155,28 @@ export function bindRecordingFilterControls(params: {
         onFiltersChanged();
     });
 
+    const applyClipFilterVisual = (mode: ClipFilterMode) => {
+        filterClipBtn.classList.remove("exclude");
+        if (mode === "only") {
+            filterClipBtn.classList.add("active");
+            filterClipBtn.style.color = "#00d2ff";
+            return;
+        }
+        if (mode === "exclude") {
+            filterClipBtn.classList.remove("active");
+            filterClipBtn.classList.add("exclude");
+            filterClipBtn.style.color = "";
+            return;
+        }
+        filterClipBtn.classList.remove("active");
+        filterClipBtn.style.color = "";
+    };
+
     filterClipBtn?.addEventListener("click", () => {
-        const next = !state.getFilterClip();
-        state.setFilterClip(next);
-        filterClipBtn.classList.toggle("active", next);
-        filterClipBtn.style.color = next ? "#00d2ff" : "";
+        const current = state.getClipFilterMode();
+        const next: ClipFilterMode = current === "all" ? "only" : current === "only" ? "exclude" : "all";
+        state.setClipFilterMode(next);
+        applyClipFilterVisual(next);
         onFiltersChanged();
     });
 
@@ -218,5 +235,6 @@ export function bindRecordingFilterControls(params: {
         onFiltersChanged();
     });
 
+    applyClipFilterVisual(state.getClipFilterMode());
     updateServerNavActiveState();
 }

@@ -659,6 +659,27 @@
 .team-200 .runes            { order: 7; margin-right: 0px; }
 .team-200 .player-name      { order: 8; text-align: left; font-size: 11px;}
 
+.player-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.team-100 .player-name {
+    justify-content: flex-end;
+}
+
+.team-200 .player-name {
+    justify-content: flex-start;
+}
+
+.honor-heart-icon {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
 /* Remove old order rules */
 
 /* Old gold-diff styles removed */

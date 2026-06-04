@@ -18,7 +18,7 @@ use crate::cancellable;
 use crate::recorder::Deferred;
 use crate::state::{CurrentlyRecording, SettingsWrapper};
 
-use super::window::{self, WINDOW_CLASS, WINDOW_PROCESS, WINDOW_TITLE};
+use super::window;
 use super::MetadataFile;
 
 #[derive(Clone)]
@@ -26,6 +26,7 @@ pub struct GameCtx {
     pub app_handle: AppHandle,
     pub match_id: MatchId,
     pub cancel_token: CancellationToken,
+    pub is_tft: bool,
 }
 
 #[derive(Debug)]
@@ -136,14 +137,14 @@ impl RecordingTask {
             Ok((mut recorder, metadata)) => {
                 let manual_mode = self.manual_mode;
                 let ctx = self.ctx;
+                ctx.app_handle.state::<CurrentlyRecording>().set(None);
+                ctx.app_handle.set_tray_menu_recording(false);
+                ctx.app_handle.set_tray_menu_preparing(false);
+
                 async_runtime::spawn_blocking(move || {
                     log::debug!("Stopping recorder process...");
 
-                    // Update state immediately to prevent UI hang if shutdown crashes
-                    ctx.app_handle.state::<CurrentlyRecording>().set(None);
-                    ctx.app_handle.set_tray_menu_recording(false);
-                    ctx.app_handle.set_tray_menu_preparing(false);
-
+                    let started = std::time::Instant::now();
                     let stopped = recorder.stop_recording();
                     if manual_mode {
                         log::info!("stopping recording: stopped={stopped:?}, recorder cached for manual reuse");
@@ -159,9 +160,13 @@ impl RecordingTask {
                         log::error!("RecordingTask failed to send event: {e}");
                     }
 
-                    Ok(metadata)
-                })
-                .await?
+                    log::info!(
+                        "recording stop background finalization completed in {:.3}s",
+                        started.elapsed().as_secs_f64()
+                    );
+                });
+
+                Ok(metadata)
             }
             Err(e) => {
                 log::warn!("recording task failed/cancelled: {e}");
@@ -265,11 +270,32 @@ impl RecordingTask {
             match_id: ctx.match_id.clone(),
             ingame_time_rec_start_offset,
             highlights: vec![],
+            tft_round_markers: vec![],
             events: vec![],
             participants: vec![],
         });
         if let Err(e) = action::save_recording_metadata(&output_filepath, &metadata_file) {
             log::info!("failed to save MetadataFile: {e}")
+        }
+
+        let live_tft_round_ocr_enabled = {
+            let settings_state = ctx.app_handle.state::<SettingsWrapper>();
+            let settings_wrapper: &SettingsWrapper = &settings_state;
+            settings_wrapper.inner().tft_round_ocr_enabled
+        };
+        if live_tft_round_ocr_enabled {
+            log::info!(
+                "TFT round live OCR enabled for this recording; initial_tft_hint={}",
+                ctx.is_tft
+            );
+            super::tft_round_ocr::run_obs_loop(
+                &mut recorder,
+                ctx.app_handle.clone(),
+                output_filepath.with_extension("json"),
+                ingame_time_rec_start_offset * 1000.0,
+                ctx.cancel_token.child_token(),
+            )
+            .await?;
         }
 
         let metadata = Metadata {
@@ -308,8 +334,9 @@ impl RecordingTask {
 
         let filename_path = settings_state.get_recordings_path().join(formatted_filename);
 
+        let (capture_title, capture_class, capture_process) = window::get_lol_window_capture_target();
         let mut settings = RecorderSettings::new(
-            Window::new(WINDOW_TITLE, Some(WINDOW_CLASS.into()), Some(WINDOW_PROCESS.into())),
+            Window::new(capture_title, Some(capture_class), Some(capture_process)),
             window_size,
             output_resolution,
             &filename_path,

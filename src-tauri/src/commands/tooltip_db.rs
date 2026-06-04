@@ -1,4 +1,4 @@
-﻿use std::path::PathBuf;
+use std::path::PathBuf;
 
 use tauri::AppHandle;
 
@@ -69,7 +69,7 @@ fn read_tooltip_locale_json(db_path: &PathBuf, locale: &str) -> Result<Option<St
     }
 }
 
-fn is_tooltip_locale_payload_valid(data_json: &str) -> bool {
+fn is_tooltip_locale_payload_valid(locale: &str, data_json: &str) -> bool {
     let parsed = match serde_json::from_str::<serde_json::Value>(data_json) {
         Ok(v) => v,
         Err(_) => return false,
@@ -142,7 +142,56 @@ fn is_tooltip_locale_payload_valid(data_json: &str) -> bool {
 
     let enough_spell_map = with_spell_map * 100 >= champions * 60;
     let enough_modern_schema = with_champion_local * 100 >= champions * 60;
-    champions >= 120 && (enough_spell_map || enough_modern_schema) && aphelios_has_extra_block
+    champions >= 120
+        && (enough_spell_map || enough_modern_schema)
+        && aphelios_has_extra_block
+        && !has_stale_english_champion_meta(locale, root)
+        && !has_known_bad_ja_slot_payload(root)
+}
+
+fn has_stale_english_champion_meta(locale: &str, root: &serde_json::Map<String, serde_json::Value>) -> bool {
+    if locale.eq_ignore_ascii_case("en_US") {
+        return false;
+    }
+
+    fn champ_field_is(
+        root: &serde_json::Map<String, serde_json::Value>,
+        champ: &str,
+        field: &str,
+        needle: &str,
+    ) -> bool {
+        root.get(champ)
+            .and_then(|x| x.as_object())
+            .and_then(|x| x.get(field))
+            .and_then(|x| x.as_str())
+            .map(|s| s == needle)
+            .unwrap_or(false)
+    }
+
+    champ_field_is(root, "Ahri", "champion_title", "the Nine-Tailed Fox")
+        || champ_field_is(root, "Yuumi", "champion_title", "the Magical Cat")
+        || champ_field_is(root, "Jax", "champion_title", "Grandmaster at Arms")
+        || champ_field_is(root, "Sett", "champion_title", "the Boss")
+        || champ_field_is(root, "Vayne", "champion_title", "the Night Hunter")
+}
+
+fn has_known_bad_ja_slot_payload(root: &serde_json::Map<String, serde_json::Value>) -> bool {
+    fn slot_contains(root: &serde_json::Map<String, serde_json::Value>, champ: &str, slot: &str, needle: &str) -> bool {
+        root.get(champ)
+            .and_then(|x| x.as_object())
+            .and_then(|x| x.get(slot))
+            .and_then(|x| x.as_str())
+            .map(|s| s.contains(needle))
+            .unwrap_or(false)
+    }
+
+    // Stale tooltip DBs generated with bad slot data duplicated some spells into
+    // neighboring slots. Reject them so the bundled fixed DB replaces existing
+    // user copies at startup.
+    slot_contains(root, "Yuumi", "E", "&nbsp;行け！")
+        || slot_contains(root, "Jax", "E", "&nbsp;パワーバッシュ")
+        || slot_contains(root, "Vayne", "Q", "&nbsp;ファイナルアワー")
+        || slot_contains(root, "Hecarim", "R", "&nbsp;파멸의 돌격")
 }
 
 fn tooltip_db_has_rows(db_path: &PathBuf) -> bool {
@@ -150,8 +199,7 @@ fn tooltip_db_has_rows(db_path: &PathBuf) -> bool {
         Ok(c) => c,
         Err(_) => return false,
     };
-    let count: i64 = match conn.query_row("SELECT COUNT(*) FROM champion_tooltips", [], |row| row.get(0))
-    {
+    let count: i64 = match conn.query_row("SELECT COUNT(*) FROM champion_tooltips", [], |row| row.get(0)) {
         Ok(v) => v,
         Err(_) => return false,
     };
@@ -171,7 +219,7 @@ pub async fn load_tooltip_locale_db(locale: String, app_handle: AppHandle) -> Re
     }
 
     if let Some(ref payload) = data_json {
-        if !is_tooltip_locale_payload_valid(payload) {
+        if !is_tooltip_locale_payload_valid(&locale, payload) {
             eprintln!(
                 "[tooltip-db] invalid payload detected for locale {}. restoring bundled tooltip_data.db",
                 locale

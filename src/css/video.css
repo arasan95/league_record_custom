@@ -19,6 +19,30 @@ body {
     --lr-lane-self-top: calc(var(--lr-team-bar-height) + var(--lr-seekbar-gap));
 }
 
+.video-js.lr-tft-mode,
+#video_player.lr-tft-mode {
+    --lr-team-bar-height: 0px;
+    --lr-seekbar-gap: 0px;
+    --lr-seekbar-height: var(--lr-self-bar-height);
+    --lr-lane-blue-height: 0px;
+    --lr-lane-red-height: 0px;
+    --lr-lane-self-top: 0px;
+}
+
+.video-js.lr-tft-mode .vjs-progress-holder::before,
+.video-js.lr-tft-mode .vjs-play-progress::before {
+    display: none !important;
+}
+
+.video-js.lr-tft-mode .vjs-marker.lane-blue,
+.video-js.lr-tft-mode .vjs-marker.lane-red {
+    display: none !important;
+}
+
+.video-js.lr-tft-mode .vjs-play-progress .lr-playhead-indicator {
+    background: rgba(255, 255, 255, 0.95);
+}
+
 /* hide videojs player outline when focused */
 video {
     outline: none !important;
@@ -297,6 +321,26 @@ body:has(.vjs-fullscreen) {
 .vjs-marker.herald { color: rgb(234, 0, 255); z-index: 13 !important; --marker-core-width: 6px; }
 .vjs-marker.baron { color: rgb(123, 0, 255); z-index: 13; --marker-core-width: 6px; opacity: 0.7 !important; }
 .vjs-marker.highlight { color: rgb(255, 170, 0); z-index: 12; }
+.vjs-marker.tft-round { color: rgb(0, 210, 255); z-index: 14; --marker-core-width: 7px; opacity: 0.85 !important; }
+.vjs-marker.tft-round.tft-stage-1 { color: rgb(0, 210, 255); }
+.vjs-marker.tft-round.tft-stage-2 { color: rgb(72, 255, 150); }
+.vjs-marker.tft-round.tft-stage-3 { color: rgb(255, 214, 64); }
+.vjs-marker.tft-round.tft-stage-4 { color: rgb(255, 128, 64); }
+.vjs-marker.tft-round.tft-stage-5 { color: rgb(255, 82, 170); }
+.vjs-marker.tft-round.tft-stage-6 { color: rgb(176, 115, 255); }
+.vjs-marker.tft-round.tft-stage-7 { color: rgb(255, 255, 255); }
+.vjs-marker.tft-round.tft-stage-8 { color: rgb(210, 230, 255); }
+.vjs-marker.tft-round.tft-stage-9 { color: rgb(230, 230, 230); }
+
+.video-js.lr-tft-mode .vjs-marker.tft-round {
+    width: var(--marker-core-width) !important;
+    margin-left: 0 !important;
+}
+
+.video-js.lr-tft-mode .vjs-marker.tft-round::after {
+    left: 0;
+    transform: none;
+}
 
 /* =========================================================================
    6. VIDEO.JS CONTROL BAR

@@ -25,9 +25,49 @@ import {
 } from "../tooltip";
 import { isTooltipPerfDebugEnabled } from "./tooltip_debug";
 import { applyScoreboardRowLayout } from "./scoreboard_row_layout_usecase";
+import honorHeartIcon from "../../assets/match-history-icons/voting_heart.png";
 
 let globalTooltipRenderTicket = 0;
 const timeoutTooltipKeys = new Set<string>();
+const pressedModifiers = {
+    Shift: false,
+    Ctrl: false,
+    Alt: false,
+    Meta: false,
+};
+if (!(window as any).__scoreboardModifierTrackerInstalled) {
+    window.addEventListener("keydown", (ev) => {
+        pressedModifiers.Shift = ev.shiftKey || ev.getModifierState("Shift");
+        pressedModifiers.Ctrl = ev.ctrlKey || ev.getModifierState("Control");
+        pressedModifiers.Alt = ev.altKey || ev.getModifierState("Alt");
+        pressedModifiers.Meta = ev.metaKey || ev.getModifierState("Meta");
+    }, true);
+    window.addEventListener("keyup", (ev) => {
+        pressedModifiers.Shift = ev.shiftKey || ev.getModifierState("Shift");
+        pressedModifiers.Ctrl = ev.ctrlKey || ev.getModifierState("Control");
+        pressedModifiers.Alt = ev.altKey || ev.getModifierState("Alt");
+        pressedModifiers.Meta = ev.metaKey || ev.getModifierState("Meta");
+    }, true);
+    window.addEventListener("blur", () => {
+        pressedModifiers.Shift = false;
+        pressedModifiers.Ctrl = false;
+        pressedModifiers.Alt = false;
+        pressedModifiers.Meta = false;
+    });
+    (window as any).__scoreboardModifierTrackerInstalled = true;
+}
+
+function isModifierPressed(e: MouseEvent, modifier: string | null | undefined): boolean {
+    if (modifier === "None") return true;
+    if (modifier === "Ctrl") return e.ctrlKey || e.getModifierState("Control") || pressedModifiers.Ctrl;
+    if (modifier === "Alt") return e.altKey || e.getModifierState("Alt") || pressedModifiers.Alt;
+    if (modifier === "Meta") return e.metaKey || e.getModifierState("Meta") || pressedModifiers.Meta;
+    return e.shiftKey || e.getModifierState("Shift") || pressedModifiers.Shift;
+}
+
+function isOpenableExternalUrl(url: string): boolean {
+    return /^https?:\/\//i.test(url.trim());
+}
 
 export type ScoreboardRefsMap = Map<
     number,
@@ -287,7 +327,12 @@ export async function renderScoreboardTeam(params: {
             img.title = "Open Wiki";
             img.addEventListener("click", async (e) => {
                 e.stopPropagation();
-                if (!settings.championWikiBaseUrl) return;
+                e.preventDefault();
+                const useSub = isModifierPressed(e, (settings as any).scoreboardLinkModifier);
+                const selectedBaseUrl = useSub
+                    ? ((settings as any).championWikiSubUrl || settings.championWikiBaseUrl)
+                    : settings.championWikiBaseUrl;
+                if (!selectedBaseUrl) return;
 
                 const champName = await getChampionNameById(p.championId);
                 if (!champName) {
@@ -296,7 +341,7 @@ export async function renderScoreboardTeam(params: {
                 }
 
                 const champEng = getChampionEnglishNameByIdSync(p.championId) || champName;
-                let url = settings.championWikiBaseUrl;
+                let url = selectedBaseUrl;
                 if (url.includes("{")) {
                     url = url
                         .replace(/{id}/g, champName)
@@ -310,7 +355,11 @@ export async function renderScoreboardTeam(params: {
                 }
 
                 try {
-                    await open(url);
+                    if (!isOpenableExternalUrl(url)) {
+                        console.warn("Skipped opening non-http(s) Wiki URL:", url);
+                        return;
+                    }
+                    await open(url.trim());
                 } catch (err) {
                     console.error("Failed to open Wiki URL:", err);
                 }
@@ -376,7 +425,12 @@ export async function renderScoreboardTeam(params: {
             itemsGrid.title = "Open Champion Build";
             itemsGrid.addEventListener("click", async (e) => {
                 e.stopPropagation();
-                if (!settings.championBuildUrl) return;
+                e.preventDefault();
+                const useSub = isModifierPressed(e, (settings as any).scoreboardLinkModifier);
+                const selectedBaseUrl = useSub
+                    ? ((settings as any).championBuildSubUrl || settings.championBuildUrl)
+                    : settings.championBuildUrl;
+                if (!selectedBaseUrl) return;
 
                 const champName = await getChampionNameById(p.championId);
                 if (!champName) {
@@ -385,7 +439,7 @@ export async function renderScoreboardTeam(params: {
                 }
 
                 const champEng = getChampionEnglishNameByIdSync(p.championId) || champName;
-                let url = settings.championBuildUrl;
+                let url = selectedBaseUrl;
                 if (url.includes("{")) {
                     url = url
                         .replace(/{id}/g, champName)
@@ -399,7 +453,11 @@ export async function renderScoreboardTeam(params: {
                 }
 
                 try {
-                    await open(url);
+                    if (!isOpenableExternalUrl(url)) {
+                        console.warn("Skipped opening non-http(s) Build URL:", url);
+                        return;
+                    }
+                    await open(url.trim());
                 } catch (err) {
                     console.error("Failed to open Build URL:", err);
                 }
@@ -482,25 +540,46 @@ export async function renderScoreboardTeam(params: {
         row.dataset.pid = p.participantId.toString();
         const nameStr = p.summonerName || (isMe ? `${data.player.gameName}#${data.player.tagLine}` : `P${p.participantId}`);
         const name = createEl("div", {}, { class: "player-name" }, nameStr) as HTMLElement;
+        if (p.honorReceived) {
+            const heartIcon = createEl("img", {
+                src: honorHeartIcon,
+                alt: "Honor received",
+                title: "Honor received",
+            }, { class: "honor-heart-icon" }) as HTMLImageElement;
+            if (teamId === 100) {
+                name.prepend(heartIcon);
+            } else {
+                name.append(heartIcon);
+            }
+        }
 
         if (settings.matchHistoryBaseUrl) {
             name.style.cursor = "pointer";
             name.title = `Open Match History for ${nameStr}`;
             name.addEventListener("click", async (e) => {
                 e.stopPropagation();
-                if (!settings.matchHistoryBaseUrl) return;
+                e.preventDefault();
+                const useSub = isModifierPressed(e, (settings as any).scoreboardLinkModifier);
+                const selectedBaseUrl = useSub
+                    ? ((settings as any).matchHistorySubUrl || settings.matchHistoryBaseUrl)
+                    : settings.matchHistoryBaseUrl;
+                if (!selectedBaseUrl) return;
                 const targetId = nameStr.replace("#", "-");
                 const encodedId = encodeURIComponent(targetId);
 
                 let url = "";
-                if (settings.matchHistoryBaseUrl.includes("{q}")) {
-                    url = settings.matchHistoryBaseUrl.replace("{q}", encodedId);
+                if (selectedBaseUrl.includes("{q}")) {
+                    url = selectedBaseUrl.replace("{q}", encodedId);
                 } else {
-                    url = `${settings.matchHistoryBaseUrl}${encodedId}`;
+                    url = `${selectedBaseUrl}${encodedId}`;
                 }
 
                 try {
-                    await open(url);
+                    if (!isOpenableExternalUrl(url)) {
+                        console.warn("Skipped opening non-http(s) Tracking URL:", url);
+                        return;
+                    }
+                    await open(url.trim());
                 } catch (err) {
                     console.error("Failed to open URL:", err);
                 }
@@ -518,6 +597,7 @@ export async function renderScoreboardTeam(params: {
             // Ignore resize handle drags and right-side controls.
             const target = e.target as HTMLElement | null;
             if (target?.closest(".scoreboard-resize-handle")) return;
+            if (target?.closest(".player-name, .champ-icon-wrap, .items-grid")) return;
 
             draggedRow = row;
             hoveredRow = null;
