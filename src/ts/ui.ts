@@ -475,6 +475,7 @@ export default class UI {
         onDeleteVideoOnly?: (videoId: string, isFavorite: boolean) => void,
         forceUpdateIds: string[] = []
     ) => {
+        const activeVideoId = this.getActiveVideoId();
         this.lastRecordingsSizeGb = recordingsSizeGb;
         this.lastRecordings = recordings;
         this.lastOnVideo = onVideo;
@@ -533,6 +534,9 @@ export default class UI {
                 sizeMaxText: this.sizeMaxText,
             },
         });
+        if (activeVideoId) {
+            this.setActiveVideoId(activeVideoId);
+        }
     };
 
     public createRecordingItem = (

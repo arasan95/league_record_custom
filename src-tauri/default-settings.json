@@ -53,12 +53,13 @@
   "keepVideoJsonOnAutoDelete": true,
   "autoDeleteClips": false,
   "tftRoundOcrEnabled": true,
+  "tftRoundLiveOcrEnabled": true,
   "tftRoundOcrRegion": {
     "anchor": "center",
-    "x": 0.3495,
-    "centerOffsetX": -0.0905,
+    "x": 0.401,
+    "centerOffsetX": -0.0845,
     "y": 0.009,
-    "width": 0.12,
+    "width": 0.038,
     "height": 0.024
   },
   "tftRoundOcrIntervalSeconds": 2.0

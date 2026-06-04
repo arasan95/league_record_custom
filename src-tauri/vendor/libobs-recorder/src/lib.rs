@@ -1,6 +1,6 @@
 use std::{env, error, fmt, io, path};
 
-use ipc_link::{IpcCommand, IpcLinkMaster, IpcResponse};
+use ipc_link::{IpcCommand, IpcLinkMaster, IpcResponse, VideoRegionFrame};
 
 pub use intprocess_recorder::settings;
 pub use intprocess_recorder::InpRecorder as SingletonRecorder;
@@ -121,6 +121,23 @@ impl Recorder {
     pub fn start_recording(&mut self) -> Result<()> {
         match self.recorder.send(IpcCommand::StartRecording) {
             IpcResponse::Ok => Ok(()),
+            IpcResponse::Err(e) => Err(Box::new(Error::Recorder(e))),
+            _ => Err(Box::new(Error::ShouldNeverHappenNotifyMe)),
+        }
+    }
+
+    pub fn capture_video_region(
+        &mut self,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    ) -> Result<Option<VideoRegionFrame>> {
+        match self
+            .recorder
+            .send(IpcCommand::CaptureVideoRegion { x, y, width, height })
+        {
+            IpcResponse::VideoRegion(frame) => Ok(frame),
             IpcResponse::Err(e) => Err(Box::new(Error::Recorder(e))),
             _ => Err(Box::new(Error::ShouldNeverHappenNotifyMe)),
         }

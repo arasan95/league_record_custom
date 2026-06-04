@@ -329,6 +329,8 @@ body:has(.vjs-fullscreen) {
 .vjs-marker.tft-round.tft-stage-5 { color: rgb(255, 82, 170); }
 .vjs-marker.tft-round.tft-stage-6 { color: rgb(176, 115, 255); }
 .vjs-marker.tft-round.tft-stage-7 { color: rgb(255, 255, 255); }
+.vjs-marker.tft-round.tft-stage-8 { color: rgb(210, 230, 255); }
+.vjs-marker.tft-round.tft-stage-9 { color: rgb(230, 230, 230); }
 
 .video-js.lr-tft-mode .vjs-marker.tft-round {
     width: var(--marker-core-width) !important;

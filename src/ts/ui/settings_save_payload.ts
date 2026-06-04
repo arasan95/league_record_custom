@@ -115,6 +115,7 @@ export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings
             volumePercent: Math.max(0, Math.min(100, Math.round(track.volumePercent))),
         })),
         tftRoundOcrEnabled: input.tftRoundOcrEnabled,
+        tftRoundLiveOcrEnabled: input.tftRoundOcrEnabled,
         maxRecordingAgeDays: input.maxRecordingAgeDays === "" ? null : parseInt(input.maxRecordingAgeDays, 10),
         maxRecordingsSizeGb: input.maxRecordingsSizeGb === "" ? null : parseInt(input.maxRecordingsSizeGb, 10),
         hightlightHotkey: input.highlightHotkeyValue,
