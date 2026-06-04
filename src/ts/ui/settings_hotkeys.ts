@@ -277,6 +277,25 @@ export function createSettingsHotkeysTabContent({
         style: "display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #40444b;",
     }, [scrollModLabel, scrollModSelect]);
 
+    const scoreboardModLabel = createEl("span", {}, { style: "font-size: 0.95em; color: #dcddde; font-weight: 500;" }, getText(lang, "scoreboardLinkModifier"));
+    const scoreboardModSelect = createEl("select", {}, {
+        class: "settings-input",
+        style: "width: 140px; padding: 6px; background-color: #202225; border: 1px solid #202225; color: #dcddde; border-radius: 3px;",
+    }, [
+        createEl("option", { value: "Shift" }, {}, "Shift"),
+        createEl("option", { value: "Ctrl" }, {}, "Ctrl"),
+        createEl("option", { value: "Alt" }, {}, "Alt"),
+        createEl("option", { value: "Meta" }, {}, "Meta"),
+        createEl("option", { value: "None" }, {}, "None"),
+    ]) as HTMLSelectElement;
+    scoreboardModSelect.value = (settings as any).scoreboardLinkModifier || "Shift";
+    scoreboardModSelect.onchange = () => {
+        (settings as any).scoreboardLinkModifier = scoreboardModSelect.value;
+    };
+    const scoreboardModContainer = createEl("div", {}, {
+        style: "display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #40444b;",
+    }, [scoreboardModLabel, scoreboardModSelect]);
+
     mouseContainer.append(
         createMouseSwitch(getText(lang, "wheelSpeed"), pendingMouseConfig.wheelAction === "speed", (checked) => {
             pendingMouseConfig.wheelAction = checked ? "speed" : "none";
@@ -288,6 +307,7 @@ export function createSettingsHotkeysTabContent({
             pendingMouseConfig.sideButtonSeek = checked;
         }),
         scrollModContainer,
+        scoreboardModContainer,
     );
     hotkeysGrid.append(mouseTitle, mouseContainer);
 

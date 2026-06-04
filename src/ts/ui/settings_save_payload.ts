@@ -44,9 +44,13 @@ export type BuildSettingsPayloadInput = {
     clipsFolder: string;
     filenameFormat: string;
     matchHistoryBaseUrl: string;
+    matchHistorySubUrl: string;
     championWikiBaseUrl: string;
+    championWikiSubUrl: string;
     championMatchupUrl: string;
+    championMatchupSubUrl: string;
     championBuildUrl: string;
+    championBuildSubUrl: string;
     encodingQuality: string;
     outputResolution: string;
     framerate: string;
@@ -56,6 +60,7 @@ export type BuildSettingsPayloadInput = {
         enabled: boolean;
         volumePercent: number;
     }>;
+    tftRoundOcrEnabled: boolean;
     maxRecordingAgeDays: string;
     maxRecordingsSizeGb: string;
     highlightHotkeyValue: string | null;
@@ -86,7 +91,6 @@ export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings
     }
 
     const [framerateN, framerateD] = input.framerate.split("/");
-
     return {
         ...input.base,
         language: input.language as any,
@@ -94,9 +98,13 @@ export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings
         clipsFolder: input.clipsFolder,
         filenameFormat: input.filenameFormat,
         matchHistoryBaseUrl: input.matchHistoryBaseUrl.trim() || null,
+        matchHistorySubUrl: input.matchHistorySubUrl.trim() || null,
         championWikiBaseUrl: input.championWikiBaseUrl.trim() || null,
+        championWikiSubUrl: input.championWikiSubUrl.trim() || null,
         championMatchupUrl: input.championMatchupUrl.trim() || null,
+        championMatchupSubUrl: input.championMatchupSubUrl.trim() || null,
         championBuildUrl: input.championBuildUrl.trim() || null,
+        championBuildSubUrl: input.championBuildSubUrl.trim() || null,
         encodingQuality: parseInt(input.encodingQuality, 10),
         outputResolution: (input.outputResolution || null) as any,
         framerate: [parseInt(framerateN, 10), parseInt(framerateD, 10)],
@@ -106,6 +114,8 @@ export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings
             enabled: !!track.enabled,
             volumePercent: Math.max(0, Math.min(100, Math.round(track.volumePercent))),
         })),
+        tftRoundOcrEnabled: input.tftRoundOcrEnabled,
+        tftRoundLiveOcrEnabled: input.tftRoundOcrEnabled,
         maxRecordingAgeDays: input.maxRecordingAgeDays === "" ? null : parseInt(input.maxRecordingAgeDays, 10),
         maxRecordingsSizeGb: input.maxRecordingsSizeGb === "" ? null : parseInt(input.maxRecordingsSizeGb, 10),
         hightlightHotkey: input.highlightHotkeyValue,

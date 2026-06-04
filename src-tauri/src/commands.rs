@@ -1,7 +1,7 @@
-﻿use std::collections::HashMap;
+use chrono::Utc;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
-use chrono::Utc;
 use std::time::Duration;
 
 use tauri::AppHandle;
@@ -221,7 +221,11 @@ fn normalize_spell_lookup_key(base: &str) -> String {
 
 async fn load_item_icon_paths(client: &reqwest::Client) -> Result<HashMap<String, String>, String> {
     let cache = ITEM_ICON_PATHS_CACHE.get_or_init(|| Mutex::new(None));
-    if let Some(existing) = cache.lock().map_err(|_| "item cache lock poisoned".to_string())?.clone() {
+    if let Some(existing) = cache
+        .lock()
+        .map_err(|_| "item cache lock poisoned".to_string())?
+        .clone()
+    {
         return Ok(existing);
     }
 
@@ -255,11 +259,16 @@ async fn load_item_icon_paths(client: &reqwest::Client) -> Result<HashMap<String
 
 async fn load_spell_icon_paths(client: &reqwest::Client) -> Result<HashMap<String, String>, String> {
     let cache = SPELL_ICON_PATHS_CACHE.get_or_init(|| Mutex::new(None));
-    if let Some(existing) = cache.lock().map_err(|_| "spell cache lock poisoned".to_string())?.clone() {
+    if let Some(existing) = cache
+        .lock()
+        .map_err(|_| "spell cache lock poisoned".to_string())?
+        .clone()
+    {
         return Ok(existing);
     }
 
-    let url = "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/summoner-spells.json";
+    let url =
+        "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/summoner-spells.json";
     let data = client
         .get(url)
         .send()
@@ -288,7 +297,11 @@ async fn load_spell_icon_paths(client: &reqwest::Client) -> Result<HashMap<Strin
 
 async fn load_tft_item_icon_paths(client: &reqwest::Client) -> Result<HashMap<String, String>, String> {
     let cache = TFT_ITEM_ICON_PATHS_CACHE.get_or_init(|| Mutex::new(None));
-    if let Some(existing) = cache.lock().map_err(|_| "tft item cache lock poisoned".to_string())?.clone() {
+    if let Some(existing) = cache
+        .lock()
+        .map_err(|_| "tft item cache lock poisoned".to_string())?
+        .clone()
+    {
         return Ok(existing);
     }
 
@@ -322,7 +335,11 @@ async fn load_tft_item_icon_paths(client: &reqwest::Client) -> Result<HashMap<St
 
 async fn load_tft_trait_icon_paths(client: &reqwest::Client) -> Result<HashMap<String, String>, String> {
     let cache = TFT_TRAIT_ICON_PATHS_CACHE.get_or_init(|| Mutex::new(None));
-    if let Some(existing) = cache.lock().map_err(|_| "tft trait cache lock poisoned".to_string())?.clone() {
+    if let Some(existing) = cache
+        .lock()
+        .map_err(|_| "tft trait cache lock poisoned".to_string())?
+        .clone()
+    {
         return Ok(existing);
     }
 
@@ -424,7 +441,8 @@ fn get_wad_entries_cached(wad_path: &PathBuf) -> Result<Arc<Vec<WadEntry>>, Stri
         }
     }
 
-    let parsed = parse_wad_entries(wad_path).map_err(|e| format!("Failed to parse WAD {}: {}", wad_path.display(), e))?;
+    let parsed =
+        parse_wad_entries(wad_path).map_err(|e| format!("Failed to parse WAD {}: {}", wad_path.display(), e))?;
     let parsed = Arc::new(parsed);
 
     let mut guard = cache.lock().map_err(|_| "WAD cache lock poisoned".to_string())?;

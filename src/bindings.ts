@@ -32,6 +32,14 @@ async renameVideo(videoId: string, newVideoId: string) : Promise<boolean> {
 async getMetadata(videoId: string) : Promise<MetadataFile | null> {
     return await TAURI_INVOKE("get_metadata", { videoId });
 },
+async appendTftRoundMarker(round: string, timestamp: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("append_tft_round_marker", { round, timestamp }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async toggleFavorite(videoId: string) : Promise<boolean | null> {
     return await TAURI_INVOKE("toggle_favorite", { videoId });
 },
@@ -95,11 +103,15 @@ export type AudioSource =
  */
 "SEPARATED"
 export type BuildingType = { buildingType: "INHIBITOR_BUILDING"; lane_type: LaneType } | { buildingType: "TOWER_BUILDING"; lane_type: LaneType; tower_type: TowerType }
-export type Deferred = { favorite: boolean; matchId: MatchId; ingameTimeRecStartOffset: number; highlights?: number[] }
+export type TftRoundMarker = { round: string; timestamp: number }
+export type Deferred = { favorite: boolean; matchId: MatchId; ingameTimeRecStartOffset: number; highlights?: number[]; tftRoundMarkers?: TftRoundMarker[] }
 export type DragonType = "FIRE_DRAGON" | "EARTH_DRAGON" | "WATER_DRAGON" | "AIR_DRAGON" | "HEXTECH_DRAGON" | "CHEMTECH_DRAGON" | "ELDER_DRAGON"
 export type Framerate = [number, number]
 export type GameEvent = ({ ChampionKill: { victim_id: number; killer_id: number; assisting_participant_ids: number[]; position: Position } } | { BuildingKill: { team_id: Team; killer_id: number; building_type: BuildingType; assisting_participant_ids: number[] } } | { EliteMonsterKill: { killer_id: number; monster_type: MonsterType; assisting_participant_ids: number[] } }) & { timestamp: number }
-export type GameMetadata = { favorite: boolean; matchId: MatchId; ingameTimeRecStartOffset: number; highlights?: number[]; queue: Queue; player: Player; championName: string; stats: Stats; participantId: number; events: GameEvent[] }
+export type Participant = { participantId: number; teamId: number; championId: number; spell1Id: number; spell2Id: number; stats: Stats; lane?: string; role?: string; summonerName?: string; summonerId?: number | null; honorReceived?: boolean; laneScore?: number; champLevel?: number | null; summonerLevel?: number | null; rank?: string | null }
+export type MatchTeam = { teamId: number; win: string | null; towerKills: number; inhibitorKills: number; baronKills: number; dragonKills: number; vilemawKills: number; riftHeraldKills: number; dominionVictoryScore: number; bans: unknown[] }
+export type GoldFrame = { timestamp: number; participants: Array<{ participantId: number; totalGold: number; minions?: number; level?: number | null }> }
+export type GameMetadata = { favorite: boolean; matchId: MatchId; ingameTimeRecStartOffset: number; highlights?: number[]; tftRoundMarkers?: TftRoundMarker[]; queue: Queue; player: Player; championName: string; stats: Stats; participantId: number; participants?: Participant[]; teams?: MatchTeam[]; events: GameEvent[]; goldTimeline?: GoldFrame[]; gameVersion?: string; gameDuration?: number; lpDiff?: number | null }
 export type LaneType = "TOP_LANE" | "MID_LANE" | "BOT_LANE"
 export type MarkerFlags = { kill: boolean; death: boolean; assist: boolean; structure: boolean; dragon: boolean; herald: boolean; atakhan: boolean; baron: boolean }
 export type MatchId = { gameId: number; platformId: string }
@@ -110,7 +122,8 @@ export type Player = { gameName: string; tagLine: string; summonerId?: number | 
 export type Position = { x: number; y: number }
 export type Queue = { id: number; name: string; isRanked: boolean }
 export type Recording = { videoId: string; metadata: MetadataFile | null }
-export type Settings = { markerFlags: MarkerFlags; checkForUpdates: boolean; debugLog: boolean; recordingsFolder: string; filenameFormat: string; encodingQuality: number; outputResolution: StdResolution | null; framerate: Framerate; recordAudio: AudioSource; onlyRecordRanked: boolean; autostart: boolean; maxRecordingAgeDays: number | null; maxRecordingsSizeGb: number | null; confirmDelete: boolean; hightlightHotkey: string | null; stopRecordingHotkey: string | null; gameModes: string[] | null; scrollFrameStepModifier: string | null; scoreboardScale: number | null; playRecordingSounds: boolean; language: string }
+export type TftRoundOcrRegion = { anchor?: string; x: number; centerOffsetX?: number; y: number; width: number; height: number }
+export type Settings = { markerFlags: MarkerFlags; checkForUpdates: boolean; debugLog: boolean; recordingsFolder: string; clipsFolder?: string; filenameFormat: string; encodingQuality: number; outputResolution: StdResolution | null; framerate: Framerate; recordAudio: AudioSource; applicationAudioTracks?: Array<{ application: string | null; enabled: boolean; volumePercent: number }>; onlyRecordRanked: boolean; autostart: boolean; maxRecordingAgeDays: number | null; maxRecordingsSizeGb: number | null; confirmDelete: boolean; hightlightHotkey: string | null; startRecordingHotkey?: string | null; stopRecordingHotkey: string | null; gameModes: string[] | null; autoplayVideo?: boolean; autoStopPlayback?: boolean; autoSelectRecording?: boolean; autoPopupOnEnd?: boolean; developerMode?: boolean; matchHistoryBaseUrl?: string | null; matchHistorySubUrl?: string | null; championWikiBaseUrl?: string | null; championWikiSubUrl?: string | null; championMatchupUrl?: string | null; championMatchupSubUrl?: string | null; championBuildUrl?: string | null; championBuildSubUrl?: string | null; scrollFrameStepModifier: string | null; scoreboardScale: number | null; playRecordingSounds: boolean; keepVideoJsonOnAutoDelete?: boolean; autoDeleteClips?: boolean; tftRoundOcrEnabled?: boolean; tftRoundLiveOcrEnabled?: boolean; tftRoundOcrRegion?: TftRoundOcrRegion; tftRoundOcrIntervalSeconds?: number; language: string }
 export type Stats = { kills: number; deaths: number; assists: number; largestMultiKill: number; neutralMinionsKilled: number; neutralMinionsKilledEnemyJungle: number; neutralMinionsKilledTeamJungle: number; totalMinionsKilled: number; visionScore: number; visionWardsBoughtInGame: number; wardsPlaced: number; wardsKilled: number; 
 /**
  * remake

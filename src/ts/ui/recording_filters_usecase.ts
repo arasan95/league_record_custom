@@ -1,11 +1,12 @@
 import type { Recording } from "../bindings";
 
 export type ServerFilter = "ALL" | "LOL" | "TFT" | "SR" | "ARAM" | "OTHER";
+export type ClipFilterMode = "all" | "only" | "exclude";
 
 export type RecordingVisibilityFilterInput = {
     recording: Recording;
     filterStar: boolean;
-    filterClip: boolean;
+    clipFilterMode: ClipFilterMode;
     filterRanked: boolean;
     filterServer: ServerFilter;
     filterRole: string;
@@ -67,7 +68,10 @@ export function isRecordingVisibleByUiFilters(input: RecordingVisibilityFilterIn
     if (input.filterStar && !input.isFavorite(recording.metadata)) {
         return false;
     }
-    if (input.filterClip && !isClip) {
+    if (input.clipFilterMode === "only" && !isClip) {
+        return false;
+    }
+    if (input.clipFilterMode === "exclude" && isClip) {
         return false;
     }
     if (input.filterRanked) {
