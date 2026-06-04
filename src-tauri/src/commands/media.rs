@@ -343,7 +343,7 @@ fn ffmpeg_version_line(ffmpeg_cmd: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-async fn resolve_ffmpeg_command(settings: &SettingsWrapper, app_handle: &AppHandle) -> (String, String) {
+pub(crate) async fn resolve_ffmpeg_command(settings: &SettingsWrapper, app_handle: &AppHandle) -> (String, String) {
     if let Err(error) = ensure_app_local_ffmpeg(app_handle).await {
         log::warn!("failed to prepare app-local FFmpeg runtime: {error}");
     }

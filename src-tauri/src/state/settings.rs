@@ -360,10 +360,10 @@ impl Default for TftRoundOcrRegion {
     fn default() -> Self {
         Self {
             anchor: "center".to_string(),
-            x: 0.3495,
-            center_offset_x: -0.0905,
+            x: 0.401,
+            center_offset_x: -0.0845,
             y: 0.009,
-            width: 0.12,
+            width: 0.038,
             height: 0.024,
         }
     }
@@ -453,6 +453,7 @@ pub struct Settings {
     pub keep_video_json_on_auto_delete: bool,
     pub auto_delete_clips: bool,
     pub tft_round_ocr_enabled: bool,
+    pub tft_round_live_ocr_enabled: bool,
     pub tft_round_ocr_region: TftRoundOcrRegion,
     pub tft_round_ocr_interval_seconds: f64,
 }
@@ -484,6 +485,7 @@ const DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE: bool = true;
 const DEFAULT_AUTO_DELETE_CLIPS: bool = false;
 const DEFAULT_PLAY_RECORDING_SOUNDS: bool = true;
 const DEFAULT_TFT_ROUND_OCR_ENABLED: bool = true;
+const DEFAULT_TFT_ROUND_LIVE_OCR_ENABLED: bool = true;
 const DEFAULT_TFT_ROUND_OCR_INTERVAL_SECONDS: f64 = 2.0;
 
 #[inline]
@@ -555,6 +557,7 @@ impl Default for Settings {
             keep_video_json_on_auto_delete: DEFAULT_KEEP_VIDEO_JSON_ON_AUTO_DELETE,
             auto_delete_clips: DEFAULT_AUTO_DELETE_CLIPS,
             tft_round_ocr_enabled: DEFAULT_TFT_ROUND_OCR_ENABLED,
+            tft_round_live_ocr_enabled: DEFAULT_TFT_ROUND_LIVE_OCR_ENABLED,
             tft_round_ocr_region: TftRoundOcrRegion::default(),
             tft_round_ocr_interval_seconds: DEFAULT_TFT_ROUND_OCR_INTERVAL_SECONDS,
         }
@@ -755,6 +758,10 @@ impl<'de> Deserialize<'de> for Settings {
                         }
                         "tftRoundOcrEnabled" => {
                             settings.tft_round_ocr_enabled = map.next_value().unwrap_or(DEFAULT_TFT_ROUND_OCR_ENABLED);
+                        }
+                        "tftRoundLiveOcrEnabled" => {
+                            settings.tft_round_live_ocr_enabled =
+                                map.next_value().unwrap_or(DEFAULT_TFT_ROUND_LIVE_OCR_ENABLED);
                         }
                         "tftRoundOcrRegion" => {
                             settings.tft_round_ocr_region = map.next_value().unwrap_or_default();

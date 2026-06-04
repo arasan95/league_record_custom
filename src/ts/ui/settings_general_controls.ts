@@ -318,10 +318,13 @@ export function createSettingsGeneralControls({
     const tftRoundOcrControls: TftRoundOcrControls = {
         enabledSwitch: createLabeledSwitch(createEl, "Create TFT round markers with OCR", (settings as any).tftRoundOcrEnabled ?? true),
     };
+    const tftRoundOcrContainer = createEl("div", {}, { style: "display: grid; grid-template-columns: 1fr; gap: 8px;" }, [
+        tftRoundOcrControls.enabledSwitch.container,
+    ]) as HTMLDivElement;
     const tftRoundOcrGroup = createGroup(
         createEl,
-        "TFT Round OCR",
-        tftRoundOcrControls.enabledSwitch.container,
+        "TFT Round Markers",
+        tftRoundOcrContainer,
         true,
     );
 
