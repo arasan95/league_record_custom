@@ -1,6 +1,6 @@
 import type { Settings } from "../bindings";
 import type { Language } from "../i18n";
-import type { UiCreateEl } from "./settings_primitives";
+import { createLabeledSwitch, type LabeledSwitch, type UiCreateEl } from "./settings_primitives";
 
 type GetText = (lang: Language, key: any) => string;
 
@@ -23,6 +23,10 @@ type ApplicationAudioTrackControl = {
     volumeInput: HTMLInputElement;
 };
 
+type TftRoundOcrControls = {
+    enabledSwitch: LabeledSwitch;
+};
+
 export type SettingsGeneralControlsResult = {
     groups: {
         languageGroup: HTMLDivElement;
@@ -34,6 +38,7 @@ export type SettingsGeneralControlsResult = {
         framerateGroup: HTMLDivElement;
         recordAudioGroup: HTMLDivElement;
         applicationAudioTracksGroup: HTMLDivElement;
+        tftRoundOcrGroup: HTMLDivElement;
         maxAgeGroup: HTMLDivElement;
         maxSizeGroup: HTMLDivElement;
         troubleshootingGroup: HTMLDivElement;
@@ -48,6 +53,7 @@ export type SettingsGeneralControlsResult = {
         frSelect: HTMLSelectElement;
         audioSelect: HTMLSelectElement;
         appAudioTrackControls: [ApplicationAudioTrackControl, ApplicationAudioTrackControl, ApplicationAudioTrackControl];
+        tftRoundOcrControls: TftRoundOcrControls;
         maxAgeInput: HTMLInputElement;
         maxSizeInput: HTMLInputElement;
     };
@@ -309,6 +315,19 @@ export function createSettingsGeneralControls({
     audioSelect.addEventListener("change", updateApplicationTracksVisibility);
     updateApplicationTracksVisibility();
 
+    const tftRoundOcrControls: TftRoundOcrControls = {
+        enabledSwitch: createLabeledSwitch(createEl, "Create TFT round markers with OCR", (settings as any).tftRoundOcrEnabled ?? true),
+    };
+    const tftRoundOcrContainer = createEl("div", {}, { style: "display: grid; grid-template-columns: 1fr; gap: 8px;" }, [
+        tftRoundOcrControls.enabledSwitch.container,
+    ]) as HTMLDivElement;
+    const tftRoundOcrGroup = createGroup(
+        createEl,
+        "TFT Round Markers",
+        tftRoundOcrContainer,
+        true,
+    );
+
     const maxAgeInput = createEl("input", {}, {
         class: "settings-input",
         type: "number",
@@ -348,6 +367,7 @@ export function createSettingsGeneralControls({
             framerateGroup: createGroup(createEl, getText(lang, "framerate"), frSelect),
             recordAudioGroup: createGroup(createEl, getText(lang, "recordAudio"), audioSelect),
             applicationAudioTracksGroup,
+            tftRoundOcrGroup,
             maxAgeGroup: createGroup(createEl, getText(lang, "maxAge"), maxAgeInput),
             maxSizeGroup: createGroup(createEl, getText(lang, "maxSize"), maxSizeInput),
             troubleshootingGroup: createGroup(createEl, "Troubleshooting", clearCacheBtn as HTMLElement, true),
@@ -367,6 +387,7 @@ export function createSettingsGeneralControls({
                 volumeRange: control.volumeRange,
                 volumeInput: control.volumeInput,
             })) as [ApplicationAudioTrackControl, ApplicationAudioTrackControl, ApplicationAudioTrackControl],
+            tftRoundOcrControls,
             maxAgeInput,
             maxSizeInput,
         },

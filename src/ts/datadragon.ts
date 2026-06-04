@@ -17,12 +17,31 @@ let tftUnitIconMap: Record<string, string> = {};
 let tftTraitStyleMap: Record<string, Record<number, number>> = {};
 let tftUnitCostMap: Record<string, number> = {};
 let isTftDataLoaded = false;
+let tftDataLoadPromise: Promise<void> | null = null;
 
 let tftDDTraitMap: Record<string, string> = {};
+let tftDDTraitApiNameMap: Record<string, string> = {};
 let isTftDDTraitLoaded = false;
+let tftDDTraitLoadPromise: Promise<void> | null = null;
 
 let tftDDItemMap: Record<string, string> = {};
 let isTftDDItemLoaded = false;
+let tftDDItemLoadPromise: Promise<void> | null = null;
+
+function rememberTftTraitIcon(key: unknown, filename: string) {
+    if (typeof key !== "string") return;
+    const normalized = key.trim().toLowerCase();
+    if (!normalized) return;
+    tftDDTraitMap[normalized] = filename;
+}
+
+function rememberTftTraitApiName(key: unknown, apiName: unknown) {
+    if (typeof key !== "string" || typeof apiName !== "string") return;
+    const normalized = key.trim().toLowerCase();
+    const normalizedApiName = apiName.trim();
+    if (!normalized || !normalizedApiName) return;
+    tftDDTraitApiNameMap[normalized] = normalizedApiName;
+}
 const DD_FETCH_TIMEOUT_MS = 5000;
 
 async function fetchWithTimeout(url: string, timeoutMs: number = DD_FETCH_TIMEOUT_MS, init?: RequestInit): Promise<Response> {
@@ -37,6 +56,14 @@ async function fetchWithTimeout(url: string, timeoutMs: number = DD_FETCH_TIMEOU
 
 export async function ensureTftDDItemLoaded() {
     if (isTftDDItemLoaded) return;
+    if (tftDDItemLoadPromise) return tftDDItemLoadPromise;
+    tftDDItemLoadPromise = ensureTftDDItemLoadedInner().finally(() => {
+        tftDDItemLoadPromise = null;
+    });
+    return tftDDItemLoadPromise;
+}
+
+async function ensureTftDDItemLoadedInner() {
     try {
         const version = getCurrentPatchVersion();
         const cacheDir = "items_cache";
@@ -85,6 +112,14 @@ export async function ensureTftDDItemLoaded() {
 
 export async function ensureTftDDTraitLoaded() {
     if (isTftDDTraitLoaded) return;
+    if (tftDDTraitLoadPromise) return tftDDTraitLoadPromise;
+    tftDDTraitLoadPromise = ensureTftDDTraitLoadedInner().finally(() => {
+        tftDDTraitLoadPromise = null;
+    });
+    return tftDDTraitLoadPromise;
+}
+
+async function ensureTftDDTraitLoadedInner() {
     try {
         const version = getCurrentPatchVersion();
         const cacheDir = "items_cache";
@@ -119,7 +154,12 @@ export async function ensureTftDDTraitLoaded() {
             for (const key of Object.keys(data)) {
                 const trait = data[key];
                 if (trait.image && trait.image.full) {
-                    tftDDTraitMap[key.toLowerCase()] = trait.image.full;
+                    rememberTftTraitIcon(key, trait.image.full);
+                    rememberTftTraitIcon(trait.id, trait.image.full);
+                    rememberTftTraitIcon(trait.name, trait.image.full);
+                    rememberTftTraitApiName(key, trait.id);
+                    rememberTftTraitApiName(trait.id, trait.id);
+                    rememberTftTraitApiName(trait.name, trait.id);
                 }
             }
         }
@@ -1039,6 +1079,14 @@ export async function getSummonerSpellData(spellId: number, version: string, lan
 
 export async function ensureTftDataLoaded(langStr: string = "en") {
     if (isTftDataLoaded) return;
+    if (tftDataLoadPromise) return tftDataLoadPromise;
+    tftDataLoadPromise = ensureTftDataLoadedInner(langStr).finally(() => {
+        tftDataLoadPromise = null;
+    });
+    return tftDataLoadPromise;
+}
+
+async function ensureTftDataLoadedInner(langStr: string = "en") {
     try {
         let locale = "en_us";
         if (langStr.startsWith("ja")) locale = "ja_jp";
@@ -1283,7 +1331,8 @@ export async function getTftUnitIconUrl(characterId: string): Promise<string> {
 
 export async function getTftTraitIconUrl(traitName: string): Promise<string> {
     if (!traitName) return "";
-    const lowerName = traitName.toLowerCase();
+    const lowerName = traitName.trim().toLowerCase();
+    if (!lowerName) return "";
     
     // Check DataDragon (DD) first for multi-set compatibility
     await ensureTftDDTraitLoaded();
@@ -1309,6 +1358,10 @@ export async function getTftTraitIconUrl(traitName: string): Promise<string> {
     // Fallback if not found in map
     const match = lowerName.match(/^tft(\d+)_/);
     if (!match) {
+        if (!/^[a-z0-9_.-]+$/.test(lowerName)) {
+            console.warn(`[Trait Icon] no icon mapping for localized TFT trait: ${traitName}`);
+            return "";
+        }
         const url = `https://raw.communitydragon.org/latest/game/assets/ux/traiticons/trait_icon_${lowerName}.png`;
         return await getCachedAssetUrl(url, "tft_trait", `${lowerName}.png`);
     }
@@ -1461,4 +1514,27 @@ export function getTftTraitStyle(apiName: string, numUnits: number): number | nu
         }
     }
     return bestStyle;
+}
+
+function tftTraitStyleValueToClass(style: number): string | null {
+    if (style <= 0) return "tft-inactive";
+    if (style === 1) return "tft-bronze";
+    if (style === 3) return "tft-silver";
+    if (style === 4) return "tft-unique";
+    if (style === 5) return "tft-gold";
+    if (style >= 6) return "tft-prismatic";
+    return null;
+}
+
+export async function getTftTraitStyleClass(apiNameOrLocalizedName: string, numUnits: number): Promise<string | null> {
+    if (!apiNameOrLocalizedName || numUnits <= 0) return null;
+    await ensureTftDDTraitLoaded();
+    await ensureTftDataLoaded();
+
+    const key = apiNameOrLocalizedName.trim().toLowerCase();
+    const apiName = tftTraitStyleMap[key] ? key : tftDDTraitApiNameMap[key]?.toLowerCase();
+    if (!apiName) return null;
+
+    const style = getTftTraitStyle(apiName, numUnits);
+    return style === null ? null : tftTraitStyleValueToClass(style);
 }

@@ -5,13 +5,14 @@ use std::process::Command;
 
 use riot_datatypes::{GameId, MatchId};
 use serde_json::json;
+use shaco::ingame::IngameClient;
 use shaco::rest::LcuRestClient;
 use tauri::{AppHandle, State};
 use tokio::time::{sleep, Duration};
 
 use crate::app::{action, RecordingManager};
-use crate::recorder::MetadataFile;
-use crate::state::{MarkerFlags, SettingsFile, SettingsWrapper};
+use crate::recorder::{MetadataFile, TftRoundMarker};
+use crate::state::{CurrentlyRecording, MarkerFlags, SettingsFile, SettingsWrapper};
 use crate::util::compare_time;
 
 use super::path_guard::resolve_existing_video_base;
@@ -368,6 +369,46 @@ pub fn delete_video_only(video_id: String, state: State<SettingsWrapper>) -> boo
 pub fn get_metadata(video_id: String, state: State<SettingsWrapper>) -> Option<MetadataFile> {
     let path = resolve_existing_video_base(&video_id, &state).ok()?;
     action::get_recording_metadata(&path, false).ok()
+}
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub async fn append_tft_round_marker(
+    round: String,
+    timestamp: f64,
+    recording: State<'_, CurrentlyRecording>,
+) -> Result<(), String> {
+    let path = recording.get().ok_or_else(|| "not currently recording".to_string())?;
+    let mut metadata = action::get_recording_metadata(&path, false).map_err(|e| e.to_string())?;
+    let resolved_timestamp = if timestamp > 0.0 {
+        timestamp
+    } else {
+        IngameClient::new()
+            .game_stats()
+            .await
+            .map(|stats| stats.game_time * 1000.0)
+            .map_err(|e| e.to_string())?
+    };
+    let marker = TftRoundMarker {
+        round,
+        timestamp: resolved_timestamp,
+    };
+
+    match &mut metadata {
+        MetadataFile::Metadata(m) => {
+            if m.tft_round_markers.last().map(|last| last.round.as_str()) != Some(marker.round.as_str()) {
+                m.tft_round_markers.push(marker);
+            }
+        }
+        MetadataFile::Deferred(d) => {
+            if d.tft_round_markers.last().map(|last| last.round.as_str()) != Some(marker.round.as_str()) {
+                d.tft_round_markers.push(marker);
+            }
+        }
+        MetadataFile::NoData(_) => return Err("current recording has no writable metadata".to_string()),
+    }
+
+    action::save_recording_metadata(&path, &metadata).map_err(|e| e.to_string())
 }
 
 #[cfg_attr(test, specta::specta)]

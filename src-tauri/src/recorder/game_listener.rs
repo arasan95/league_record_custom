@@ -8,10 +8,12 @@ use riot_datatypes::lcu::{GameData, GamePhase, SessionEventData, SubscriptionRes
 use riot_datatypes::{GameId, MatchId, Queue};
 use riot_local_auth::Credentials;
 
+use serde::Deserialize;
 use shaco::model::ingame::GameEvent as LiveGameEvent;
 use shaco::model::ws::{EventType, LcuSubscriptionType};
 use shaco::{rest::LcuRestClient, ws::LcuWebsocketClient};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::async_runtime;
@@ -28,7 +30,7 @@ use crate::app::{action, AppEvent, EventManager, SystemTrayManager};
 use crate::recorder::MetadataFile;
 use crate::state::{CurrentlyRecording, SettingsWrapper};
 
-use super::lp_helper::fetch_current_lp;
+use super::lp_helper::{fetch_current_lp, RankedLpSnapshot};
 
 fn normalize_identity_key(raw: &str) -> String {
     raw.trim().to_lowercase()
@@ -40,6 +42,10 @@ fn team_id_str(team: &shaco::model::ingame::TeamId) -> &'static str {
         shaco::model::ingame::TeamId::Order => "100",
         _ => "100",
     }
+}
+
+fn is_tft_queue_id(queue_id: i64) -> bool {
+    matches!(queue_id, 1090 | 1100 | 1110 | 1130 | 1160 | 1220)
 }
 
 fn build_live_player_fallback_key(player: &shaco::model::ingame::Player) -> String {
@@ -58,6 +64,152 @@ fn build_live_player_fallback_key(player: &shaco::model::ingame::Player) -> Stri
     )
 }
 
+fn terminal_live_event_reason(event: &LiveGameEvent) -> Option<String> {
+    match event {
+        LiveGameEvent::GameEnd(e) => Some(format!("Live Client GameEnd ({:?})", e.result)),
+        _ => None,
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HonorRecognition {
+    sender_puuid: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HonorRecognitionHistoryEntry {
+    game_id: GameId,
+    puuid: String,
+    summoner_id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HonorBallotPlayer {
+    puuid: String,
+    summoner_id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HonorBallot {
+    eligible_allies: Vec<HonorBallotPlayer>,
+}
+
+async fn fetch_honor_sender_summoner_ids(lcu_rest_client: &LcuRestClient, game_id: GameId) -> Result<HashSet<i64>> {
+    let recognitions = lcu_rest_client
+        .get::<Vec<HonorRecognition>>("/lol-honor-v2/v1/recognition")
+        .await?;
+    let sender_puuids: HashSet<String> = recognitions
+        .into_iter()
+        .filter_map(|recognition| {
+            let puuid = recognition.sender_puuid.trim();
+            (!puuid.is_empty()).then(|| puuid.to_string())
+        })
+        .collect();
+
+    if sender_puuids.is_empty() {
+        return Ok(HashSet::new());
+    }
+
+    let mut sender_summoner_ids = HashSet::new();
+
+    if let Ok(history) = lcu_rest_client
+        .get::<Vec<HonorRecognitionHistoryEntry>>("/lol-honor-v2/v1/recognition-history")
+        .await
+    {
+        for entry in history {
+            if entry.game_id == game_id && sender_puuids.contains(&entry.puuid) {
+                sender_summoner_ids.insert(entry.summoner_id);
+            }
+        }
+    }
+
+    if let Ok(ballot) = lcu_rest_client.get::<HonorBallot>("/lol-honor-v2/v1/ballot").await {
+        for ally in ballot.eligible_allies {
+            if sender_puuids.contains(&ally.puuid) {
+                sender_summoner_ids.insert(ally.summoner_id);
+            }
+        }
+    }
+
+    Ok(sender_summoner_ids)
+}
+
+fn mark_honor_received(metadata_file: &mut MetadataFile, sender_summoner_ids: &HashSet<i64>) -> bool {
+    let participants = match metadata_file {
+        MetadataFile::Metadata(metadata) => &mut metadata.participants,
+        MetadataFile::Deferred(deferred) => &mut deferred.participants,
+        MetadataFile::NoData(_) => return false,
+    };
+
+    let mut changed = false;
+    for participant in participants {
+        let received = participant
+            .summoner_id
+            .is_some_and(|summoner_id| sender_summoner_ids.contains(&summoner_id));
+        if received && !participant.honor_received {
+            participant.honor_received = true;
+            changed = true;
+        }
+    }
+    changed
+}
+
+async fn append_honor_received_metadata(ctx: ApiCtx, metadata_filepath: PathBuf, video_id: String, game_id: GameId) {
+    let lcu_rest_client = LcuRestClient::from(&ctx.credentials);
+
+    for attempt in 1..=10 {
+        if ctx.cancel_token.is_cancelled() {
+            return;
+        }
+
+        match fetch_honor_sender_summoner_ids(&lcu_rest_client, game_id).await {
+            Ok(sender_summoner_ids) if !sender_summoner_ids.is_empty() => {
+                match action::get_recording_metadata(&metadata_filepath, false) {
+                    Ok(mut metadata_file) => {
+                        if mark_honor_received(&mut metadata_file, &sender_summoner_ids) {
+                            if let Err(e) = action::save_recording_metadata(&metadata_filepath, &metadata_file) {
+                                log::warn!("failed to append honor metadata: {e}");
+                                return;
+                            }
+
+                            log::info!(
+                                "Appended honor metadata for {} sender(s) to {:?}",
+                                sender_summoner_ids.len(),
+                                metadata_filepath
+                            );
+                            if let Err(e) = ctx
+                                .app_handle
+                                .send_event(AppEvent::MetadataChanged { payload: vec![video_id] })
+                            {
+                                log::error!("GameListener failed to send honor metadata event: {e}");
+                            }
+                        }
+                        return;
+                    }
+                    Err(e) => {
+                        log::warn!("failed to read metadata before appending honor data: {e}");
+                        return;
+                    }
+                }
+            }
+            Ok(_) => {
+                log::debug!("Honor recognition not ready yet (attempt {attempt}/10)");
+            }
+            Err(e) => {
+                log::debug!("Honor recognition fetch failed (attempt {attempt}/10): {e}");
+            }
+        }
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+
+    log::info!("Honor recognition was not available for game_id={game_id}");
+}
+
 #[derive(Clone)]
 pub struct ApiCtx {
     pub app_handle: AppHandle,
@@ -67,7 +219,7 @@ pub struct ApiCtx {
 }
 
 impl ApiCtx {
-    fn game_ctx(&self, game_id: GameId) -> GameCtx {
+    fn game_ctx(&self, game_id: GameId, is_tft: bool) -> GameCtx {
         GameCtx {
             app_handle: self.app_handle.clone(),
             match_id: MatchId {
@@ -75,6 +227,7 @@ impl ApiCtx {
                 platform_id: self.platform_id.clone(),
             },
             cancel_token: self.cancel_token.child_token(),
+            is_tft,
         }
     }
 }
@@ -89,11 +242,11 @@ enum State {
         JoinHandle<Vec<LiveGameEvent>>,
         Arc<Mutex<Vec<LiveGameEvent>>>,
         Arc<Mutex<HashMap<String, i32>>>,                      // player_map
-        Option<i32>,                                           // start_lp
+        Option<RankedLpSnapshot>,                              // start_lp
         Arc<Mutex<Option<shaco::model::ingame::AllGameData>>>, // last_game_data
         HashMap<i64, i32>,                                     // pid_to_cid (ParticipantId -> ChampionId)
     ),
-    EndOfGame(Metadata, Vec<LiveGameEvent>, Option<i32>), // start_lp
+    EndOfGame(Metadata, Vec<LiveGameEvent>, Option<RankedLpSnapshot>), // start_lp
 }
 
 impl Display for State {
@@ -114,7 +267,9 @@ pub struct GameListener {
     last_stopped_game_id: Option<GameId>,
     last_manual_prewarm_game_id: Option<GameId>,
     missing_window_ticks: u8,
+    terminal_live_event: Arc<Mutex<Option<String>>>,
     latest_session_game_id: Option<GameId>,
+    latest_session_is_tft: bool,
     end_of_game_since: Option<Instant>,
     end_of_game_finalize_requested: bool,
 }
@@ -132,7 +287,9 @@ impl GameListener {
             last_stopped_game_id: None,
             last_manual_prewarm_game_id: None,
             missing_window_ticks: 0,
+            terminal_live_event: Arc::new(Mutex::new(None)),
             latest_session_game_id: None,
+            latest_session_is_tft: false,
             end_of_game_since: None,
             end_of_game_finalize_requested: false,
         }
@@ -170,6 +327,7 @@ impl GameListener {
         live_events: Arc<Mutex<Vec<LiveGameEvent>>>,
         player_map: Arc<Mutex<HashMap<String, i32>>>,
         last_game_data: Arc<Mutex<Option<shaco::model::ingame::AllGameData>>>,
+        terminal_live_event: Arc<Mutex<Option<String>>>,
         app_handle: AppHandle,
     ) -> Vec<LiveGameEvent> {
         let client = shaco::ingame::IngameClient::new();
@@ -325,6 +483,17 @@ impl GameListener {
                         *old_items = current_items;
                     }
 
+                    for event in &new_events {
+                        if let Some(reason) = terminal_live_event_reason(event) {
+                            log::info!("Terminal live event detected: {reason}");
+                            if let Ok(mut terminal) = terminal_live_event.lock() {
+                                if terminal.is_none() {
+                                    *terminal = Some(reason);
+                                }
+                            }
+                        }
+                    }
+
                     if !new_events.is_empty() {
                         if let Ok(mut events) = live_events.lock() {
                             events.extend(new_events);
@@ -353,6 +522,8 @@ impl GameListener {
             Ok(init_event_data) => {
                 if init_event_data.game_data.game_id > 0 {
                     self.latest_session_game_id = Some(init_event_data.game_data.game_id);
+                    self.latest_session_is_tft = is_tft_queue_id(init_event_data.game_data.queue.id)
+                        || init_event_data.game_data.game_mode.as_deref() == Some("TFT");
                 }
                 self.state_transition(SubscriptionResponse::Session(init_event_data), false)
                     .await;
@@ -362,9 +533,11 @@ impl GameListener {
         }
 
         // Prime manual recorder once at startup so first manual hotkey press can start faster.
-        let prewarm_ctx = self
-            .ctx
-            .game_ctx(self.latest_session_game_id.unwrap_or_else(|| Utc::now().timestamp_millis()));
+        let prewarm_ctx = self.ctx.game_ctx(
+            self.latest_session_game_id
+                .unwrap_or_else(|| Utc::now().timestamp_millis()),
+            self.latest_session_is_tft,
+        );
         async_runtime::spawn(async move {
             if let Err(e) = RecordingTask::prewarm(prewarm_ctx).await {
                 log::warn!("startup manual prewarm failed: {e}");
@@ -385,9 +558,27 @@ impl GameListener {
                             if let SubscriptionResponse::Session(session) = &event_data {
                                 if session.game_data.game_id > 0 {
                                     self.latest_session_game_id = Some(session.game_data.game_id);
+                                    self.latest_session_is_tft = is_tft_queue_id(session.game_data.queue.id)
+                                        || session.game_data.game_mode.as_deref() == Some("TFT");
                                 }
                             }
-                            self.state_transition(event_data, false).await;
+                            let transition_event =
+                                if matches!(event_data, SubscriptionResponse::EogStatsBlock {})
+                                    && matches!(self.state, State::Recording(..))
+                                {
+                                    log::info!("LCU EOG stats block detected while recording. Stopping recording...");
+                                    SubscriptionResponse::Session(SessionEventData {
+                                        phase: GamePhase::EndOfGame,
+                                        game_data: GameData {
+                                            game_id: self.latest_session_game_id.unwrap_or(0),
+                                            queue: Queue { id: 0, is_ranked: false, name: "".into() },
+                                            game_mode: None,
+                                        },
+                                    })
+                                } else {
+                                    event_data
+                                };
+                            self.state_transition(transition_event, false).await;
                             self.maybe_trigger_end_of_game_finalize().await;
                         }
                         Err(e) => {
@@ -434,15 +625,19 @@ impl GameListener {
                         let live_events_clone = live_events.clone();
                         let player_map_clone = player_map.clone();
                         let last_game_data = Arc::new(Mutex::new(None));
+                        if let Ok(mut terminal) = self.terminal_live_event.lock() {
+                            *terminal = None;
+                        }
                         let live_task = async_runtime::spawn(Self::run_info_poller(
                             live_events_clone,
                             player_map_clone,
                             last_game_data.clone(),
+                            self.terminal_live_event.clone(),
                             self.ctx.app_handle.clone(),
                         ));
 
                         self.state = State::Recording(
-                            RecordingTask::new_manual(self.ctx.game_ctx(game_id)),
+                            RecordingTask::new_manual(self.ctx.game_ctx(game_id, self.latest_session_is_tft)),
                             HighlightTask::new(self.ctx.app_handle.clone()),
                             live_task,
                             live_events,
@@ -457,14 +652,24 @@ impl GameListener {
                     }
                 }
                 _ = health_tick.tick() => {
-                    // Alt+F4 fallback:
-                    // Sometimes gameflow phase updates are missed when the game is force-closed.
-                    // If the LoL window disappears for several consecutive ticks while recording,
-                    // force-stop the recording to prevent it from being stuck forever.
                     if let State::Recording(..) = self.state {
-                        // Only apply this fallback after recording has actually started.
-                        // During auto-record startup we can be in State::Recording while still waiting
-                        // for in-game readiness, and the window may legitimately be unavailable.
+                        let terminal_reason = self.terminal_live_event.lock().ok().and_then(|mut terminal| terminal.take());
+                        if let Some(reason) = terminal_reason {
+                            log::info!("Stopping recording due to terminal live event: {reason}");
+                            self.state_transition(SubscriptionResponse::Session(SessionEventData {
+                                phase: GamePhase::PreEndOfGame,
+                                game_data: GameData {
+                                    game_id: 0,
+                                    queue: Queue { id: 0, is_ranked: false, name: "".into() },
+                                    game_mode: None,
+                                },
+                            }), false).await;
+                            self.maybe_trigger_end_of_game_finalize().await;
+                            continue;
+                        }
+
+                        // Missing LoL window can happen when the game client drops mid-match.
+                        // Keep recording until LCU or Live Client reports the actual game end.
                         let is_actually_recording = self.ctx.app_handle.state::<CurrentlyRecording>().get().is_some();
                         if !is_actually_recording {
                             self.missing_window_ticks = 0;
@@ -473,21 +678,11 @@ impl GameListener {
 
                         if window::get_lol_window().is_none() {
                             self.missing_window_ticks = self.missing_window_ticks.saturating_add(1);
-                            if self.missing_window_ticks >= 3 {
+                            if self.missing_window_ticks == 3 {
                                 log::warn!(
-                                    "LoL window missing for {}s during recording. Forcing stop.",
+                                    "LoL window missing for {}s during recording. Keeping recording until LCU/live event reports game end.",
                                     self.missing_window_ticks
                                 );
-                                self.missing_window_ticks = 0;
-                                self.state_transition(SubscriptionResponse::Session(SessionEventData {
-                                    phase: GamePhase::PreEndOfGame,
-                                    game_data: GameData {
-                                        game_id: 0,
-                                        queue: Queue { id: 0, is_ranked: false, name: "".into() },
-                                        game_mode: None,
-                                    },
-                                }), false).await;
-                                self.maybe_trigger_end_of_game_finalize().await;
                             }
                         } else {
                             self.missing_window_ticks = 0;
@@ -547,6 +742,7 @@ impl GameListener {
                         queue.is_ranked,
                         game_mode
                     );
+                    let is_tft_game = is_tft_queue_id(queue.id) || game_mode.as_deref() == Some("TFT");
 
                     let settings = self.ctx.app_handle.state::<SettingsWrapper>();
 
@@ -623,6 +819,9 @@ impl GameListener {
                         let live_events_clone = live_events.clone();
                         let player_map_clone = player_map.clone();
                         let last_game_data = Arc::new(Mutex::new(None));
+                        if let Ok(mut terminal) = self.terminal_live_event.lock() {
+                            *terminal = None;
+                        }
 
                         // Fetch Session for PID->CID
                         let mut pid_to_cid = HashMap::new();
@@ -669,7 +868,10 @@ impl GameListener {
                                                         if !riot_id_full.is_empty() {
                                                             let riot_key = normalize_identity_key(riot_id_full);
                                                             map.insert(format!("riot:{}", riot_key), pid32);
-                                                            map.insert(format!("team:{}|riot:{}", team_id, riot_key), pid32);
+                                                            map.insert(
+                                                                format!("team:{}|riot:{}", team_id, riot_key),
+                                                                pid32,
+                                                            );
                                                         }
 
                                                         let riot_game_name = p
@@ -683,10 +885,14 @@ impl GameListener {
                                                             .unwrap_or("")
                                                             .trim();
                                                         if !riot_game_name.is_empty() && !riot_tag_line.is_empty() {
-                                                            let riot_joined = format!("{}#{}", riot_game_name, riot_tag_line);
+                                                            let riot_joined =
+                                                                format!("{}#{}", riot_game_name, riot_tag_line);
                                                             let riot_key = normalize_identity_key(&riot_joined);
                                                             map.insert(format!("riot:{}", riot_key), pid32);
-                                                            map.insert(format!("team:{}|riot:{}", team_id, riot_key), pid32);
+                                                            map.insert(
+                                                                format!("team:{}|riot:{}", team_id, riot_key),
+                                                                pid32,
+                                                            );
                                                         }
                                                     }
                                                 }
@@ -702,17 +908,24 @@ impl GameListener {
                             live_events_clone,
                             player_map_clone,
                             last_game_data.clone(),
+                            self.terminal_live_event.clone(),
                             self.ctx.app_handle.clone(),
                         ));
 
                         // Try to fetch LP
-                        let start_lp = fetch_current_lp(&self.ctx.credentials).await;
-                        if let Some(lp) = start_lp {
-                            log::info!("Fetched initial LP: {}", lp);
+                        let start_lp = fetch_current_lp(&self.ctx.credentials, queue.id).await;
+                        if let Some(lp) = &start_lp {
+                            log::info!(
+                                "Fetched initial LP: queue={}, rank={} {}, lp={}",
+                                lp.queue_type,
+                                lp.tier,
+                                lp.division,
+                                lp.league_points
+                            );
                         }
 
                         State::Recording(
-                            RecordingTask::new(self.ctx.game_ctx(game_id)),
+                            RecordingTask::new(self.ctx.game_ctx(game_id, is_tft_game)),
                             HighlightTask::new(self.ctx.app_handle.clone()),
                             live_task,
                             live_events,
@@ -727,7 +940,7 @@ impl GameListener {
                         // manual hotkey start doesn't pay the full initialization cost later.
                         if Some(game_id) != self.last_manual_prewarm_game_id {
                             self.last_manual_prewarm_game_id = Some(game_id);
-                            let prewarm_ctx = self.ctx.game_ctx(game_id);
+                            let prewarm_ctx = self.ctx.game_ctx(game_id, is_tft_game);
                             let app_handle_clone = self.ctx.app_handle.clone();
                             async_runtime::spawn(async move {
                                 app_handle_clone.set_tray_menu_preparing(true);
@@ -751,7 +964,9 @@ impl GameListener {
                             loop {
                                 tokio::time::sleep(Duration::from_secs(1)).await;
                                 if client.all_game_data(None).await.is_ok() {
-                                    log::info!("In-game API responded (non-recorded mode). Emitting GameStarted for Auto Stop.");
+                                    log::info!(
+                                        "In-game API responded (non-recorded mode). Emitting GameStarted for Auto Stop."
+                                    );
                                     if let Err(e) = app_handle_clone.send_event(AppEvent::GameStarted) {
                                         log::error!("Failed to emit GameStarted (non-recorded): {}", e);
                                     }
@@ -786,9 +1001,10 @@ impl GameListener {
                     SubscriptionResponse::Session(SessionEventData {
                         phase:
                             phase @ (GamePhase::FailedToLaunch
-                            | GamePhase::Reconnect
                             | GamePhase::WaitingForStats
-                            | GamePhase::PreEndOfGame),
+                            | GamePhase::PreEndOfGame
+                            | GamePhase::EndOfGame
+                            | GamePhase::TerminatedInError),
                         ..
                     }) => {
                         log::debug!("Game listener detected phase: {phase:?}. Stopping recording...");
@@ -849,12 +1065,14 @@ impl GameListener {
                                                 let team_id = team_and_rest.split('#').next().unwrap_or_default();
                                                 let summoner_key = normalize_identity_key(real_name);
                                                 if !summoner_key.is_empty() {
-                                                    if let Some(id) =
-                                                        name_to_id.get(&format!("team:{team_id}|summoner:{summoner_key}"))
+                                                    if let Some(id) = name_to_id
+                                                        .get(&format!("team:{team_id}|summoner:{summoner_key}"))
                                                     {
                                                         return Some(*id);
                                                     }
-                                                    if let Some(id) = name_to_id.get(&format!("summoner:{summoner_key}")) {
+                                                    if let Some(id) =
+                                                        name_to_id.get(&format!("summoner:{summoner_key}"))
+                                                    {
                                                         return Some(*id);
                                                     }
                                                     if let Some(id) = name_to_id.get(real_name) {
@@ -866,7 +1084,9 @@ impl GameListener {
                                             if let Some(real_name) = name.split('#').next() {
                                                 if !real_name.is_empty() {
                                                     let summoner_key = normalize_identity_key(real_name);
-                                                    if let Some(id) = name_to_id.get(&format!("summoner:{summoner_key}")) {
+                                                    if let Some(id) =
+                                                        name_to_id.get(&format!("summoner:{summoner_key}"))
+                                                    {
                                                         return Some(*id);
                                                     }
                                                     if let Some(id) = name_to_id.get(real_name) {
@@ -955,6 +1175,8 @@ impl GameListener {
                                                 lane: "NONE".into(),
                                                 role: "NONE".into(),
                                                 summoner_name: player.summoner_name.clone(),
+                                                summoner_id: None,
+                                                honor_received: false,
                                                 lane_score: 0.0,
                                                 champ_level: Some(player.level),
                                                 summoner_level: None,
@@ -1054,6 +1276,7 @@ impl GameListener {
                             output_filepath,
                             ingame_time_rec_start_offset,
                         } = metadata;
+                        let honor_game_id = match_id.game_id;
 
                         let mut metadata_filepath = output_filepath;
                         let video_id = metadata_filepath.file_name().and_then(OsStr::to_str).map(str::to_owned);
@@ -1074,45 +1297,94 @@ impl GameListener {
                                 {
                                     game_metadata.favorite = deferred.favorite;
                                     game_metadata.highlights = deferred.highlights;
+                                    game_metadata.tft_round_markers = deferred.tft_round_markers;
+                                }
+
+                                let is_tft_metadata = is_tft_queue_id(game_metadata.queue.id);
+                                if !is_tft_metadata {
+                                    game_metadata.tft_round_markers.clear();
                                 }
 
                                 // Calculate LP Diff
-                                if let Some(s_lp) = start_lp {
-                                    // Wait a bit for LCU to update before fetching end LP?
-                                    // Actually process_dataWithRetry already takes some time.
-                                    // But user asked for "wait a few seconds after game end".
-                                    // The EndOfGame state transition happens immediately on EOG session event.
-                                    // process_data_with_retry does retries, but maybe we should explicitly wait/fetch here?
-                                    // Let's try fetching current LP now.
+                                if !is_tft_metadata {
+                                    if let Some(s_lp) = &start_lp {
+                                        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
-                                    // Wait 3 seconds to be safe (User requested wait)
-                                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-
-                                    if let Some(end_lp) = fetch_current_lp(&ctx.credentials).await {
-                                        let diff = end_lp - s_lp;
-                                        log::info!("LP Update: Start={}, End={}, Diff={}", s_lp, end_lp, diff);
-                                        game_metadata.lp_diff = Some(diff);
-                                    } else {
-                                        log::warn!("Could not fetch End LP");
+                                        if let Some(end_lp) =
+                                            fetch_current_lp(&ctx.credentials, game_metadata.queue.id).await
+                                        {
+                                            if let Some(diff) = end_lp.lp_diff_from(s_lp) {
+                                                log::info!(
+                                                    "LP Update: Start={:?}, End={:?}, Diff={}",
+                                                    s_lp,
+                                                    end_lp,
+                                                    diff
+                                                );
+                                                game_metadata.lp_diff = Some(diff);
+                                            }
+                                        } else {
+                                            log::warn!("Could not fetch End LP");
+                                        }
                                     }
                                 }
 
+                                let tft_round_markers_empty = game_metadata.tft_round_markers.is_empty();
                                 let result = action::save_recording_metadata(
                                     &metadata_filepath,
                                     &crate::recorder::MetadataFile::Metadata(game_metadata),
                                 );
                                 log::info!("writing game metadata to ({metadata_filepath:?}): {result:?}");
+                                let should_backfill_tft_rounds =
+                                    result.is_ok() && is_tft_metadata && tft_round_markers_empty;
+                                if should_backfill_tft_rounds {
+                                    let video_path = metadata_filepath.with_extension("mp4");
+                                    let backfill_metadata_path = metadata_filepath.clone();
+                                    let backfill_app_handle = ctx.app_handle.clone();
+                                    let backfill_video_id = video_id.clone();
+                                    async_runtime::spawn(async move {
+                                        match super::tft_round_ocr::backfill_from_recording(
+                                            backfill_app_handle.clone(),
+                                            video_path,
+                                            backfill_metadata_path,
+                                        )
+                                        .await
+                                        {
+                                            Ok(count) if count > 0 => {
+                                                log::info!("backfilled {count} TFT round markers");
+                                                if let Some(video_id) = backfill_video_id {
+                                                    let _ = backfill_app_handle.send_event(AppEvent::MetadataChanged {
+                                                        payload: vec![video_id],
+                                                    });
+                                                }
+                                            }
+                                            Ok(_) => {}
+                                            Err(e) => log::warn!("failed to backfill TFT round markers: {e}"),
+                                        }
+                                    });
+                                }
                             }
                             Err(e) => log::error!("unable to process data: {e}"),
                         }
 
                         if let Some(video_id) = video_id {
-                            if let Err(e) = ctx
-                                .app_handle
-                                .send_event(AppEvent::MetadataChanged { payload: vec![video_id] })
-                            {
+                            if let Err(e) = ctx.app_handle.send_event(AppEvent::MetadataChanged {
+                                payload: vec![video_id.clone()],
+                            }) {
                                 log::error!("GameListener failed to send event: {e}");
                             }
+
+                            let honor_ctx = ctx.clone();
+                            let honor_metadata_filepath = metadata_filepath.clone();
+                            let honor_video_id = video_id.clone();
+                            async_runtime::spawn(async move {
+                                append_honor_received_metadata(
+                                    honor_ctx,
+                                    honor_metadata_filepath,
+                                    honor_video_id,
+                                    honor_game_id,
+                                )
+                                .await;
+                            });
                         }
                     });
 

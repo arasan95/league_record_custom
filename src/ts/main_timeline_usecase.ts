@@ -1,4 +1,4 @@
-import type { GameEvent } from "./bindings";
+import type { GameEvent, TftRoundMarker } from "./bindings";
 
 export type TimelineRow = { timestamp: number; text: string };
 
@@ -14,10 +14,11 @@ export function formatTimestampLabel(timestamp: number): string {
 export function buildTimelineRows(input: {
     currentEvents: { participantId: number; events: GameEvent[] } | null;
     highlightEvents: { events: number[] } | null;
+    tftRoundEvents?: { events: TftRoundMarker[] } | null;
     markerEventName: (event: GameEvent, participantId: number, teamId: number | null) => string | null;
 }): TimelineRow[] {
     const rows: TimelineRow[] = [];
-    const { currentEvents, highlightEvents, markerEventName } = input;
+    const { currentEvents, highlightEvents, tftRoundEvents, markerEventName } = input;
 
     if (highlightEvents !== null) {
         for (const event of highlightEvents.events) {
@@ -34,6 +35,11 @@ export function buildTimelineRows(input: {
         }
     }
 
+    if (tftRoundEvents !== null && tftRoundEvents !== undefined) {
+        for (const event of tftRoundEvents.events) {
+            rows.push({ timestamp: event.timestamp, text: `${formatTimestampLabel(event.timestamp)} TFT ${event.round}` });
+        }
+    }
+
     return rows.toSorted((a, b) => a.timestamp - b.timestamp);
 }
-

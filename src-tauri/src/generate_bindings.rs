@@ -16,6 +16,7 @@ fn generate_bindings() -> anyhow::Result<()> {
             commands::delete_video_only,
             commands::rename_video,
             commands::get_metadata,
+            commands::append_tft_round_marker,
             commands::toggle_favorite,
             commands::confirm_delete,
             commands::disable_confirm_delete,

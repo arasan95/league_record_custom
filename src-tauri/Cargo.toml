@@ -5,7 +5,7 @@ members = ["riot_datatypes"]
 exclude = ["vendor"]
 
 [workspace.package]
-version = "1.1.26"
+version = "1.1.32"
 edition = "2021"
 authors = ["arasan95"]
 license = "GPL-3.0-or-later"
@@ -33,6 +33,9 @@ strum_macros = "0.27.1"
 specta = "=2.0.0-rc.22"
 specta-typescript = "0.0.9"
 
+[patch.crates-io]
+phf_generator = { path = "vendor/phf_generator-0.8.0" }
+
 # --- APP ---
 
 [package]
@@ -53,7 +56,7 @@ name = "LeagueRecord"
 path = "src/main.rs"
 
 [dependencies]
-tauri = { version = "2.10", features = ["protocol-asset", "tray-icon"] }
+tauri = { version = "2.11", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-updater = "2.10"
 tauri-plugin-autostart = "2.5.0"
 tauri-plugin-single-instance = "2.3.0"
@@ -86,6 +89,7 @@ notify = { version = "6.1.1", default-features = false, features = [
 semver = "1.0.23"
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
+    "Win32_Graphics_Gdi",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Input",
@@ -97,8 +101,10 @@ reqwest = { version = "0.12.2", default-features = false, features = [
     "json",
     "rustls-tls",
 ] }
+sha2 = "0.10.9"
 tauri-plugin-shell = "2.3.4"
 tauri-plugin-fs = "2.4.5"
+zip = { version = "4.6.1", default-features = false, features = ["deflate"] }
 zstd = "0.13.3"
 rayon = "1.11.0"
 byteorder = "1.5.0"

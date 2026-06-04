@@ -61,9 +61,13 @@ export type SettingsOptionsSections = {
         gameModeSwitches: GameModeSwitchMap;
         otherSwitches: OtherSwitchMap;
         matchHistoryUrlInput: HTMLInputElement;
+        matchHistorySubUrlInput: HTMLInputElement;
         championWikiUrlInput: HTMLInputElement;
+        championWikiSubUrlInput: HTMLInputElement;
         championMatchupUrlInput: HTMLInputElement;
+        championMatchupSubUrlInput: HTMLInputElement;
         championBuildUrlInput: HTMLInputElement;
+        championBuildSubUrlInput: HTMLInputElement;
     };
 };
 
@@ -208,6 +212,14 @@ export function createSettingsOptionsSections(
         createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "trackingUrlHint")),
         matchHistoryUrlInput,
     ]) as HTMLDivElement;
+    const matchHistorySubUrlInput = createEl("input", {}, {
+        class: "settings-input",
+        type: "text",
+        placeholder: "Sub URL (modifier-click)",
+        value: (settings as any).matchHistorySubUrl || "",
+        style: "flex: 1; margin-top: 6px;",
+    }) as HTMLInputElement;
+    trackingUrlContainer.append(matchHistorySubUrlInput);
 
     const championWikiUrlInput = createEl("input", {}, {
         class: "settings-input",
@@ -222,6 +234,14 @@ export function createSettingsOptionsSections(
         createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "championWikiUrlHint")),
         championWikiUrlInput,
     ]) as HTMLDivElement;
+    const championWikiSubUrlInput = createEl("input", {}, {
+        class: "settings-input",
+        type: "text",
+        placeholder: "Sub URL (modifier-click)",
+        value: (settings as any).championWikiSubUrl || "",
+        style: "flex: 1; margin-top: 6px;",
+    }) as HTMLInputElement;
+    championWikiUrlContainer.append(championWikiSubUrlInput);
 
     const championMatchupUrlInput = createEl("input", {}, {
         class: "settings-input",
@@ -235,6 +255,14 @@ export function createSettingsOptionsSections(
         createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "championMatchupUrlHint")),
         championMatchupUrlInput,
     ]) as HTMLDivElement;
+    const championMatchupSubUrlInput = createEl("input", {}, {
+        class: "settings-input",
+        type: "text",
+        placeholder: "Sub URL (modifier-click)",
+        value: (settings as any).championMatchupSubUrl || "",
+        style: "flex: 1; margin-top: 6px;",
+    }) as HTMLInputElement;
+    championMatchupUrlContainer.append(championMatchupSubUrlInput);
 
     const championBuildUrlInput = createEl("input", {}, {
         class: "settings-input",
@@ -248,6 +276,14 @@ export function createSettingsOptionsSections(
         createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "championBuildUrlHint")),
         championBuildUrlInput,
     ]) as HTMLDivElement;
+    const championBuildSubUrlInput = createEl("input", {}, {
+        class: "settings-input",
+        type: "text",
+        placeholder: "Sub URL (modifier-click)",
+        value: (settings as any).championBuildSubUrl || "",
+        style: "flex: 1; margin-top: 6px;",
+    }) as HTMLInputElement;
+    championBuildUrlContainer.append(championBuildSubUrlInput);
 
     const scoreboardLinksContent = createEl("div", {}, {
         class: "settings-group-styled",
@@ -276,9 +312,13 @@ export function createSettingsOptionsSections(
             gameModeSwitches,
             otherSwitches,
             matchHistoryUrlInput,
+            matchHistorySubUrlInput,
             championWikiUrlInput,
+            championWikiSubUrlInput,
             championMatchupUrlInput,
+            championMatchupSubUrlInput,
             championBuildUrlInput,
+            championBuildSubUrlInput,
         },
     };
 }

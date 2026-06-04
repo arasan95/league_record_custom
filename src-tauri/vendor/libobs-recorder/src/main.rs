@@ -69,6 +69,21 @@ fn main() {
                 Some(IpcResponse::Err("recorder not initialized".into()))
             }
         }
+        IpcCommand::CaptureVideoRegion { x, y, width, height } => {
+            if let Some(recorder) = recorder.as_mut() {
+                Some(IpcResponse::VideoRegion(
+                    recorder
+                        .capture_video_region(x, y, width, height)
+                        .map(|frame| ipc_link::VideoRegionFrame {
+                            width: frame.width,
+                            height: frame.height,
+                            bgra: frame.bgra,
+                        }),
+                ))
+            } else {
+                Some(IpcResponse::Err("recorder not initialized".into()))
+            }
+        }
         IpcCommand::StopRecording => {
             if let Some(recorder) = recorder.as_mut() {
                 if recorder.is_recording() {

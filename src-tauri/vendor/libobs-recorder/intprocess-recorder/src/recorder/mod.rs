@@ -3,7 +3,7 @@ use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
 use std::ptr::{null_mut, NonNull};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::{self, ThreadId};
 use std::time::Duration;
 
@@ -49,6 +49,177 @@ const AUDIO_MIX_FULL: u32 = 1 << 0;
 const AUDIO_MIX_GAME: u32 = 1 << 1;
 const AUDIO_MIX_SYSTEM: u32 = 1 << 2;
 const AUDIO_MIX_MIC: u32 = 1 << 3;
+const RAW_VIDEO_FRAME_RATE_DIVISOR: u32 = 30;
+const RAW_VIDEO_MAX_HEIGHT: u32 = 720;
+
+#[derive(Default)]
+struct LatestRawVideoFrame {
+    width: u32,
+    height: u32,
+    x: f64,
+    y: f64,
+    normalized_width: f64,
+    normalized_height: f64,
+    bgra: Vec<u8>,
+}
+
+pub struct VideoRegionFrame {
+    pub width: u32,
+    pub height: u32,
+    pub bgra: Vec<u8>,
+}
+
+struct RawVideoFrames {
+    latest: Arc<Mutex<Option<LatestRawVideoFrame>>>,
+    callback_state: Box<RawVideoCallbackState>,
+}
+
+struct RawVideoCallbackState {
+    latest: Arc<Mutex<Option<LatestRawVideoFrame>>>,
+    width: u32,
+    height: u32,
+    x: f64,
+    y: f64,
+    normalized_width: f64,
+    normalized_height: f64,
+}
+
+impl RawVideoFrames {
+    fn start(width: u32, height: u32, x: f64, y: f64, normalized_width: f64, normalized_height: f64) -> Self {
+        let (width, height) = raw_video_callback_size(width, height);
+        let latest = Arc::new(Mutex::new(None));
+        let mut callback_state = Box::new(RawVideoCallbackState {
+            latest: latest.clone(),
+            width,
+            height,
+            x: x.clamp(0.0, 1.0),
+            y: y.clamp(0.0, 1.0),
+            normalized_width: normalized_width.clamp(0.01, 1.0),
+            normalized_height: normalized_height.clamp(0.01, 1.0),
+        });
+        let conversion = libobs_sys::video_scale_info {
+            format: libobs_sys::video_format_VIDEO_FORMAT_BGRA,
+            width,
+            height,
+            range: libobs_sys::video_range_type_VIDEO_RANGE_FULL,
+            colorspace: libobs_sys::video_colorspace_VIDEO_CS_709,
+        };
+        unsafe {
+            libobs_sys::obs_add_raw_video_callback2(
+                &conversion,
+                RAW_VIDEO_FRAME_RATE_DIVISOR,
+                Some(raw_video_callback),
+                callback_state.as_mut() as *mut RawVideoCallbackState as *mut _,
+            );
+        }
+        Self { latest, callback_state }
+    }
+
+    fn contains(&self, x: f64, y: f64, width: f64, height: f64) -> bool {
+        let epsilon = 0.0005;
+        let state = self.callback_state.as_ref();
+        x + epsilon >= state.x
+            && y + epsilon >= state.y
+            && x + width <= state.x + state.normalized_width + epsilon
+            && y + height <= state.y + state.normalized_height + epsilon
+    }
+
+    fn crop(&self, x: f64, y: f64, width: f64, height: f64) -> Option<VideoRegionFrame> {
+        let latest = self.latest.lock().ok()?;
+        let frame = latest.as_ref()?;
+        let source_x = (((x - frame.x) / frame.normalized_width) * frame.width as f64)
+            .round()
+            .max(0.0) as u32;
+        let source_y = (((y - frame.y) / frame.normalized_height) * frame.height as f64)
+            .round()
+            .max(0.0) as u32;
+        let crop_width = ((width / frame.normalized_width) * frame.width as f64).round().max(8.0) as u32;
+        let crop_height = ((height / frame.normalized_height) * frame.height as f64)
+            .round()
+            .max(8.0) as u32;
+        let crop_width = crop_width.min(frame.width.saturating_sub(source_x));
+        let crop_height = crop_height.min(frame.height.saturating_sub(source_y));
+        if crop_width == 0 || crop_height == 0 {
+            return None;
+        }
+
+        let mut bgra = Vec::with_capacity(crop_width as usize * crop_height as usize * 4);
+        for row in source_y..source_y + crop_height {
+            let start = ((row * frame.width + source_x) * 4) as usize;
+            let end = start + crop_width as usize * 4;
+            bgra.extend_from_slice(frame.bgra.get(start..end)?);
+        }
+        Some(VideoRegionFrame {
+            width: crop_width,
+            height: crop_height,
+            bgra,
+        })
+    }
+}
+
+fn raw_video_callback_size(width: u32, height: u32) -> (u32, u32) {
+    if width == 0 || height == 0 || height <= RAW_VIDEO_MAX_HEIGHT {
+        return (width, height);
+    }
+    let scaled_height = RAW_VIDEO_MAX_HEIGHT;
+    let scaled_width = ((width as u64 * scaled_height as u64) / height as u64)
+        .max(1)
+        .min(u32::MAX as u64) as u32;
+    (scaled_width, scaled_height)
+}
+
+impl Drop for RawVideoFrames {
+    fn drop(&mut self) {
+        unsafe {
+            libobs_sys::obs_remove_raw_video_callback(
+                Some(raw_video_callback),
+                self.callback_state.as_mut() as *mut RawVideoCallbackState as *mut _,
+            );
+        }
+    }
+}
+
+unsafe extern "C" fn raw_video_callback(param: *mut std::ffi::c_void, frame: *mut libobs_sys::video_data) {
+    if param.is_null() || frame.is_null() {
+        return;
+    }
+    let state = &*(param as *const RawVideoCallbackState);
+    let frame = &*frame;
+    let source = frame.data[0];
+    let line_size = frame.linesize[0] as usize;
+    let row_bytes = state.width as usize * 4;
+    if source.is_null() || line_size < row_bytes || state.width == 0 || state.height == 0 {
+        return;
+    }
+
+    let base_width = (state.height as f64 * 16.0 / 9.0).min(state.width as f64);
+    let source_x = (state.x * base_width).round().max(0.0) as usize;
+    let source_y = (state.y * state.height as f64).round().max(0.0) as usize;
+    let crop_width = (state.normalized_width * base_width).round().max(8.0) as usize;
+    let crop_height = (state.normalized_height * state.height as f64).round().max(8.0) as usize;
+    let crop_width = crop_width.min((state.width as usize).saturating_sub(source_x));
+    let crop_height = crop_height.min((state.height as usize).saturating_sub(source_y));
+    if crop_width == 0 || crop_height == 0 {
+        return;
+    }
+
+    let mut bgra = Vec::with_capacity(crop_width * crop_height * 4);
+    for row in source_y..source_y + crop_height {
+        let source_row = std::slice::from_raw_parts(source.add(row * line_size + source_x * 4), crop_width * 4);
+        bgra.extend_from_slice(source_row);
+    }
+    if let Ok(mut latest) = state.latest.lock() {
+        *latest = Some(LatestRawVideoFrame {
+            width: crop_width as u32,
+            height: crop_height as u32,
+            x: state.x,
+            y: state.y,
+            normalized_width: state.normalized_width,
+            normalized_height: state.normalized_height,
+            bgra,
+        });
+    }
+}
 
 fn normalize_process_name(value: Option<&str>) -> Option<String> {
     let trimmed = value.unwrap_or_default().trim();
@@ -63,9 +234,7 @@ fn normalize_process_name(value: Option<&str>) -> Option<String> {
     Some(process)
 }
 
-fn normalized_track(
-    track: Option<&ApplicationAudioTrackSetting>,
-) -> (Option<String>, bool, u8) {
+fn normalized_track(track: Option<&ApplicationAudioTrackSetting>) -> (Option<String>, bool, u8) {
     let enabled = track.map(|t| t.enabled).unwrap_or(false);
     let volume_percent = track.map(|t| t.volume_percent.min(100)).unwrap_or(100);
     let app = normalize_process_name(track.and_then(|t| t.application.as_deref()));
@@ -98,6 +267,7 @@ pub struct InpRecorder {
     audio_source1: NonNull<libobs_sys::obs_source>,
     audio_source2: NonNull<libobs_sys::obs_source>,
     audio_source3: NonNull<libobs_sys::obs_source>,
+    raw_video_frames: Option<RawVideoFrames>,
 
     _phantom: std::marker::PhantomData<(PhantomUnsend, PhantomUnsync)>,
 }
@@ -304,6 +474,7 @@ impl InpRecorder {
                 audio_source1,
                 audio_source2,
                 audio_source3,
+                raw_video_frames: None,
                 _phantom: std::marker::PhantomData,
             })
         }
@@ -385,13 +556,7 @@ impl InpRecorder {
         let mut data = ObsData::new();
         data.set_int("bitrate", 160);
         let audio_encoder = unsafe {
-            libobs_sys::obs_audio_encoder_create(
-                get.c_str("ffmpeg_aac"),
-                name,
-                data.as_ptr(),
-                mixer_idx,
-                null_mut(),
-            )
+            libobs_sys::obs_audio_encoder_create(get.c_str("ffmpeg_aac"), name, data.as_ptr(), mixer_idx, null_mut())
         };
         if audio_encoder.is_null() {
             return Err("unable to create audio encoder");
@@ -499,6 +664,7 @@ impl InpRecorder {
     }
 
     pub fn stop_recording(&mut self) {
+        self.raw_video_frames = None;
         if self.is_recording() {
             unsafe { libobs_sys::obs_output_stop(self.output.as_ptr()) }
             // println!("Recording Stop: {}", unsafe { libobs_sys::bnum_allocs() });
@@ -670,35 +836,37 @@ impl InpRecorder {
                 unsafe {
                     libobs_sys::obs_source_set_audio_mixers(
                         self.audio_source1.as_ptr(),
-                        if separated_audio { AUDIO_MIX_GAME } else { AUDIO_MIX_FULL },
+                        if separated_audio {
+                            AUDIO_MIX_GAME
+                        } else {
+                            AUDIO_MIX_FULL
+                        },
                     )
                 };
 
                 self.audio_source1.as_ptr()
             }
-            AudioSource::APPLICATIONS3 => {
-                match app1.as_deref().filter(|_| app1_enabled) {
-                    Some(process) => {
-                        let mut data = ObsData::new();
-                        data.set_string("window", format!("::{process}"));
-                        unsafe { libobs_sys::obs_source_update(self.audio_source1.as_ptr(), data.as_ptr()) };
-                        unsafe {
-                            libobs_sys::obs_source_set_audio_mixers(
-                                self.audio_source1.as_ptr(),
-                                AUDIO_MIX_FULL | AUDIO_MIX_GAME,
-                            )
-                        };
-                        unsafe {
-                            libobs_sys::obs_source_set_volume(
-                                self.audio_source1.as_ptr(),
-                                f32::from(app1_volume_percent) / 100.0,
-                            );
-                        }
-                        self.audio_source1.as_ptr()
+            AudioSource::APPLICATIONS3 => match app1.as_deref().filter(|_| app1_enabled) {
+                Some(process) => {
+                    let mut data = ObsData::new();
+                    data.set_string("window", format!("::{process}"));
+                    unsafe { libobs_sys::obs_source_update(self.audio_source1.as_ptr(), data.as_ptr()) };
+                    unsafe {
+                        libobs_sys::obs_source_set_audio_mixers(
+                            self.audio_source1.as_ptr(),
+                            AUDIO_MIX_FULL | AUDIO_MIX_GAME,
+                        )
+                    };
+                    unsafe {
+                        libobs_sys::obs_source_set_volume(
+                            self.audio_source1.as_ptr(),
+                            f32::from(app1_volume_percent) / 100.0,
+                        );
                     }
-                    None => null_mut(),
+                    self.audio_source1.as_ptr()
                 }
-            }
+                None => null_mut(),
+            },
             _ => null_mut(),
         };
         unsafe { libobs_sys::obs_set_output_source(AUDIO_CHANNEL1, audio_source1) };
@@ -718,29 +886,27 @@ impl InpRecorder {
                 };
                 self.audio_source2.as_ptr()
             }
-            AudioSource::APPLICATIONS3 => {
-                match app2.as_deref().filter(|_| app2_enabled) {
-                    Some(process) => {
-                        let mut data = ObsData::new();
-                        data.set_string("window", format!("::{process}"));
-                        unsafe { libobs_sys::obs_source_update(self.audio_source2.as_ptr(), data.as_ptr()) };
-                        unsafe {
-                            libobs_sys::obs_source_set_audio_mixers(
-                                self.audio_source2.as_ptr(),
-                                AUDIO_MIX_FULL | AUDIO_MIX_SYSTEM,
-                            )
-                        };
-                        unsafe {
-                            libobs_sys::obs_source_set_volume(
-                                self.audio_source2.as_ptr(),
-                                f32::from(app2_volume_percent) / 100.0,
-                            );
-                        }
-                        self.audio_source2.as_ptr()
+            AudioSource::APPLICATIONS3 => match app2.as_deref().filter(|_| app2_enabled) {
+                Some(process) => {
+                    let mut data = ObsData::new();
+                    data.set_string("window", format!("::{process}"));
+                    unsafe { libobs_sys::obs_source_update(self.audio_source2.as_ptr(), data.as_ptr()) };
+                    unsafe {
+                        libobs_sys::obs_source_set_audio_mixers(
+                            self.audio_source2.as_ptr(),
+                            AUDIO_MIX_FULL | AUDIO_MIX_SYSTEM,
+                        )
+                    };
+                    unsafe {
+                        libobs_sys::obs_source_set_volume(
+                            self.audio_source2.as_ptr(),
+                            f32::from(app2_volume_percent) / 100.0,
+                        );
                     }
-                    None => null_mut(),
+                    self.audio_source2.as_ptr()
                 }
-            }
+                None => null_mut(),
+            },
             _ => null_mut(),
         };
         unsafe { libobs_sys::obs_set_output_source(AUDIO_CHANNEL2, audio_source2) };
@@ -760,29 +926,27 @@ impl InpRecorder {
                 };
                 self.audio_source3.as_ptr()
             }
-            AudioSource::APPLICATIONS3 => {
-                match app3.as_deref().filter(|_| app3_enabled) {
-                    Some(process) => {
-                        let mut data = ObsData::new();
-                        data.set_string("window", format!("::{process}"));
-                        unsafe { libobs_sys::obs_source_update(self.audio_source3.as_ptr(), data.as_ptr()) };
-                        unsafe {
-                            libobs_sys::obs_source_set_audio_mixers(
-                                self.audio_source3.as_ptr(),
-                                AUDIO_MIX_FULL | AUDIO_MIX_MIC,
-                            )
-                        };
-                        unsafe {
-                            libobs_sys::obs_source_set_volume(
-                                self.audio_source3.as_ptr(),
-                                f32::from(app3_volume_percent) / 100.0,
-                            );
-                        }
-                        self.audio_source3.as_ptr()
+            AudioSource::APPLICATIONS3 => match app3.as_deref().filter(|_| app3_enabled) {
+                Some(process) => {
+                    let mut data = ObsData::new();
+                    data.set_string("window", format!("::{process}"));
+                    unsafe { libobs_sys::obs_source_update(self.audio_source3.as_ptr(), data.as_ptr()) };
+                    unsafe {
+                        libobs_sys::obs_source_set_audio_mixers(
+                            self.audio_source3.as_ptr(),
+                            AUDIO_MIX_FULL | AUDIO_MIX_MIC,
+                        )
+                    };
+                    unsafe {
+                        libobs_sys::obs_source_set_volume(
+                            self.audio_source3.as_ptr(),
+                            f32::from(app3_volume_percent) / 100.0,
+                        );
                     }
-                    None => null_mut(),
+                    self.audio_source3.as_ptr()
                 }
-            }
+                None => null_mut(),
+            },
             _ => null_mut(),
         };
         unsafe { libobs_sys::obs_set_output_source(AUDIO_CHANNEL3, audio_source3) };
@@ -794,6 +958,28 @@ impl InpRecorder {
 
     pub fn is_recording(&self) -> bool {
         unsafe { libobs_sys::obs_output_active(self.output.as_ptr()) }
+    }
+
+    pub fn capture_video_region(&mut self, x: f64, y: f64, width: f64, height: f64) -> Option<VideoRegionFrame> {
+        if self
+            .raw_video_frames
+            .as_ref()
+            .is_some_and(|frames| !frames.contains(x, y, width, height))
+        {
+            self.raw_video_frames = None;
+        }
+        if self.raw_video_frames.is_none() && self.is_recording() {
+            let ovi = Self::get_video_info().ok()?;
+            self.raw_video_frames = Some(RawVideoFrames::start(
+                ovi.output_width,
+                ovi.output_height,
+                x,
+                y,
+                width,
+                height,
+            ));
+        }
+        self.raw_video_frames.as_ref()?.crop(x, y, width, height)
     }
 
     pub fn get_adapter_info(&self) -> Adapter {

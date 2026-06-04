@@ -1,5 +1,45 @@
 import type { Participant, Settings } from "../bindings";
 
+const pressedModifiers = {
+    Shift: false,
+    Ctrl: false,
+    Alt: false,
+    Meta: false,
+};
+if (!(window as any).__scoreboardCenterModifierTrackerInstalled) {
+    window.addEventListener("keydown", (ev) => {
+        pressedModifiers.Shift = ev.shiftKey || ev.getModifierState("Shift");
+        pressedModifiers.Ctrl = ev.ctrlKey || ev.getModifierState("Control");
+        pressedModifiers.Alt = ev.altKey || ev.getModifierState("Alt");
+        pressedModifiers.Meta = ev.metaKey || ev.getModifierState("Meta");
+    }, true);
+    window.addEventListener("keyup", (ev) => {
+        pressedModifiers.Shift = ev.shiftKey || ev.getModifierState("Shift");
+        pressedModifiers.Ctrl = ev.ctrlKey || ev.getModifierState("Control");
+        pressedModifiers.Alt = ev.altKey || ev.getModifierState("Alt");
+        pressedModifiers.Meta = ev.metaKey || ev.getModifierState("Meta");
+    }, true);
+    window.addEventListener("blur", () => {
+        pressedModifiers.Shift = false;
+        pressedModifiers.Ctrl = false;
+        pressedModifiers.Alt = false;
+        pressedModifiers.Meta = false;
+    });
+    (window as any).__scoreboardCenterModifierTrackerInstalled = true;
+}
+
+function isModifierPressed(e: MouseEvent, modifier: string | null | undefined): boolean {
+    if (modifier === "None") return true;
+    if (modifier === "Ctrl") return e.ctrlKey || e.getModifierState("Control") || pressedModifiers.Ctrl;
+    if (modifier === "Alt") return e.altKey || e.getModifierState("Alt") || pressedModifiers.Alt;
+    if (modifier === "Meta") return e.metaKey || e.getModifierState("Meta") || pressedModifiers.Meta;
+    return e.shiftKey || e.getModifierState("Shift") || pressedModifiers.Shift;
+}
+
+function isOpenableExternalUrl(url: string): boolean {
+    return /^https?:\/\//i.test(url.trim());
+}
+
 export async function buildScoreboardCenterRows(input: {
     createEl: (tagName: string, properties?: any, attributes?: any, content?: any) => HTMLElement;
     sorted100: Participant[];
@@ -41,7 +81,12 @@ export async function buildScoreboardCenterRows(input: {
             diffRow.title = "Open Matchup";
             diffRow.addEventListener("click", async (e) => {
                 e.stopPropagation();
-                if (!settings.championMatchupUrl) return;
+                e.preventDefault();
+                const useSub = isModifierPressed(e, (settings as any).scoreboardLinkModifier);
+                const selectedBaseUrl = useSub
+                    ? ((settings as any).championMatchupSubUrl || settings.championMatchupUrl)
+                    : settings.championMatchupUrl;
+                if (!selectedBaseUrl) return;
 
                 let myP = p1;
                 let oppP = p2;
@@ -60,7 +105,7 @@ export async function buildScoreboardCenterRows(input: {
 
                 const myEng = getChampionEnglishNameByIdSync(myP.championId) || myChampName;
                 const oppEng = getChampionEnglishNameByIdSync(oppP.championId) || targetChampName;
-                const url = settings.championMatchupUrl
+                const url = selectedBaseUrl
                     .replace(/{My_id}/g, myChampName)
                     .replace(/{My_name}/g, myEng)
                     .replace(/{My_name_}/g, myEng.replace(/\s+/g, "_"))
@@ -74,7 +119,11 @@ export async function buildScoreboardCenterRows(input: {
                     .replace(/{Opponent}/g, targetChampName)
                     .replace(/{opponent}/g, targetChampName.toLowerCase());
                 try {
-                    await openUrl(url);
+                    if (!isOpenableExternalUrl(url)) {
+                        console.warn("Skipped opening non-http(s) Matchup URL:", url);
+                        return;
+                    }
+                    await openUrl(url.trim());
                 } catch (error) {
                     console.error("Failed to open Matchup URL:", error);
                 }
@@ -87,4 +136,3 @@ export async function buildScoreboardCenterRows(input: {
 
     return { centerDiv, diffRefs };
 }
-

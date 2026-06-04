@@ -105,7 +105,10 @@ pub fn get_league_install_dir() -> Option<PathBuf> {
                 }
 
                 let mut p = PathBuf::from(&s);
-                if p.file_name().map(|x| x.eq_ignore_ascii_case("LeagueClient.exe")).unwrap_or(false) {
+                if p.file_name()
+                    .map(|x| x.eq_ignore_ascii_case("LeagueClient.exe"))
+                    .unwrap_or(false)
+                {
                     p.pop();
                 }
                 if is_valid_lol_dir(&p) {
@@ -303,10 +306,18 @@ pub fn extract_all_champions_to_json(install_dir: &Path, output_path: &Path) -> 
     let db = load_hash_db();
 
     // Process WADs in parallel using rayon
-    let results: Vec<(String, HashMap<String, crate::wad::extractor::SpellExtractionResult>, Vec<String>)> = wads
+    let results: Vec<(
+        String,
+        HashMap<String, crate::wad::extractor::SpellExtractionResult>,
+        Vec<String>,
+    )> = wads
         .par_iter()
         .filter_map(|wad_path| {
-            let champ_name = wad_path.file_name().unwrap_or_default().to_string_lossy().replace(".wad.client", "");
+            let champ_name = wad_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .replace(".wad.client", "");
             let mut champ_vars = HashMap::new();
             let mut champ_slots = Vec::new();
             let mut spell_hashes_to_id = HashMap::new();
@@ -395,10 +406,18 @@ pub fn extract_all_champions_to_json(install_dir: &Path, output_path: &Path) -> 
                 .strip_prefix(&champ_lower)
                 .unwrap_or(&lower)
                 .trim_start_matches('_');
-            if stripped.starts_with('q') { return Some("Q"); }
-            if stripped.starts_with('w') { return Some("W"); }
-            if stripped.starts_with('e') { return Some("E"); }
-            if stripped.starts_with('r') { return Some("R"); }
+            if stripped.starts_with('q') {
+                return Some("Q");
+            }
+            if stripped.starts_with('w') {
+                return Some("W");
+            }
+            if stripped.starts_with('e') {
+                return Some("E");
+            }
+            if stripped.starts_with('r') {
+                return Some("R");
+            }
             None
         };
 
@@ -458,10 +477,7 @@ pub fn extract_all_champions_to_json(install_dir: &Path, output_path: &Path) -> 
                 if let Some(ext_res) = vars.get(passive_id) {
                     champion_spell_debug.insert("Passive".to_string(), ext_res.debug_json.clone());
                 }
-            } else if let Some((_sid, ext_res)) = vars
-                .iter()
-                .find(|(sid, _)| sid.to_lowercase().contains("passive"))
-            {
+            } else if let Some((_sid, ext_res)) = vars.iter().find(|(sid, _)| sid.to_lowercase().contains("passive")) {
                 champion_spell_debug.insert("Passive".to_string(), ext_res.debug_json.clone());
             }
         }

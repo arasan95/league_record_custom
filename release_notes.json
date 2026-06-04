@@ -2,12 +2,14 @@
     "notes": [
         "[日本語]",
         "主な変更点:",
-        "- 一部のルーンアイコンが表示されない問題を修正",
-        "- サイドバーからその試合の公式リプレイを再生するボタンを追加",
+        "- TFTの録画にマーカーを追加できるようになりました",
+        "- 試合中のラウンドを自動で読み取り、あとから見返したい場面を探しやすくなりました",
+        "- LoLだけでなく、TFTの振り返りにも使いやすくなりました",
         "",
         "[English]",
         "Highlights:",
-        "- Fixed an issue where some rune icons were not displayed",
-        "- Added a sidebar button to play the official replay for that match"
+        "- Added marker support for TFT recordings",
+        "- The app can now read TFT rounds automatically, making it easier to find moments you want to review later",
+        "- League Record Custom is now easier to use for reviewing both LoL and TFT games"
     ]
 }

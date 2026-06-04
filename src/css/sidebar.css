@@ -219,6 +219,12 @@
     background: rgba(0, 210, 255, 0.15) !important;
 }
 
+#filter-clip-btn.exclude {
+    color: #5f6770 !important;
+    background: rgba(0, 0, 0, 0.22) !important;
+    border-color: rgba(95, 103, 112, 0.35) !important;
+}
+
 #filter-ranked-btn.active {
     color: #2de09e !important;
     background: rgba(45, 224, 158, 0.15) !important;

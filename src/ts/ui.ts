@@ -29,6 +29,7 @@ import { bindSidebarResizeHandle, loadInitialUiSettings } from "./ui/ui_bootstra
 import { prepareScoreboardView, renderScoreboardMainRows } from "./ui/scoreboard_render_flow_usecase";
 import { applyScoreboardTickFlow } from "./ui/scoreboard_tick_flow_usecase";
 import { clearVideoMetadataView } from "./ui/video_metadata_view_usecase";
+import type { ClipFilterMode } from "./ui/recording_filters_usecase";
 import monoTower from "../assets/match-history-icons/mono-tower.png";
 import monoVoidgrub from "../assets/match-history-icons/mono-voidgrub.png";
 import monoDrake from "../assets/match-history-icons/mono-drake.png";
@@ -40,6 +41,24 @@ try {
     appWindow = getCurrentWebviewWindow();
 } catch (error) {
     console.warn("Failed to get current window (likely running in browser):", error);
+}
+
+const CLIP_FILTER_MODE_STORAGE_KEY = "sidebarClipFilterMode";
+
+function loadClipFilterModeFromStorage(): ClipFilterMode {
+    try {
+        const raw = localStorage.getItem(CLIP_FILTER_MODE_STORAGE_KEY);
+        if (raw === "only" || raw === "exclude" || raw === "all") {
+            return raw;
+        }
+    } catch {}
+    return "all";
+}
+
+function saveClipFilterModeToStorage(mode: ClipFilterMode): void {
+    try {
+        localStorage.setItem(CLIP_FILTER_MODE_STORAGE_KEY, mode);
+    } catch {}
 }
 
 export default class UI {
@@ -76,7 +95,7 @@ export default class UI {
     private maxStorageGb: number = 0; // Loaded from settings
 
     private filterStar = false;
-    private filterClip = false;
+    private clipFilterMode: ClipFilterMode = loadClipFilterModeFromStorage();
     private filterRanked = false;
     private filterSearch = false;
     private searchQuery: string = "";
@@ -269,9 +288,10 @@ export default class UI {
                 setFilterStar: (value) => {
                     this.filterStar = value;
                 },
-                getFilterClip: () => this.filterClip,
-                setFilterClip: (value) => {
-                    this.filterClip = value;
+                getClipFilterMode: () => this.clipFilterMode,
+                setClipFilterMode: (value) => {
+                    this.clipFilterMode = value;
+                    saveClipFilterModeToStorage(value);
                 },
                 getFilterRanked: () => this.filterRanked,
                 setFilterRanked: (value) => {
@@ -455,6 +475,7 @@ export default class UI {
         onDeleteVideoOnly?: (videoId: string, isFavorite: boolean) => void,
         forceUpdateIds: string[] = []
     ) => {
+        const activeVideoId = this.getActiveVideoId();
         this.lastRecordingsSizeGb = recordingsSizeGb;
         this.lastRecordings = recordings;
         this.lastOnVideo = onVideo;
@@ -476,7 +497,7 @@ export default class UI {
             forceUpdateIds,
             search: {
                 filterStar: this.filterStar,
-                filterClip: this.filterClip,
+                clipFilterMode: this.clipFilterMode,
                 filterRanked: this.filterRanked,
                 filterSearch: this.filterSearch,
                 filterServer: this.filterServer,
@@ -513,6 +534,9 @@ export default class UI {
                 sizeMaxText: this.sizeMaxText,
             },
         });
+        if (activeVideoId) {
+            this.setActiveVideoId(activeVideoId);
+        }
     };
 
     public createRecordingItem = (
@@ -698,9 +722,15 @@ export default class UI {
     };
 
     public clearVideoMetadata() {
+        this.setTftMode(false);
         clearVideoMetadataView({
             emptyEl: this.vjs.dom.emptyEl,
         });
+    }
+
+    public setTftMode(enabled: boolean) {
+        if (!this.player) return;
+        (this.player.el() as HTMLElement).classList.toggle("lr-tft-mode", enabled);
     }
 
     public async setVideoDescriptionMetadata(data: GameMetadata) {
@@ -729,7 +759,9 @@ export default class UI {
 
         resetScoreboardRuntimeState(this, data);
 
+        this.setTftMode(isTftMatch);
         const playerEl = this.player.el() as HTMLElement;
+        playerEl.classList.toggle("lr-tft-mode", isTftMatch);
         this.timeline = new InventoryTimeline(this.events, data.participants.map(p => p.participantId), undefined);
 
         const prepared = prepareScoreboardView({
@@ -910,6 +942,10 @@ export default class UI {
 
     public setAutoSelectBtnOnClickHandler = (handler: (e: Event) => void) => {
         bindChangeHandler(this.autoSelectCb, handler);
+    };
+
+    public setCurrentLanguage = (language: string) => {
+        this.currentLanguage = language;
     };
 
     public showSettingsModal = (

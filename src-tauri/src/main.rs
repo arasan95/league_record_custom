@@ -110,13 +110,12 @@ fn run_app_default() {
         not(feature = "av-invoke-one"),
         feature = "av-invoke-triple-settings"
     ))]
-    let app = app
-        .invoke_handler(tauri::generate_handler![
-            commands::get_recordings_path,
-            commands::create_clip,
-            commands::get_clip_audio_tracks,
-            commands::get_settings
-        ]);
+    let app = app.invoke_handler(tauri::generate_handler![
+        commands::get_recordings_path,
+        commands::create_clip,
+        commands::get_clip_audio_tracks,
+        commands::get_settings
+    ]);
 
     #[cfg(all(
         not(feature = "av-no-invoke"),
@@ -125,14 +124,13 @@ fn run_app_default() {
         not(feature = "av-invoke-triple-settings"),
         feature = "av-invoke-triple-tooltip"
     ))]
-    let app = app
-        .invoke_handler(tauri::generate_handler![
-            commands::get_recordings_path,
-            commands::create_clip,
-            commands::get_clip_audio_tracks,
-            commands::load_tooltip_locale_db,
-            commands::perf_log
-        ]);
+    let app = app.invoke_handler(tauri::generate_handler![
+        commands::get_recordings_path,
+        commands::create_clip,
+        commands::get_clip_audio_tracks,
+        commands::load_tooltip_locale_db,
+        commands::perf_log
+    ]);
 
     #[cfg(all(
         not(feature = "av-no-invoke"),
@@ -142,12 +140,11 @@ fn run_app_default() {
         not(feature = "av-invoke-triple-tooltip"),
         feature = "av-invoke-pair"
     ))]
-    let app = app
-        .invoke_handler(tauri::generate_handler![
-            commands::get_recordings_path,
-            commands::create_clip,
-            commands::get_clip_audio_tracks
-        ]);
+    let app = app.invoke_handler(tauri::generate_handler![
+        commands::get_recordings_path,
+        commands::create_clip,
+        commands::get_clip_audio_tracks
+    ]);
 
     #[cfg(all(
         not(feature = "av-no-invoke"),
@@ -158,15 +155,14 @@ fn run_app_default() {
         not(feature = "av-invoke-pair"),
         feature = "av-invoke-mix-small"
     ))]
-    let app = app
-        .invoke_handler(tauri::generate_handler![
-            commands::get_recordings_path,
-            commands::get_settings,
-            commands::create_clip,
-            commands::get_clip_audio_tracks,
-            commands::load_tooltip_locale_db,
-            commands::perf_log
-        ]);
+    let app = app.invoke_handler(tauri::generate_handler![
+        commands::get_recordings_path,
+        commands::get_settings,
+        commands::create_clip,
+        commands::get_clip_audio_tracks,
+        commands::load_tooltip_locale_db,
+        commands::perf_log
+    ]);
 
     #[cfg(all(
         not(feature = "av-no-invoke"),
@@ -178,21 +174,21 @@ fn run_app_default() {
         not(feature = "av-invoke-mix-small"),
         feature = "av-invoke-mix-medium"
     ))]
-    let app = app
-        .invoke_handler(tauri::generate_handler![
-            commands::get_recordings_path,
-            commands::get_recordings_list,
-            commands::rename_video,
-            commands::get_metadata,
-            commands::save_settings,
-            commands::create_clip,
-            commands::get_clip_audio_tracks,
-            commands::get_ffmpeg_runtime_info,
-            commands::download_image,
-            commands::load_scoreboard_cache,
-            commands::load_tooltip_locale_db,
-            commands::perf_log
-        ]);
+    let app = app.invoke_handler(tauri::generate_handler![
+        commands::get_recordings_path,
+        commands::get_recordings_list,
+        commands::rename_video,
+        commands::get_metadata,
+        commands::append_tft_round_marker,
+        commands::save_settings,
+        commands::create_clip,
+        commands::get_clip_audio_tracks,
+        commands::get_ffmpeg_runtime_info,
+        commands::download_image,
+        commands::load_scoreboard_cache,
+        commands::load_tooltip_locale_db,
+        commands::perf_log
+    ]);
 
     #[cfg(all(
         not(feature = "av-no-invoke"),
@@ -205,30 +201,30 @@ fn run_app_default() {
         not(feature = "av-invoke-mix-medium"),
         feature = "av-invoke-group-a"
     ))]
-    let app = app
-        .invoke_handler(tauri::generate_handler![
-            commands::get_marker_flags,
-            commands::set_marker_flags,
-            commands::get_recordings_path,
-            commands::get_recordings_size,
-            commands::get_recordings_list,
-            commands::open_recordings_folder,
-            commands::delete_video,
-            commands::delete_video_only,
-            commands::rename_video,
-            commands::get_metadata,
-            commands::toggle_favorite,
-            commands::confirm_delete,
-            commands::disable_confirm_delete,
-            commands::get_settings,
-            commands::save_settings,
-            commands::pick_recordings_folder,
-            commands::get_running_applications,
-            commands::is_league_client_available,
-            commands::download_recording_replay,
-            commands::play_recording_replay,
-            commands::pick_clips_folder
-        ]);
+    let app = app.invoke_handler(tauri::generate_handler![
+        commands::get_marker_flags,
+        commands::set_marker_flags,
+        commands::get_recordings_path,
+        commands::get_recordings_size,
+        commands::get_recordings_list,
+        commands::open_recordings_folder,
+        commands::delete_video,
+        commands::delete_video_only,
+        commands::rename_video,
+        commands::get_metadata,
+        commands::append_tft_round_marker,
+        commands::toggle_favorite,
+        commands::confirm_delete,
+        commands::disable_confirm_delete,
+        commands::get_settings,
+        commands::save_settings,
+        commands::pick_recordings_folder,
+        commands::get_running_applications,
+        commands::is_league_client_available,
+        commands::download_recording_replay,
+        commands::play_recording_replay,
+        commands::pick_clips_folder
+    ]);
 
     #[cfg(all(
         not(feature = "av-no-invoke"),
@@ -242,21 +238,20 @@ fn run_app_default() {
         not(feature = "av-invoke-group-a"),
         feature = "av-invoke-group-b"
     ))]
-    let app = app
-        .invoke_handler(tauri::generate_handler![
-            commands::create_clip,
-            commands::get_clip_audio_tracks,
-            commands::pick_ffmpeg_path,
-            commands::get_ffmpeg_runtime_info,
-            commands::clear_cache,
-            commands::clear_cache_for_patch_update,
-            commands::download_image,
-            commands::save_scoreboard_cache,
-            commands::load_scoreboard_cache,
-            commands::update_champion_data,
-            commands::load_tooltip_locale_db,
-            commands::perf_log
-        ]);
+    let app = app.invoke_handler(tauri::generate_handler![
+        commands::create_clip,
+        commands::get_clip_audio_tracks,
+        commands::pick_ffmpeg_path,
+        commands::get_ffmpeg_runtime_info,
+        commands::clear_cache,
+        commands::clear_cache_for_patch_update,
+        commands::download_image,
+        commands::save_scoreboard_cache,
+        commands::load_scoreboard_cache,
+        commands::update_champion_data,
+        commands::load_tooltip_locale_db,
+        commands::perf_log
+    ]);
 
     #[cfg(all(
         not(feature = "av-no-invoke"),
@@ -272,42 +267,42 @@ fn run_app_default() {
         not(feature = "av-safe-invoke"),
         not(feature = "av-disable-tooltip-db")
     ))]
-    let app = app
-        .invoke_handler(tauri::generate_handler![
-            commands::get_marker_flags,
-            commands::set_marker_flags,
-            commands::get_recordings_path,
-            commands::get_recordings_size,
-            commands::get_recordings_list,
-            commands::open_recordings_folder,
-            commands::delete_video,
-            commands::delete_video_only,
-            commands::rename_video,
-            commands::get_metadata,
-            commands::toggle_favorite,
-            commands::confirm_delete,
-            commands::disable_confirm_delete,
-            commands::get_settings,
-            commands::save_settings,
-            commands::pick_recordings_folder,
-            commands::get_running_applications,
-            commands::is_league_client_available,
-            commands::download_recording_replay,
-            commands::play_recording_replay,
-            commands::create_clip,
-            commands::get_clip_audio_tracks,
-            commands::pick_clips_folder,
-            commands::pick_ffmpeg_path,
-            commands::get_ffmpeg_runtime_info,
-            commands::clear_cache,
-            commands::clear_cache_for_patch_update,
-            commands::download_image,
-            commands::save_scoreboard_cache,
-            commands::load_scoreboard_cache,
-            commands::update_champion_data,
-            commands::load_tooltip_locale_db,
-            commands::perf_log
-        ]);
+    let app = app.invoke_handler(tauri::generate_handler![
+        commands::get_marker_flags,
+        commands::set_marker_flags,
+        commands::get_recordings_path,
+        commands::get_recordings_size,
+        commands::get_recordings_list,
+        commands::open_recordings_folder,
+        commands::delete_video,
+        commands::delete_video_only,
+        commands::rename_video,
+        commands::get_metadata,
+        commands::append_tft_round_marker,
+        commands::toggle_favorite,
+        commands::confirm_delete,
+        commands::disable_confirm_delete,
+        commands::get_settings,
+        commands::save_settings,
+        commands::pick_recordings_folder,
+        commands::get_running_applications,
+        commands::is_league_client_available,
+        commands::download_recording_replay,
+        commands::play_recording_replay,
+        commands::create_clip,
+        commands::get_clip_audio_tracks,
+        commands::pick_clips_folder,
+        commands::pick_ffmpeg_path,
+        commands::get_ffmpeg_runtime_info,
+        commands::clear_cache,
+        commands::clear_cache_for_patch_update,
+        commands::download_image,
+        commands::save_scoreboard_cache,
+        commands::load_scoreboard_cache,
+        commands::update_champion_data,
+        commands::load_tooltip_locale_db,
+        commands::perf_log
+    ]);
 
     #[cfg(all(
         not(feature = "av-no-invoke"),
@@ -323,41 +318,41 @@ fn run_app_default() {
         not(feature = "av-safe-invoke"),
         feature = "av-disable-tooltip-db"
     ))]
-    let app = app
-        .invoke_handler(tauri::generate_handler![
-            commands::get_marker_flags,
-            commands::set_marker_flags,
-            commands::get_recordings_path,
-            commands::get_recordings_size,
-            commands::get_recordings_list,
-            commands::open_recordings_folder,
-            commands::delete_video,
-            commands::delete_video_only,
-            commands::rename_video,
-            commands::get_metadata,
-            commands::toggle_favorite,
-            commands::confirm_delete,
-            commands::disable_confirm_delete,
-            commands::get_settings,
-            commands::save_settings,
-            commands::pick_recordings_folder,
-            commands::get_running_applications,
-            commands::is_league_client_available,
-            commands::download_recording_replay,
-            commands::play_recording_replay,
-            commands::create_clip,
-            commands::get_clip_audio_tracks,
-            commands::pick_clips_folder,
-            commands::pick_ffmpeg_path,
-            commands::get_ffmpeg_runtime_info,
-            commands::clear_cache,
-            commands::clear_cache_for_patch_update,
-            commands::download_image,
-            commands::save_scoreboard_cache,
-            commands::load_scoreboard_cache,
-            commands::update_champion_data,
-            commands::perf_log
-        ]);
+    let app = app.invoke_handler(tauri::generate_handler![
+        commands::get_marker_flags,
+        commands::set_marker_flags,
+        commands::get_recordings_path,
+        commands::get_recordings_size,
+        commands::get_recordings_list,
+        commands::open_recordings_folder,
+        commands::delete_video,
+        commands::delete_video_only,
+        commands::rename_video,
+        commands::get_metadata,
+        commands::append_tft_round_marker,
+        commands::toggle_favorite,
+        commands::confirm_delete,
+        commands::disable_confirm_delete,
+        commands::get_settings,
+        commands::save_settings,
+        commands::pick_recordings_folder,
+        commands::get_running_applications,
+        commands::is_league_client_available,
+        commands::download_recording_replay,
+        commands::play_recording_replay,
+        commands::create_clip,
+        commands::get_clip_audio_tracks,
+        commands::pick_clips_folder,
+        commands::pick_ffmpeg_path,
+        commands::get_ffmpeg_runtime_info,
+        commands::clear_cache,
+        commands::clear_cache_for_patch_update,
+        commands::download_image,
+        commands::save_scoreboard_cache,
+        commands::load_scoreboard_cache,
+        commands::update_champion_data,
+        commands::perf_log
+    ]);
 
     #[cfg(all(
         not(feature = "av-no-invoke"),
@@ -372,29 +367,29 @@ fn run_app_default() {
         not(feature = "av-invoke-group-b"),
         feature = "av-safe-invoke"
     ))]
-    let app = app
-        .invoke_handler(tauri::generate_handler![
-            commands::get_marker_flags,
-            commands::set_marker_flags,
-            commands::get_recordings_path,
-            commands::get_recordings_size,
-            commands::get_recordings_list,
-            commands::delete_video,
-            commands::delete_video_only,
-            commands::rename_video,
-            commands::get_metadata,
-            commands::toggle_favorite,
-            commands::confirm_delete,
-            commands::disable_confirm_delete,
-            commands::get_settings,
-            commands::save_settings,
-            commands::clear_cache,
-            commands::clear_cache_for_patch_update,
-            commands::save_scoreboard_cache,
-            commands::load_scoreboard_cache,
-            commands::load_tooltip_locale_db,
-            commands::perf_log
-        ]);
+    let app = app.invoke_handler(tauri::generate_handler![
+        commands::get_marker_flags,
+        commands::set_marker_flags,
+        commands::get_recordings_path,
+        commands::get_recordings_size,
+        commands::get_recordings_list,
+        commands::delete_video,
+        commands::delete_video_only,
+        commands::rename_video,
+        commands::get_metadata,
+        commands::append_tft_round_marker,
+        commands::toggle_favorite,
+        commands::confirm_delete,
+        commands::disable_confirm_delete,
+        commands::get_settings,
+        commands::save_settings,
+        commands::clear_cache,
+        commands::clear_cache_for_patch_update,
+        commands::save_scoreboard_cache,
+        commands::load_scoreboard_cache,
+        commands::load_tooltip_locale_db,
+        commands::perf_log
+    ]);
 
     #[cfg(feature = "av-no-invoke")]
     let app = app;
@@ -405,8 +400,7 @@ fn run_app_default() {
     #[cfg(feature = "av-no-setup")]
     let app = app;
 
-    let app = app
-        .build(tauri::generate_context!());
+    let app = app.build(tauri::generate_context!());
 
     match app {
         Ok(app) => app.run(app::process_app_event),
@@ -419,8 +413,7 @@ fn run_app_default() {
 
 #[cfg(feature = "av-minimal")]
 fn run_app_minimal() {
-    let app = tauri::Builder::default()
-        .build(tauri::generate_context!());
+    let app = tauri::Builder::default().build(tauri::generate_context!());
 
     match app {
         Ok(app) => app.run(|_, _| {}),
@@ -435,5 +428,3 @@ fn run_app_minimal() {
 mod parse_tests {
     // Tests containing personal hardcoded paths have been removed.
 }
-
-
