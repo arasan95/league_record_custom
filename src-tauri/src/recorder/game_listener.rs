@@ -56,12 +56,47 @@ fn build_live_player_fallback_key(player: &shaco::model::ingame::Player) -> Stri
         .map(normalize_identity_key)
         .unwrap_or_default();
     format!(
-        "fallback:{}|{}|{}|{}",
+        "fallback:{}|{}|{}",
         team_id_str(&player.team),
         normalize_identity_key(&player.summoner_name),
-        normalize_identity_key(&player.champion_name),
         riot_key
     )
+}
+
+fn parse_pid_tag(raw: &str) -> Option<i32> {
+    let (_, rest) = raw.rsplit_once("#PID:")?;
+    let pid_str = rest.split('#').next().unwrap_or_default();
+    pid_str.parse::<i32>().ok().filter(|pid| (1..=10).contains(pid))
+}
+
+fn build_synthetic_shopper_name(
+    player: &shaco::model::ingame::Player,
+    player_map: &HashMap<String, i32>,
+) -> String {
+    let team_intro = team_id_str(&player.team);
+    let summoner_key = normalize_identity_key(&player.summoner_name);
+    let riot_key = player.riot_id.riot_id.as_deref().map(normalize_identity_key);
+
+    let resolved_pid = player_map
+        .get(&format!("team:{}|summoner:{}", team_intro, summoner_key))
+        .copied()
+        .or_else(|| player_map.get(&format!("summoner:{}", summoner_key)).copied())
+        .or_else(|| {
+            riot_key.as_ref().and_then(|key| {
+                player_map
+                    .get(&format!("team:{}|riot:{}", team_intro, key))
+                    .copied()
+                    .or_else(|| player_map.get(&format!("riot:{}", key)).copied())
+            })
+        });
+
+    match resolved_pid {
+        Some(pid) => format!(
+            "{}#PID:{}#TEAM:{}#CNAME:{}",
+            player.summoner_name, pid, team_intro, player.champion_name
+        ),
+        None => format!("{}#TEAM:{}#CNAME:{}", player.summoner_name, team_intro, player.champion_name),
+    }
 }
 
 fn terminal_live_event_reason(event: &LiveGameEvent) -> Option<String> {
@@ -407,8 +442,24 @@ impl GameListener {
                     for (player_idx, player) in data.all_players.iter().enumerate() {
                         let name = player.summoner_name.clone();
                         let current_items = player.items.clone();
+                        let synthetic_shopper_name = player_map
+                            .lock()
+                            .ok()
+                            .map(|map| build_synthetic_shopper_name(player, &map))
+                            .unwrap_or_else(|| {
+                                format!(
+                                    "{}#TEAM:{}#CNAME:{}",
+                                    name,
+                                    team_id_str(&player.team),
+                                    player.champion_name
+                                )
+                            });
 
-                        let inventory_key = format!("idx:{player_idx}|{}", build_live_player_fallback_key(player));
+                        let inventory_key = if let Some(pid) = parse_pid_tag(&synthetic_shopper_name) {
+                            format!("pid:{pid}")
+                        } else {
+                            format!("idx:{player_idx}|{}", build_live_player_fallback_key(player))
+                        };
                         let old_items = previous_inventory.entry(inventory_key).or_default();
 
                         let mut old_counts: HashMap<i32, i32> = HashMap::new();
@@ -430,20 +481,11 @@ impl GameListener {
                                 // Find the full item struct from old_items
                                 if let Some(item_struct) = old_items.iter().find(|i| i.item_id == *id) {
                                     for _ in 0..diff {
-                                        // Use Name + Team identifier.
-                                        // Team is required to disambiguate bots with same name on different teams.
-                                        let team_intro = team_id_str(&player.team);
-                                        // SkinID logic: ChampionID * 1000 + SkinIndex
-                                        let unique_name =
-                                            format!("{}#TEAM:{}#CNAME:{}", name, team_intro, player.champion_name);
-
-                                        // println!("DEBUG: Generated Event ItemSold for {}", unique_name);
-
                                         new_events.push(LiveGameEvent::ItemSold(shaco::model::ingame::ItemSold {
                                             event_id: 0, // Synthetic Only
                                             event_time: game_time,
                                             item: item_struct.clone(),
-                                            shopper_name: unique_name,
+                                            shopper_name: synthetic_shopper_name.clone(),
                                         }));
                                     }
                                 }
@@ -459,19 +501,12 @@ impl GameListener {
                                 // Find the full item struct
                                 if let Some(item_struct) = current_items.iter().find(|i| i.item_id == *id) {
                                     for _ in 0..diff {
-                                        // Use Name + Team identifier.
-                                        let team_intro = team_id_str(&player.team);
-                                        let unique_name =
-                                            format!("{}#TEAM:{}#CNAME:{}", name, team_intro, player.champion_name);
-
-                                        // println!("DEBUG: Generated Event ItemPurchased for {}", unique_name);
-
                                         new_events.push(LiveGameEvent::ItemPurchased(
                                             shaco::model::ingame::ItemPurchased {
                                                 event_id: 0, // Synthetic Only
                                                 event_time: game_time,
                                                 item: item_struct.clone(),
-                                                shopper_name: unique_name,
+                                                shopper_name: synthetic_shopper_name.clone(),
                                             },
                                         ));
                                     }
@@ -1053,6 +1088,10 @@ impl GameListener {
                                     for event in &collected_events {
                                         // Helper to match name to ID
                                         let resolve_id = |name: &str| -> Option<i32> {
+                                            if let Some(pid) = parse_pid_tag(name) {
+                                                return Some(pid);
+                                            }
+
                                             if let Some(id) = name_to_id.get(name) {
                                                 return Some(*id);
                                             }
@@ -1105,7 +1144,7 @@ impl GameListener {
                                                         event: crate::recorder::data::Event::ItemPurchased {
                                                             participant_id: pid as i64,
                                                             item_id: e.item.item_id as i64,
-                                                            slot: None,
+                                                            slot: Some(e.item.slot as i64),
                                                         },
                                                     });
                                                 }
@@ -1117,7 +1156,7 @@ impl GameListener {
                                                         event: crate::recorder::data::Event::ItemSold {
                                                             participant_id: pid as i64,
                                                             item_id: e.item.item_id as i64,
-                                                            slot: None,
+                                                            slot: Some(e.item.slot as i64),
                                                         },
                                                     });
                                                 }
