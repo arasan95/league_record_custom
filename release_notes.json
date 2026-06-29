@@ -6,18 +6,12 @@
         "- 新チャンピオンやリワークされたチャンピオンのスキル名・説明・クールダウン・コストに対応しやすくなりました",
         "- 設定 → About に、ツールチップデータベースの更新確認ボタンを追加しました",
         "- ニーコが変身している試合で、他のプレイヤーにニーコのアイテムが表示されることがある問題を修正しました",
-        "- TFTの録画にマーカーを追加できるようになりました",
-        "- 試合中のラウンドを自動で読み取り、あとから見返したい場面を探しやすくなりました",
-        "- LoLだけでなく、TFTの振り返りにも使いやすくなりました",
         "",
         "[English]",
         "Highlights:",
         "- Tooltip data is now generated automatically from up-to-date in-game data",
         "- Added better support for new and reworked champions, including skill names, descriptions, cooldowns, and costs",
         "- Added a tooltip database update button under Settings → About",
-        "- Fixed an issue where Neeko's items could appear on another player when Neeko was disguised",
-        "- Added marker support for TFT recordings",
-        "- The app can now read TFT rounds automatically, making it easier to find moments you want to review later",
-        "- League Record Custom is now easier to use for reviewing both LoL and TFT games"
+        "- Fixed an issue where Neeko's items could appear on another player when Neeko was disguised"
     ]
 }

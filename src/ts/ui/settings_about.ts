@@ -2,6 +2,8 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-shell";
 import { check } from "@tauri-apps/plugin-updater";
 
+import { commands } from "../bindings";
+import { clearLocalChampionTooltipCache } from "../datadragon";
 import type { Settings } from "../bindings";
 import type { Language } from "../i18n";
 import type { UiCreateEl } from "./settings_primitives";
@@ -101,6 +103,75 @@ export function createSettingsAboutTabContent({
     ) as HTMLButtonElement;
     updateActionsContainer.append(checkUpdateBtn);
 
+    const tooltipDbStatusMsg = createEl(
+        "div",
+        {},
+        { style: "font-size: 0.9em; color: #aaa; margin: 4px 0 10px; min-height: 20px;" },
+    ) as HTMLDivElement;
+    const tooltipDbActionsContainer = createEl(
+        "div",
+        {},
+        { style: "display: flex; justify-content: center; gap: 10px;" },
+    ) as HTMLDivElement;
+    const tooltipDbUpdateBtn = createEl(
+        "button",
+        {
+            onclick: async () => {
+                tooltipDbUpdateBtn.disabled = true;
+                tooltipDbStatusMsg.innerText =
+                    getText(lang as any, "tooltipDbChecking" as any) || "Checking tooltip database...";
+                tooltipDbStatusMsg.style.color = "#aaa";
+                try {
+                    const result = await commands.checkTooltipDbUpdate();
+                    if (result.status === "error") {
+                        throw new Error(String(result.error || "Failed to check tooltip database update."));
+                    }
+                    const info = result.data;
+                    if (!info.updateAvailable) {
+                        tooltipDbStatusMsg.innerText =
+                            getText(lang as any, "tooltipDbLatest" as any) || "Tooltip database is up to date.";
+                        tooltipDbStatusMsg.style.color = "#4CAF50";
+                        return;
+                    }
+
+                    const sizeMb = (info.remoteSize / 1024 / 1024).toFixed(1);
+                    const message =
+                        getText(lang as any, "tooltipDbUpdateConfirm" as any)
+                        || `A new tooltip database is available (${sizeMb} MB). Replace the current local database?`;
+                    if (!confirm(message)) {
+                        tooltipDbStatusMsg.innerText =
+                            getText(lang as any, "tooltipDbUpdateCancelled" as any) || "Tooltip database update cancelled.";
+                        tooltipDbStatusMsg.style.color = "#aaa";
+                        return;
+                    }
+
+                    tooltipDbStatusMsg.innerText =
+                        getText(lang as any, "tooltipDbUpdating" as any) || "Updating tooltip database...";
+                    tooltipDbStatusMsg.style.color = "#aaa";
+                    const applyResult = await commands.applyTooltipDbUpdate(info.remoteSha256);
+                    if (applyResult.status === "error") {
+                        throw new Error(String(applyResult.error || "Failed to update tooltip database."));
+                    }
+                    clearLocalChampionTooltipCache();
+                    tooltipDbStatusMsg.innerText =
+                        getText(lang as any, "tooltipDbUpdated" as any)
+                        || "Tooltip database updated. Newly opened tooltips will use the new data.";
+                    tooltipDbStatusMsg.style.color = "#4CAF50";
+                } catch (e) {
+                    console.error("Tooltip DB update failed", e);
+                    tooltipDbStatusMsg.innerText =
+                        getText(lang as any, "tooltipDbUpdateError" as any) || "Failed to update tooltip database.";
+                    tooltipDbStatusMsg.style.color = "#ff5555";
+                } finally {
+                    tooltipDbUpdateBtn.disabled = false;
+                }
+            },
+        },
+        { class: "btn-browse" },
+        getText(lang as any, "checkTooltipDbUpdates" as any) || "Check tooltip DB updates",
+    ) as HTMLButtonElement;
+    tooltipDbActionsContainer.append(tooltipDbUpdateBtn);
+
     const updateOnStartupCheckbox = createEl(
         "input",
         {
@@ -122,7 +193,15 @@ export function createSettingsAboutTabContent({
         ],
     ) as HTMLLabelElement;
 
-    aboutWrapper.append(appVersionLine, repoLine, updateActionsContainer, updateStatusMsg, updateOnStartupContainer);
+    aboutWrapper.append(
+        appVersionLine,
+        repoLine,
+        updateActionsContainer,
+        updateStatusMsg,
+        tooltipDbActionsContainer,
+        tooltipDbStatusMsg,
+        updateOnStartupContainer,
+    );
     aboutTabContent.appendChild(aboutWrapper);
     return aboutTabContent;
 }
