@@ -1,6 +1,21 @@
+use std::io::Write;
 use std::path::PathBuf;
 
 use tauri::AppHandle;
+
+const TOOLTIP_DB_REMOTE_URL: &str =
+    "https://raw.githubusercontent.com/arasan95/league_record_custom/main/src-tauri/resources/tooltip_data.db";
+
+#[cfg_attr(test, derive(specta::Type))]
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TooltipDbUpdateInfo {
+    pub update_available: bool,
+    pub current_sha256: String,
+    pub remote_sha256: String,
+    pub remote_size: u64,
+    pub checked_url: String,
+}
 
 fn ensure_tooltip_db_installed(app_handle: &AppHandle) -> Result<PathBuf, String> {
     use tauri::Manager;
@@ -85,7 +100,8 @@ fn is_tooltip_locale_payload_valid(locale: &str, data_json: &str) -> bool {
     let mut champions = 0usize;
     let mut with_spell_map = 0usize;
     let mut with_champion_local = 0usize;
-    for v in root.values() {
+    let mut same_as_key_local_names = 0usize;
+    for (champ_id, v) in root {
         let Some(champ) = v.as_object() else {
             continue;
         };
@@ -93,13 +109,16 @@ fn is_tooltip_locale_payload_valid(locale: &str, data_json: &str) -> bool {
         if champ.get("spell_map").and_then(|x| x.as_object()).is_some() {
             with_spell_map += 1;
         }
-        if champ
+        if let Some(local_name) = champ
             .get("champion_local")
             .and_then(|x| x.as_str())
-            .map(|s| !s.trim().is_empty())
-            .unwrap_or(false)
         {
-            with_champion_local += 1;
+            if !local_name.trim().is_empty() {
+                with_champion_local += 1;
+                if local_name.trim() == champ_id {
+                    same_as_key_local_names += 1;
+                }
+            }
         }
     }
 
@@ -145,6 +164,7 @@ fn is_tooltip_locale_payload_valid(locale: &str, data_json: &str) -> bool {
     champions >= 120
         && (enough_spell_map || enough_modern_schema)
         && aphelios_has_extra_block
+        && (locale != "ja_JP" || same_as_key_local_names == 0)
         && !has_stale_english_champion_meta(locale, root)
         && !has_known_bad_ja_slot_payload(root)
 }
@@ -206,6 +226,102 @@ fn tooltip_db_has_rows(db_path: &PathBuf) -> bool {
     count > 0
 }
 
+fn tooltip_db_update_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {
+    use tauri::Manager;
+
+    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let update_dir = app_data_dir.join("tooltip_db").join("updates");
+    std::fs::create_dir_all(&update_dir).map_err(|e| e.to_string())?;
+    Ok(update_dir)
+}
+
+fn sha256_file(path: &PathBuf) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+
+    let bytes = std::fs::read(path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn validate_tooltip_db_file(db_path: &PathBuf) -> Result<(), String> {
+    let conn = rusqlite::Connection::open(db_path)
+        .map_err(|e| format!("Failed to open tooltip DB ({}): {}", db_path.display(), e))?;
+    let mut stmt = conn
+        .prepare("SELECT locale, data_json FROM champion_tooltips")
+        .map_err(|e| format!("Failed to prepare tooltip DB validation query: {}", e))?;
+    let rows = stmt
+        .query_map([], |row| {
+            let locale: String = row.get(0)?;
+            let data_json: String = row.get(1)?;
+            Ok((locale, data_json))
+        })
+        .map_err(|e| format!("Failed to query tooltip DB validation rows: {}", e))?;
+
+    let mut locales = 0usize;
+    for row in rows {
+        let (locale, data_json) = row.map_err(|e| format!("Failed to read tooltip DB validation row: {}", e))?;
+        if !is_tooltip_locale_payload_valid(&locale, &data_json) {
+            return Err(format!(
+                "Downloaded tooltip DB has invalid payload for locale {}",
+                locale
+            ));
+        }
+        locales += 1;
+    }
+
+    if locales < 13 {
+        return Err(format!("Downloaded tooltip DB has too few locales: {}", locales));
+    }
+
+    Ok(())
+}
+
+async fn download_remote_tooltip_db(app_handle: &AppHandle) -> Result<(PathBuf, String, u64), String> {
+    let client = reqwest::Client::builder()
+        .user_agent("LeagueRecord tooltip-db-updater")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let response = client
+        .get(TOOLTIP_DB_REMOTE_URL)
+        .header("Cache-Control", "no-cache")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to download tooltip DB: {}", e))?;
+    if !response.status().is_success() {
+        return Err(format!("Tooltip DB download failed: {}", response.status()));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read tooltip DB download: {}", e))?;
+    let size = bytes.len() as u64;
+    if size < 1_000_000 {
+        return Err(format!("Downloaded tooltip DB is unexpectedly small: {} bytes", size));
+    }
+
+    let update_dir = tooltip_db_update_dir(app_handle)?;
+    let tmp_path = update_dir.join("tooltip_data.remote.tmp");
+    let db_path = update_dir.join("tooltip_data.remote.db");
+    if tmp_path.exists() {
+        std::fs::remove_file(&tmp_path).map_err(|e| format!("Failed to remove old temp tooltip DB: {}", e))?;
+    }
+    if db_path.exists() {
+        std::fs::remove_file(&db_path).map_err(|e| format!("Failed to remove old staged tooltip DB: {}", e))?;
+    }
+    {
+        let mut file =
+            std::fs::File::create(&tmp_path).map_err(|e| format!("Failed to create temp tooltip DB: {}", e))?;
+        file.write_all(&bytes)
+            .map_err(|e| format!("Failed to write temp tooltip DB: {}", e))?;
+    }
+    std::fs::rename(&tmp_path, &db_path).map_err(|e| format!("Failed to stage downloaded tooltip DB: {}", e))?;
+    validate_tooltip_db_file(&db_path)?;
+    let sha = sha256_file(&db_path)?;
+    Ok((db_path, sha, size))
+}
+
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub async fn load_tooltip_locale_db(locale: String, app_handle: AppHandle) -> Result<Option<String>, String> {
@@ -230,4 +346,72 @@ pub async fn load_tooltip_locale_db(locale: String, app_handle: AppHandle) -> Re
     }
 
     Ok(data_json)
+}
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub async fn check_tooltip_db_update(app_handle: AppHandle) -> Result<TooltipDbUpdateInfo, String> {
+    let current_db = ensure_tooltip_db_installed(&app_handle)?;
+    let current_sha256 = sha256_file(&current_db)?;
+    let (_remote_db, remote_sha256, remote_size) = download_remote_tooltip_db(&app_handle).await?;
+
+    Ok(TooltipDbUpdateInfo {
+        update_available: current_sha256 != remote_sha256,
+        current_sha256,
+        remote_sha256,
+        remote_size,
+        checked_url: TOOLTIP_DB_REMOTE_URL.to_string(),
+    })
+}
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub async fn apply_tooltip_db_update(
+    expected_sha256: String,
+    app_handle: AppHandle,
+) -> Result<TooltipDbUpdateInfo, String> {
+    let current_db = ensure_tooltip_db_installed(&app_handle)?;
+    let update_dir = tooltip_db_update_dir(&app_handle)?;
+    let staged_db = update_dir.join("tooltip_data.remote.db");
+    if !staged_db.exists() {
+        return Err("No downloaded tooltip DB update is staged. Please check for updates again.".to_string());
+    }
+
+    validate_tooltip_db_file(&staged_db)?;
+    let remote_sha256 = sha256_file(&staged_db)?;
+    if remote_sha256 != expected_sha256 {
+        return Err("Downloaded tooltip DB changed after the update check. Please check again.".to_string());
+    }
+
+    let current_sha256 = sha256_file(&current_db)?;
+    if current_sha256 == remote_sha256 {
+        return Ok(TooltipDbUpdateInfo {
+            update_available: false,
+            current_sha256,
+            remote_sha256,
+            remote_size: std::fs::metadata(&staged_db).map(|m| m.len()).unwrap_or(0),
+            checked_url: TOOLTIP_DB_REMOTE_URL.to_string(),
+        });
+    }
+
+    let backup_db = current_db.with_extension("db.bak");
+    let replacement_db = current_db.with_extension("db.new");
+    std::fs::copy(&staged_db, &replacement_db).map_err(|e| format!("Failed to stage tooltip DB replacement: {}", e))?;
+    validate_tooltip_db_file(&replacement_db)?;
+    if backup_db.exists() {
+        std::fs::remove_file(&backup_db).map_err(|e| format!("Failed to remove old tooltip DB backup: {}", e))?;
+    }
+    std::fs::rename(&current_db, &backup_db).map_err(|e| format!("Failed to backup current tooltip DB: {}", e))?;
+    if let Err(e) = std::fs::rename(&replacement_db, &current_db) {
+        let _ = std::fs::rename(&backup_db, &current_db);
+        return Err(format!("Failed to replace tooltip DB: {}", e));
+    }
+
+    Ok(TooltipDbUpdateInfo {
+        update_available: false,
+        current_sha256: sha256_file(&current_db)?,
+        remote_sha256,
+        remote_size: std::fs::metadata(&current_db).map(|m| m.len()).unwrap_or(0),
+        checked_url: TOOLTIP_DB_REMOTE_URL.to_string(),
+    })
 }

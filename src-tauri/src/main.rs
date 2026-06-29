@@ -129,6 +129,8 @@ fn run_app_default() {
         commands::create_clip,
         commands::get_clip_audio_tracks,
         commands::load_tooltip_locale_db,
+        commands::check_tooltip_db_update,
+        commands::apply_tooltip_db_update,
         commands::perf_log
     ]);
 
@@ -161,6 +163,8 @@ fn run_app_default() {
         commands::create_clip,
         commands::get_clip_audio_tracks,
         commands::load_tooltip_locale_db,
+        commands::check_tooltip_db_update,
+        commands::apply_tooltip_db_update,
         commands::perf_log
     ]);
 
@@ -187,6 +191,8 @@ fn run_app_default() {
         commands::download_image,
         commands::load_scoreboard_cache,
         commands::load_tooltip_locale_db,
+        commands::check_tooltip_db_update,
+        commands::apply_tooltip_db_update,
         commands::perf_log
     ]);
 
@@ -250,6 +256,8 @@ fn run_app_default() {
         commands::load_scoreboard_cache,
         commands::update_champion_data,
         commands::load_tooltip_locale_db,
+        commands::check_tooltip_db_update,
+        commands::apply_tooltip_db_update,
         commands::perf_log
     ]);
 
@@ -301,6 +309,8 @@ fn run_app_default() {
         commands::load_scoreboard_cache,
         commands::update_champion_data,
         commands::load_tooltip_locale_db,
+        commands::check_tooltip_db_update,
+        commands::apply_tooltip_db_update,
         commands::perf_log
     ]);
 
@@ -388,6 +398,8 @@ fn run_app_default() {
         commands::save_scoreboard_cache,
         commands::load_scoreboard_cache,
         commands::load_tooltip_locale_db,
+        commands::check_tooltip_db_update,
+        commands::apply_tooltip_db_update,
         commands::perf_log
     ]);
 

@@ -1373,8 +1373,10 @@ impl GameListener {
                                     &crate::recorder::MetadataFile::Metadata(game_metadata),
                                 );
                                 log::info!("writing game metadata to ({metadata_filepath:?}): {result:?}");
-                                let should_backfill_tft_rounds =
-                                    result.is_ok() && is_tft_metadata && tft_round_markers_empty;
+                                let should_backfill_tft_rounds = false
+                                    && result.is_ok()
+                                    && is_tft_metadata
+                                    && tft_round_markers_empty;
                                 if should_backfill_tft_rounds {
                                     let video_path = metadata_filepath.with_extension("mp4");
                                     let backfill_metadata_path = metadata_filepath.clone();
