@@ -174,6 +174,9 @@ export function createSettingsOptionsSections(
         autoDeleteClips: createLabeledSwitch(createEl, getText(lang, "autoDeleteClips" as any), (settings as any).autoDeleteClips ?? false),
     };
 
+    const createLinkInputLabel = (text: string): HTMLDivElement =>
+        createEl("div", {}, { style: "font-size: 0.78em; color: #c9d1d9; margin: 7px 0 4px; font-weight: 600;" }, text) as HTMLDivElement;
+
     const matchHistoryUrlInput = createEl("input", {}, {
         class: "settings-input",
         type: "text",
@@ -210,15 +213,19 @@ export function createSettingsOptionsSections(
         createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "trackingUrl")),
         createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, getText(lang, "trackingUrlExample")),
         createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "trackingUrlHint")),
+        createLinkInputLabel(getText(lang, "primaryLinkUrl" as any)),
         matchHistoryUrlInput,
     ]) as HTMLDivElement;
     const matchHistorySubUrlInput = createEl("input", {}, {
         class: "settings-input",
         type: "text",
-        placeholder: "Sub URL (modifier-click)",
+        placeholder: getText(lang, "alternateLinkUrl" as any),
         value: (settings as any).matchHistorySubUrl || "",
         style: "flex: 1; margin-top: 6px;",
     }) as HTMLInputElement;
+    trackingUrlContainer.append(
+        createLinkInputLabel(getText(lang, "alternateLinkUrl" as any)),
+    );
     trackingUrlContainer.append(matchHistorySubUrlInput);
 
     const championWikiUrlInput = createEl("input", {}, {
@@ -232,16 +239,20 @@ export function createSettingsOptionsSections(
         createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "championWikiUrl")),
         createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, getText(lang, "championWikiUrlExample")),
         createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "championWikiUrlHint")),
+        createLinkInputLabel(getText(lang, "primaryLinkUrl" as any)),
         championWikiUrlInput,
     ]) as HTMLDivElement;
     const championWikiSubUrlInput = createEl("input", {}, {
         class: "settings-input",
         type: "text",
-        placeholder: "Sub URL (modifier-click)",
+        placeholder: getText(lang, "alternateLinkUrl" as any),
         value: (settings as any).championWikiSubUrl || "",
         style: "flex: 1; margin-top: 6px;",
     }) as HTMLInputElement;
-    championWikiUrlContainer.append(championWikiSubUrlInput);
+    championWikiUrlContainer.append(
+        createLinkInputLabel(getText(lang, "alternateLinkUrl" as any)),
+        championWikiSubUrlInput,
+    );
 
     const championMatchupUrlInput = createEl("input", {}, {
         class: "settings-input",
@@ -253,16 +264,20 @@ export function createSettingsOptionsSections(
     const championMatchupUrlContainer = createEl("div", {}, { class: "settings-group full-width", style: "border: none; padding: 0; background: none; margin-top: 10px;" }, [
         createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "championMatchupUrl")),
         createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "championMatchupUrlHint")),
+        createLinkInputLabel(getText(lang, "primaryLinkUrl" as any)),
         championMatchupUrlInput,
     ]) as HTMLDivElement;
     const championMatchupSubUrlInput = createEl("input", {}, {
         class: "settings-input",
         type: "text",
-        placeholder: "Sub URL (modifier-click)",
+        placeholder: getText(lang, "alternateLinkUrl" as any),
         value: (settings as any).championMatchupSubUrl || "",
         style: "flex: 1; margin-top: 6px;",
     }) as HTMLInputElement;
-    championMatchupUrlContainer.append(championMatchupSubUrlInput);
+    championMatchupUrlContainer.append(
+        createLinkInputLabel(getText(lang, "alternateLinkUrl" as any)),
+        championMatchupSubUrlInput,
+    );
 
     const championBuildUrlInput = createEl("input", {}, {
         class: "settings-input",
@@ -274,16 +289,20 @@ export function createSettingsOptionsSections(
     const championBuildUrlContainer = createEl("div", {}, { class: "settings-group full-width", style: "border: none; padding: 0; background: none; margin-top: 10px;" }, [
         createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "championBuildUrl")),
         createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "championBuildUrlHint")),
+        createLinkInputLabel(getText(lang, "primaryLinkUrl" as any)),
         championBuildUrlInput,
     ]) as HTMLDivElement;
     const championBuildSubUrlInput = createEl("input", {}, {
         class: "settings-input",
         type: "text",
-        placeholder: "Sub URL (modifier-click)",
+        placeholder: getText(lang, "alternateLinkUrl" as any),
         value: (settings as any).championBuildSubUrl || "",
         style: "flex: 1; margin-top: 6px;",
     }) as HTMLInputElement;
-    championBuildUrlContainer.append(championBuildSubUrlInput);
+    championBuildUrlContainer.append(
+        createLinkInputLabel(getText(lang, "alternateLinkUrl" as any)),
+        championBuildSubUrlInput,
+    );
 
     const scoreboardLinksContent = createEl("div", {}, {
         class: "settings-group-styled",

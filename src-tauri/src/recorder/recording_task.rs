@@ -278,11 +278,7 @@ impl RecordingTask {
             log::info!("failed to save MetadataFile: {e}")
         }
 
-        let live_tft_round_ocr_enabled = {
-            let settings_state = ctx.app_handle.state::<SettingsWrapper>();
-            let settings_wrapper: &SettingsWrapper = &settings_state;
-            settings_wrapper.inner().tft_round_ocr_enabled
-        };
+        let live_tft_round_ocr_enabled = false;
         if live_tft_round_ocr_enabled {
             log::info!(
                 "TFT round live OCR enabled for this recording; initial_tft_hint={}",
