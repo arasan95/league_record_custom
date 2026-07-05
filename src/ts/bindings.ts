@@ -149,6 +149,22 @@ async loadScoreboardCache(videoId: string) : Promise<Result<string, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async checkTooltipDbUpdate() : Promise<Result<TooltipDbUpdateInfo, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("check_tooltip_db_update") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async applyTooltipDbUpdate(expectedSha256: string) : Promise<Result<TooltipDbUpdateInfo, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("apply_tooltip_db_update", { expectedSha256 }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -330,6 +346,7 @@ export type Team = "BLUE" | "RED"
 export type TftCompanion = { contentID: string; skinID: number; species: string }
 export type TftRoundMarker = { round: string; timestamp: number }
 export type TftRoundOcrRegion = { anchor?: string; x: number; centerOffsetX?: number; y: number; width: number; height: number }
+export type TooltipDbUpdateInfo = { updateAvailable: boolean; currentSha256: string; remoteSha256: string; remoteSize: number; checkedUrl: string }
 export type TftTrait = { name: string; numUnits: number; style: number; tierCurrent: number; tierTotal: number }
 export type TftUnit = { characterId: string; name: string; rarity: number; tier: number; itemNames?: string[] }
 export type TowerType = "OUTER_TURRET" | "INNER_TURRET" | "BASE_TURRET" | "NEXUS_TURRET"

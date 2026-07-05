@@ -16,6 +16,16 @@ fn is_tft_queue_id(queue_id: i64) -> bool {
     matches!(queue_id, 1090 | 1100 | 1110 | 1130 | 1160 | 1220)
 }
 
+fn normalize_identity_key(raw: &str) -> String {
+    raw.trim().to_lowercase()
+}
+
+fn parse_pid_tag(raw: &str) -> Option<i64> {
+    let (_, rest) = raw.rsplit_once("#PID:")?;
+    let pid_str = rest.split('#').next().unwrap_or_default();
+    pid_str.parse::<i64>().ok().filter(|pid| (1..=10).contains(pid))
+}
+
 pub async fn process_data(
     ingame_time_rec_start_offset: f64,
     match_id: MatchId,
@@ -958,11 +968,41 @@ fn merge_live_events(
             (intermediate_name, None)
         };
 
+        let tagged_pid = parse_pid_tag(shopper_name);
+
         // Match Logic
         let identity = participant_identities.iter().find(|pi| {
             let pid = pi.participant_id;
 
-            // 1. CNAME Check (Primary Identity)
+            // 1. PID tag from synthetic live events is stable even when Neeko disguises
+            // as another champion.
+            if let Some(req_pid) = tagged_pid {
+                return pid == req_pid;
+            }
+
+            // 2. Summoner name + team is more stable than champion display name.
+            let full_riot_id = format!("{}#{}", pi.player.game_name, pi.player.tag_line);
+            let name_key = normalize_identity_key(actual_name);
+            let game_name_key = normalize_identity_key(&pi.player.game_name);
+            let riot_id_key = normalize_identity_key(&full_riot_id);
+            let name_matches = !name_key.is_empty() && (name_key == game_name_key || name_key == riot_id_key);
+            let partial_match = !name_key.is_empty()
+                && !game_name_key.is_empty()
+                && (name_key.contains(&game_name_key) || game_name_key.contains(&name_key));
+
+            if name_matches || partial_match {
+                if let Some(req_team) = target_team_side {
+                    if let Some(&real_team) = pid_to_team.get(&pid) {
+                        return real_team == req_team;
+                    }
+                    let inferred_team = if pid <= 5 { 100 } else { 200 };
+                    return inferred_team == req_team;
+                }
+                return true;
+            }
+
+            // 3. CNAME fallback. This is intentionally last because live client
+            // champion_name can reflect Neeko's disguise target.
             if let Some(req_cname) = target_cname {
                 if let Some(champ) = pid_to_champ.get(&pid) {
                     // Check if requested CNAME matches Alias (Key) or Name (Localized)
@@ -986,31 +1026,7 @@ fn merge_live_events(
                 return false;
             }
 
-            // 2. Fallback: Name + Team Check
-            let full_riot_id = format!("{}#{}", pi.player.game_name, pi.player.tag_line);
-            let name_matches = pi.player.game_name == actual_name || full_riot_id == actual_name;
-            let partial_match = !actual_name.is_empty()
-                && (actual_name.contains(&pi.player.game_name) || pi.player.game_name.contains(actual_name));
-
-            if !name_matches && !partial_match {
-                return false;
-            }
-
-            if let Some(req_team) = target_team_side {
-                if let Some(&real_team) = pid_to_team.get(&pid) {
-                    if real_team == req_team {
-                        return true;
-                    } else {
-                        return false;
-                    }
-                } else {
-                    let inferred_team = if pid <= 5 { 100 } else { 200 };
-                    return inferred_team == req_team;
-                }
-            }
-
-            // Legacy
-            true
+            false
         });
 
         if identity.is_none() {

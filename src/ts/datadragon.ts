@@ -454,6 +454,11 @@ const detailedChampionCache: Record<string, any> = {};
 let allChampionsLocalTooltipCache: Record<string, any> | null = null;
 let allChampionsLocalTooltipLocale: string = "";
 
+export function clearLocalChampionTooltipCache(): void {
+    allChampionsLocalTooltipCache = null;
+    allChampionsLocalTooltipLocale = "";
+}
+
 export async function getLocalChampionTooltips(championId: number, langStr: string = "ja"): Promise<any> {
     const champName = await getChampionNameById(championId);
     if (!champName) return null;
