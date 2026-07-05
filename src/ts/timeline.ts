@@ -1,4 +1,4 @@
-import { GameEvent } from "./bindings";
+import type { GameEvent, Participant } from "./bindings";
 
 const TRINKET_IDS = new Set([
     3340, 3364, 3363, 3513, // Warding Totem, Oracle Lens, Farsight Alteration, Eye of the Herald...
@@ -15,9 +15,25 @@ export interface InventoryState {
 export class InventoryTimeline {
     private participantTimelines: Map<number, { timestamp: number, state: InventoryState }[]> = new Map();
     private idMap?: Map<number, number>;
+    private finalItemsByParticipant?: Map<number, Set<number>>;
+    private finalItemOwners?: Map<number, Set<number>>;
 
-    constructor(events: GameEvent[], participants: number[], idMap?: Map<number, number>) {
+    constructor(events: GameEvent[], participants: number[], idMap?: Map<number, number>, finalParticipants?: Participant[]) {
         this.idMap = idMap;
+        if (finalParticipants) {
+            this.finalItemsByParticipant = new Map();
+            this.finalItemOwners = new Map();
+            finalParticipants.forEach((p) => {
+                const items = [p.stats.item0, p.stats.item1, p.stats.item2, p.stats.item3, p.stats.item4, p.stats.item5, p.stats.item6]
+                    .filter((id) => id && id > 0);
+                const itemSet = new Set(items);
+                this.finalItemsByParticipant!.set(p.participantId, itemSet);
+                itemSet.forEach((itemId) => {
+                    if (!this.finalItemOwners!.has(itemId)) this.finalItemOwners!.set(itemId, new Set());
+                    this.finalItemOwners!.get(itemId)!.add(p.participantId);
+                });
+            });
+        }
         // Initialize timelines for all participants
         participants.forEach(pid => {
             this.participantTimelines.set(pid, [{ 
@@ -32,7 +48,8 @@ export class InventoryTimeline {
         ).sort((a, b) => a.timestamp - b.timestamp);
 
         // Process events
-        for (const event of itemEvents) {
+        for (let eventIndex = 0; eventIndex < itemEvents.length; eventIndex++) {
+            const event = itemEvents[eventIndex];
             let pid = 0;
             if ("ItemPurchased" in event) pid = event.ItemPurchased.participant_id;
             else if ("ItemSold" in event) pid = event.ItemSold.participant_id;
@@ -42,6 +59,10 @@ export class InventoryTimeline {
 
             if (this.idMap && this.idMap.has(pid)) {
                 pid = this.idMap.get(pid)!;
+            }
+
+            if ("ItemPurchased" in event && this.shouldSkipSuspiciousPurchase(itemEvents, eventIndex, pid)) {
+                continue;
             }
 
             const history = this.participantTimelines.get(pid);
@@ -137,6 +158,59 @@ export class InventoryTimeline {
             // Better to push new entry to be safe with ordering.
             history.push({ timestamp: event.timestamp, state: newState });
         }
+
+        if (finalParticipants && itemEvents.length > 0) {
+            const finalTimestamp = Math.max(...itemEvents.map((event) => event.timestamp)) + 1;
+            finalParticipants.forEach((p) => {
+                const history = this.participantTimelines.get(p.participantId);
+                if (!history) return;
+                history.push({
+                    timestamp: finalTimestamp,
+                    state: {
+                        items: [p.stats.item0, p.stats.item1, p.stats.item2, p.stats.item3, p.stats.item4, p.stats.item5],
+                        trinket: p.stats.item6 || 0,
+                    },
+                });
+            });
+        }
+    }
+
+    private shouldSkipSuspiciousPurchase(itemEvents: GameEvent[], eventIndex: number, pid: number): boolean {
+        if (!this.finalItemsByParticipant || !this.finalItemOwners) return false;
+        const event = itemEvents[eventIndex];
+        if (!("ItemPurchased" in event)) return false;
+
+        const itemId = event.ItemPurchased.item_id;
+        const ownFinalItems = this.finalItemsByParticipant.get(pid);
+        if (!ownFinalItems || ownFinalItems.has(itemId)) return false;
+
+        const owners = this.finalItemOwners.get(itemId);
+        const ownedByAnotherParticipant = !!owners && Array.from(owners).some((ownerPid) => ownerPid !== pid);
+        if (!ownedByAnotherParticipant) return false;
+
+        const slot = event.ItemPurchased.slot;
+        for (let i = eventIndex + 1; i < itemEvents.length; i++) {
+            const later = itemEvents[i];
+            let laterPid = 0;
+            if ("ItemPurchased" in later) laterPid = later.ItemPurchased.participant_id;
+            else if ("ItemSold" in later) laterPid = later.ItemSold.participant_id;
+            else if ("ItemUndo" in later) laterPid = later.ItemUndo.participant_id;
+            if (this.idMap && this.idMap.has(laterPid)) laterPid = this.idMap.get(laterPid)!;
+            if (laterPid !== pid) continue;
+
+            if ("ItemSold" in later && later.ItemSold.item_id === itemId) return false;
+            if ("ItemUndo" in later && later.ItemUndo.after_id === itemId) return false;
+            if (
+                "ItemPurchased" in later
+                && slot !== undefined
+                && slot !== null
+                && later.ItemPurchased.slot === slot
+            ) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private cloneState(state: InventoryState): InventoryState {
