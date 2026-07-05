@@ -17,21 +17,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - name: Remove non-release helper bins
-        shell: pwsh
-        run: |
-          $helperBins = @(
-            "src-tauri/src/bin/extract_rcp_asset.rs",
-            "src-tauri/src/bin/find_wad_object.rs",
-            "src-tauri/src/bin/rebuild_tooltip_cache.rs",
-            "src-tauri/src/bin/dump_aphelios_wad_tooltips.rs"
-          )
-          foreach ($bin in $helperBins) {
-            if (Test-Path $bin) {
-              Remove-Item -LiteralPath $bin -Force
-              Write-Host "Removed helper bin: $bin"
-            }
-          }
       - uses: oven-sh/setup-bun@v2
       - uses: dtolnay/rust-toolchain@nightly
 
@@ -61,6 +46,7 @@ jobs:
             Write-Error "bundle.resources not found in $sourcePath"
             exit 1
           }
+          $cfg.bundle.createUpdaterArtifacts = $true
           if ($cfg.bundle.resources.PSObject.Properties.Name -contains "resources/tools/ffmpeg/*") {
             $cfg.bundle.resources.PSObject.Properties.Remove("resources/tools/ffmpeg/*")
             Write-Host "Removed FFmpeg runtime resource entry for updater build."

@@ -762,7 +762,7 @@ export default class UI {
         this.setTftMode(isTftMatch);
         const playerEl = this.player.el() as HTMLElement;
         playerEl.classList.toggle("lr-tft-mode", isTftMatch);
-        this.timeline = new InventoryTimeline(this.events, data.participants.map(p => p.participantId), undefined);
+        this.timeline = new InventoryTimeline(this.events, data.participants.map(p => p.participantId), undefined, data.participants);
 
         const prepared = prepareScoreboardView({
             data,
