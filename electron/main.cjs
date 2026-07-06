@@ -1312,21 +1312,29 @@ function defaultGameResolution(settings) {
   return resolutionFromStd(settings.outputResolution ?? "1920x1080p");
 }
 
-function closestStdResolution(resolution) {
-  const candidates = [
-    ["1600x1200p", 4 / 3],
-    ["1280x1024p", 5 / 4],
-    ["1920x1080p", 16 / 9],
-    ["1920x1200p", 16 / 10],
-    ["2560x1080p", 21 / 9],
-    ["2580x1080p", 43 / 18],
-    ["3840x1600p", 24 / 10],
-    ["3840x1080p", 32 / 9],
-    ["3840x1200p", 32 / 10],
-  ];
-  const ratio = resolution.width / resolution.height;
-  candidates.sort((a, b) => Math.abs(a[1] - ratio) - Math.abs(b[1] - ratio));
-  return resolutionFromStd(candidates[0][0]);
+function evenDimension(value, minimum = 2) {
+  const rounded = Math.max(minimum, Math.round(Number(value) || minimum));
+  return rounded % 2 === 0 ? rounded : rounded - 1;
+}
+
+function matchWindowAspectByHeight(inputResolution, targetHeight) {
+  const ratio = Number(inputResolution?.width ?? 0) / Number(inputResolution?.height ?? 0);
+  const height = evenDimension(targetHeight);
+  if (!Number.isFinite(ratio) || ratio <= 0) {
+    return { width: evenDimension(height * (16 / 9)), height };
+  }
+  return { width: evenDimension(height * ratio), height };
+}
+
+function outputResolutionForWindow(inputResolution, settings) {
+  if (settings.outputResolution) {
+    const selected = resolutionFromStd(settings.outputResolution);
+    return matchWindowAspectByHeight(inputResolution, selected.height);
+  }
+  return {
+    width: evenDimension(inputResolution.width),
+    height: evenDimension(inputResolution.height),
+  };
 }
 
 async function detectLeagueWindowResolution() {
@@ -1438,7 +1446,7 @@ async function buildRecorderSettings(settings, gameInfo) {
       await writeLog("recording", `window resolution fallback ${fallbackResolution.width}x${fallbackResolution.height}: ${String(error?.message || error)}`);
       return fallbackResolution;
     });
-  const outputResolution = settings.outputResolution ? resolutionFromStd(settings.outputResolution) : closestStdResolution(inputResolution);
+  const outputResolution = outputResolutionForWindow(inputResolution, settings);
   const logicalPart = inputResolution.logicalWidth && inputResolution.logicalHeight
     ? ` logical=${inputResolution.logicalWidth}x${inputResolution.logicalHeight} dpi=${inputResolution.dpi ?? 96}`
     : "";
