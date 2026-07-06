@@ -781,7 +781,7 @@ function createRecordingTrayImage(kind) {
 }
 
 function createTrayIcon(kind = "default") {
-  if (kind === "recording" || kind === "preparing") {
+  if (kind === "recording" || kind === "preparing" || kind === "stopping") {
     return createRecordingTrayImage(kind);
   }
 
@@ -792,7 +792,7 @@ function createTrayIcon(kind = "default") {
 
 function updateTrayMenu(status = "idle") {
   if (!appTray) return;
-  const isBusy = status === "recording" || status === "preparing";
+  const isBusy = status === "recording" || status === "preparing" || status === "stopping";
   const template = [
     { label: "Recording", type: "checkbox", checked: isBusy, enabled: false },
     { type: "separator" },
@@ -811,7 +811,7 @@ function updateTrayMenu(status = "idle") {
   ];
   appTray.setContextMenu(Menu.buildFromTemplate(template));
   appTray.setToolTip(APP_NAME);
-  appTray.setImage(createTrayIcon(status === "recording" ? "recording" : status === "preparing" ? "preparing" : "default"));
+  appTray.setImage(createTrayIcon(status === "recording" ? "recording" : status === "preparing" || status === "stopping" ? "preparing" : "default"));
 }
 
 function initTray() {
@@ -1308,28 +1308,14 @@ function resolutionFromStd(value) {
   return { width, height };
 }
 
-function defaultGameResolution(settings) {
-  return resolutionFromStd(settings.outputResolution ?? "1920x1080p");
-}
-
 function evenDimension(value, minimum = 2) {
   const rounded = Math.max(minimum, Math.round(Number(value) || minimum));
   return rounded % 2 === 0 ? rounded : rounded - 1;
 }
 
-function matchWindowAspectByHeight(inputResolution, targetHeight) {
-  const ratio = Number(inputResolution?.width ?? 0) / Number(inputResolution?.height ?? 0);
-  const height = evenDimension(targetHeight);
-  if (!Number.isFinite(ratio) || ratio <= 0) {
-    return { width: evenDimension(height * (16 / 9)), height };
-  }
-  return { width: evenDimension(height * ratio), height };
-}
-
 function outputResolutionForWindow(inputResolution, settings) {
   if (settings.outputResolution) {
-    const selected = resolutionFromStd(settings.outputResolution);
-    return matchWindowAspectByHeight(inputResolution, selected.height);
+    return resolutionFromStd(settings.outputResolution);
   }
   return {
     width: evenDimension(inputResolution.width),
@@ -1337,24 +1323,70 @@ function outputResolutionForWindow(inputResolution, settings) {
   };
 }
 
-async function detectLeagueWindowResolution() {
+async function getLeagueWindowInfo() {
   if (process.platform !== "win32") return null;
   const script = `
 Add-Type @"
 using System;
+using System.Text;
 using System.Runtime.InteropServices;
 public class LRWinApi {
   [StructLayout(LayoutKind.Sequential)]
   public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+  public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+  [DllImport("user32.dll")]
+  public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
   [DllImport("user32.dll", SetLastError=true)]
   public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+  [DllImport("user32.dll")]
+  public static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll", CharSet=CharSet.Auto)]
+  public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+  [DllImport("user32.dll", CharSet=CharSet.Auto)]
+  public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
   [DllImport("user32.dll", SetLastError=true)]
   public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
   [DllImport("user32.dll", SetLastError=true)]
   public static extern uint GetDpiForWindow(IntPtr hWnd);
 }
 "@
-$h = [LRWinApi]::FindWindow("RiotWindowClass", "League of Legends (TM) Client")
+function Get-WindowTextValue([IntPtr]$hwnd) {
+  $sb = New-Object System.Text.StringBuilder 512
+  [void][LRWinApi]::GetWindowText($hwnd, $sb, $sb.Capacity)
+  $sb.ToString()
+}
+function Get-WindowClassValue([IntPtr]$hwnd) {
+  $sb = New-Object System.Text.StringBuilder 256
+  [void][LRWinApi]::GetClassName($hwnd, $sb, $sb.Capacity)
+  $sb.ToString()
+}
+$title = "League of Legends (TM) Client"
+$class = "RiotWindowClass"
+$h = [LRWinApi]::FindWindow($class, $title)
+if ($h -eq [IntPtr]::Zero) {
+  $script:foundHwnd = [IntPtr]::Zero
+  $script:foundTitle = ""
+  $script:foundClass = ""
+  $callback = [LRWinApi+EnumWindowsProc]{
+    param([IntPtr]$hwnd, [IntPtr]$lparam)
+    if (-not [LRWinApi]::IsWindowVisible($hwnd)) { return $true }
+    $candidateTitle = Get-WindowTextValue $hwnd
+    $candidateClass = Get-WindowClassValue $hwnd
+    if ($candidateClass -eq "RiotWindowClass" -and $candidateTitle.Contains("League of Legends")) {
+      $script:foundHwnd = $hwnd
+      $script:foundTitle = $candidateTitle
+      $script:foundClass = $candidateClass
+      return $false
+    }
+    return $true
+  }
+  [void][LRWinApi]::EnumWindows($callback, [IntPtr]::Zero)
+  $h = $script:foundHwnd
+  if ($h -ne [IntPtr]::Zero) {
+    $title = $script:foundTitle
+    $class = $script:foundClass
+  }
+}
 if ($h -eq [IntPtr]::Zero) { exit 2 }
 $r = New-Object LRWinApi+RECT
 if (-not [LRWinApi]::GetClientRect($h, [ref]$r)) { exit 3 }
@@ -1366,37 +1398,52 @@ if ($dpi -le 0) { $dpi = 96 }
 $scale = $dpi / 96.0
 $physW = [Math]::Round($w * $scale)
 $physH = [Math]::Round($hgt * $scale)
-Write-Output "$w,$hgt,$physW,$physH,$dpi"
+[pscustomobject]@{
+  title = $title
+  class = $class
+  process = "League of Legends.exe"
+  width = $physW
+  height = $physH
+  logicalWidth = $w
+  logicalHeight = $hgt
+  dpi = $dpi
+} | ConvertTo-Json -Compress
 `;
   const result = await runCommandCollect("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script]);
   if (result.code !== 0) return null;
-  const match = result.stdout.trim().match(/^(\d+),(\d+),(\d+),(\d+),(\d+)$/);
-  if (!match) return null;
+  let info;
+  try {
+    info = JSON.parse(result.stdout.trim());
+  } catch {
+    return null;
+  }
   return {
-    width: Number(match[3]),
-    height: Number(match[4]),
-    logicalWidth: Number(match[1]),
-    logicalHeight: Number(match[2]),
-    dpi: Number(match[5]),
+    title: String(info.title || "League of Legends (TM) Client"),
+    class: String(info.class || "RiotWindowClass"),
+    process: String(info.process || "League of Legends.exe"),
+    width: Number(info.width),
+    height: Number(info.height),
+    logicalWidth: Number(info.logicalWidth),
+    logicalHeight: Number(info.logicalHeight),
+    dpi: Number(info.dpi),
+  };
+}
+
+async function detectLeagueWindowResolution() {
+  const info = await getLeagueWindowInfo();
+  if (!info) return null;
+  return {
+    width: info.width,
+    height: info.height,
+    logicalWidth: info.logicalWidth,
+    logicalHeight: info.logicalHeight,
+    dpi: info.dpi,
   };
 }
 
 async function isLeagueWindowAvailable() {
   if (process.platform !== "win32") return true;
-  const script = `
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public class LRWinApiWindowCheck {
-  [DllImport("user32.dll", SetLastError=true)]
-  public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
-}
-"@
-$h = [LRWinApiWindowCheck]::FindWindow("RiotWindowClass", "League of Legends (TM) Client")
-if ($h -eq [IntPtr]::Zero) { exit 2 }
-`;
-  const result = await runCommandCollect("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script]);
-  return result.code === 0;
+  return Boolean(await getLeagueWindowInfo());
 }
 
 async function waitForLeagueWindowResolution(maxAttempts, intervalMs) {
@@ -1440,24 +1487,31 @@ async function buildRecorderSettings(settings, gameInfo) {
   if (!filenameFormat.toLowerCase().endsWith(".mp4")) filenameFormat += ".mp4";
   const filename = formatRecordingFilename(filenameFormat);
   const outputPath = path.join(settings.recordingsFolder, filename);
-  const fallbackResolution = defaultGameResolution(settings);
-  const inputResolution = await waitForLeagueWindowResolution(gameInfo?.manual ? 20 : 8, gameInfo?.manual ? 200 : 250)
-    .catch(async (error) => {
-      await writeLog("recording", `window resolution fallback ${fallbackResolution.width}x${fallbackResolution.height}: ${String(error?.message || error)}`);
-      return fallbackResolution;
-    });
+  const windowInfo = await getLeagueWindowInfo();
+  const inputResolution = windowInfo
+    ? {
+        width: windowInfo.width,
+        height: windowInfo.height,
+        logicalWidth: windowInfo.logicalWidth,
+        logicalHeight: windowInfo.logicalHeight,
+        dpi: windowInfo.dpi,
+      }
+    : await waitForLeagueWindowResolution(gameInfo?.manual ? 20 : 60, gameInfo?.manual ? 200 : 500);
+  const captureWindow = windowInfo ?? await getLeagueWindowInfo();
+  if (!captureWindow) throw new Error("unable to resolve League capture window");
   const outputResolution = outputResolutionForWindow(inputResolution, settings);
   const logicalPart = inputResolution.logicalWidth && inputResolution.logicalHeight
     ? ` logical=${inputResolution.logicalWidth}x${inputResolution.logicalHeight} dpi=${inputResolution.dpi ?? 96}`
     : "";
   await writeLog("recording", `resolution input=${inputResolution.width}x${inputResolution.height}${logicalPart} ratio=${(inputResolution.width / inputResolution.height).toFixed(4)} output=${outputResolution.width}x${outputResolution.height} setting=${settings.outputResolution ?? "auto"}`);
+  await writeLog("recording", `capture window title='${captureWindow.title}' class='${captureWindow.class}' process='${captureWindow.process}'`);
   return {
     outputPath,
     ipcSettings: {
       window: {
-        name: "League of Legends (TM) Client",
-        class: "RiotWindowClass",
-        process: "League of Legends.exe",
+        name: captureWindow.title,
+        class: captureWindow.class,
+        process: captureWindow.process,
       },
       input_resolution: inputResolution,
       output_resolution: outputResolution,
@@ -1707,6 +1761,7 @@ class RecorderController {
       return false;
     }
     this.stopping = true;
+    this.setStatus("stopping");
     const current = this.current;
     this.stopLiveCapture();
     await writeLog("recording", `stopping output=${current.outputPath} manualStop=${isManualStop}`);
@@ -2827,7 +2882,7 @@ class GameMonitor {
   }
 
   async stopFromEvent(reason) {
-    if (!this.controller.current) return;
+    if (!this.controller.current || this.controller.stopping) return;
     await writeLog("game-monitor", `stopping recording reason=${reason}`);
     await this.controller.stopRecording(false).catch((error) => {
       void writeLog("recording", `auto stop failed: ${String(error?.stack || error)}`);
