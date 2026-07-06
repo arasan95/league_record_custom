@@ -1614,6 +1614,8 @@ class RecorderController {
     this.liveGameStartedFired = false;
     this.liveGameEndStopRequested = false;
     this.liveClientFailureTicks = 0;
+    this.liveClientStopRequested = false;
+    this.lastLiveClientSuccessAt = 0;
   }
 
   setStatus(status) {
@@ -1671,6 +1673,8 @@ class RecorderController {
     this.liveGameStartedFired = false;
     this.liveGameEndStopRequested = false;
     this.liveClientFailureTicks = 0;
+    this.liveClientStopRequested = false;
+    this.lastLiveClientSuccessAt = 0;
     await this.refreshParticipantMap();
     this.startLiveCapture();
 
@@ -1776,6 +1780,24 @@ class RecorderController {
     const tick = () => {
       this.captureTick().catch((error) => {
         this.liveClientFailureTicks += 1;
+        const liveClientDownMs = this.lastLiveClientSuccessAt > 0 ? Date.now() - this.lastLiveClientSuccessAt : 0;
+        if (
+          !this.liveClientStopRequested &&
+          this.current &&
+          this.status === "recording" &&
+          this.liveGameStartedFired &&
+          this.liveClientFailureTicks >= 8 &&
+          liveClientDownMs >= 6000
+        ) {
+          this.liveClientStopRequested = true;
+          void writeLog(
+            "recording",
+            `live client unavailable after game start; requesting stop failures=${this.liveClientFailureTicks} downMs=${liveClientDownMs}: ${String(error?.message || error)}`,
+          );
+          setTimeout(() => {
+            void gameMonitor?.stopFromEvent("LiveClientUnavailable");
+          }, 0);
+        }
         void writeLog("recording", `live capture tick failed: ${String(error?.message || error)}`);
       });
     };
@@ -1793,6 +1815,8 @@ class RecorderController {
     if (!this.current) return;
     const data = await ingameRequest("/liveclientdata/allgamedata");
     this.liveClientFailureTicks = 0;
+    this.liveClientStopRequested = false;
+    this.lastLiveClientSuccessAt = Date.now();
     this.lastLiveGameData = data;
     if (!this.liveGameStartedFired) {
       this.liveGameStartedFired = true;
@@ -2835,7 +2859,7 @@ class GameMonitor {
       this.missingWindowLogged = false;
       return;
     }
-    const available = await isLeagueWindowAvailable().catch(() => true);
+    const available = await isLeagueWindowAvailable().catch(() => false);
     if (available) {
       this.missingWindowTicks = 0;
       this.missingWindowLogged = false;
