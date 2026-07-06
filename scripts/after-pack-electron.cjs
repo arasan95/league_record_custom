@@ -21,7 +21,7 @@ module.exports = async function afterPack(context) {
   if (context.electronPlatformName !== "win32") return;
 
   const projectDir = context.packager.info.projectDir;
-  const exePath = path.join(context.appOutDir, "LeagueRecord.exe");
+  const exePath = path.join(context.appOutDir, "LeagueRecordElectron.exe");
   const generatedIconPath = path.join(projectDir, "release-electron", ".icon-ico", "icon.ico");
   const iconPath = fs.existsSync(generatedIconPath)
     ? generatedIconPath
@@ -31,10 +31,10 @@ module.exports = async function afterPack(context) {
 
   const args = [
     exePath,
-    "--set-version-string", "FileDescription", "LeagueRecord",
-    "--set-version-string", "ProductName", "LeagueRecord",
-    "--set-version-string", "InternalName", "LeagueRecord",
-    "--set-version-string", "OriginalFilename", "LeagueRecord.exe",
+    "--set-version-string", "FileDescription", "LeagueRecord Electron",
+    "--set-version-string", "ProductName", "LeagueRecord Electron",
+    "--set-version-string", "InternalName", "LeagueRecordElectron",
+    "--set-version-string", "OriginalFilename", "LeagueRecordElectron.exe",
     "--set-version-string", "CompanyName", "arasan95",
     "--set-version-string", "LegalCopyright", "Copyright (c) arasan95",
     "--set-file-version", version,

@@ -37,7 +37,7 @@ function getDevElectronBin() {
     sourceMtimeMs: sourceStat.mtimeMs,
     iconMtimeMs: iconStat.mtimeMs,
     iconSize: iconStat.size,
-    version: 1,
+    version: 2,
   };
 
   let currentStamp = null;
@@ -72,8 +72,8 @@ function getDevElectronBin() {
 
   const result = spawnSync(rcedit, [
     devExe,
-    "--set-version-string", "FileDescription", "LeagueRecord",
-    "--set-version-string", "ProductName", "LeagueRecord",
+    "--set-version-string", "FileDescription", "LeagueRecord Electron Dev",
+    "--set-version-string", "ProductName", "LeagueRecord Electron Dev",
     "--set-version-string", "InternalName", "LeagueRecordDev",
     "--set-version-string", "OriginalFilename", "LeagueRecordDev.exe",
     "--set-version-string", "CompanyName", "arasan95",
