@@ -1253,6 +1253,19 @@ function getSessionGameInfo(session) {
   };
 }
 
+function shouldStopRecordingOnClientExit(info) {
+  const queueId = Number(info?.queueId ?? 0);
+  const queueName = String(info?.queueName ?? "").toUpperCase();
+  const gameMode = String(info?.gameMode ?? "").toUpperCase();
+  return (
+    queueId === 3140 ||
+    queueName.includes("PRACTICE") ||
+    queueName.includes("CUSTOM") ||
+    gameMode.includes("PRACTICE") ||
+    gameMode.includes("CUSTOM")
+  );
+}
+
 async function getGameflowPhaseSafe() {
   try {
     const phase = await lcuRequest("GET", "/lol-gameflow/v1/gameflow-phase");
@@ -2906,6 +2919,20 @@ class GameMonitor {
     if (this.missingWindowTicks >= 3 && !this.missingWindowLogged) {
       this.missingWindowLogged = true;
       await writeLog("game-monitor", `LoL window missing during recording ticks=${this.missingWindowTicks}; waiting for LCU/live end signal`);
+    }
+    if (
+      this.missingWindowTicks >= 8 &&
+      this.controller.liveClientFailureTicks >= 8 &&
+      this.controller.liveGameStartedFired &&
+      shouldStopRecordingOnClientExit(this.latestGameInfo)
+    ) {
+      await writeLog(
+        "game-monitor",
+        `stopping recording because practice/custom client exited queue=${this.latestGameInfo?.queueId ?? 0} mode=${this.latestGameInfo?.gameMode ?? ""} missingWindowTicks=${this.missingWindowTicks} liveClientFailureTicks=${this.controller.liveClientFailureTicks}`,
+      );
+      await this.controller.stopRecording(false).catch((error) => {
+        void writeLog("recording", `auto stop failed: ${String(error?.stack || error)}`);
+      });
     }
   }
 
