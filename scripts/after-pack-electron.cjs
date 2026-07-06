@@ -6,6 +6,23 @@ function findRcedit(projectDir) {
   const fallback = path.join(projectDir, "node_modules", "electron-winstaller", "vendor", "rcedit.exe");
   if (fs.existsSync(fallback)) return fallback;
 
+  const nodeModulesDir = path.join(projectDir, "node_modules");
+  const stack = [nodeModulesDir];
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    if (!dir || !fs.existsSync(dir)) continue;
+
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isFile() && entry.name === "rcedit.exe") {
+        return entryPath;
+      }
+      if (entry.isDirectory()) {
+        stack.push(entryPath);
+      }
+    }
+  }
+
   const cacheDir = path.join(process.env.LOCALAPPDATA || "", "electron-builder", "Cache", "winCodeSign");
   if (fs.existsSync(cacheDir)) {
     const candidates = fs.readdirSync(cacheDir)
