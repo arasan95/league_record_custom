@@ -1,34 +1,13 @@
 const fs = require("node:fs");
-const path = require("node:path");
-const os = require("node:os");
+const { findLogsDir, latestLogPath, readText } = require("./electron-log-path.cjs");
 
-const userData = path.join(os.homedir(), "AppData", "Roaming", "LeagueRecord");
-const logsDir = path.join(userData, "logs");
-const latestPtr = path.join(logsDir, "latest.log");
-
-function readText(file) {
-  try {
-    return fs.readFileSync(file, "utf8");
-  } catch {
-    return "";
-  }
-}
-
-function latestLogPath() {
-  const pointed = readText(latestPtr).trim();
-  if (pointed && fs.existsSync(pointed)) return pointed;
-  const logs = fs.readdirSync(logsDir)
-    .filter((name) => /^session-.*\.log$/i.test(name))
-    .map((name) => path.join(logsDir, name))
-    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-  return logs[0] ?? null;
-}
+const logsDir = findLogsDir();
 
 function countMatches(text, pattern) {
   return (text.match(pattern) ?? []).length;
 }
 
-const file = process.argv[2] || latestLogPath();
+const file = process.argv[2] || latestLogPath(logsDir);
 if (!file || !fs.existsSync(file)) {
   console.error(`No log file found in ${logsDir}`);
   process.exit(1);
