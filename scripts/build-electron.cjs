@@ -64,7 +64,7 @@ function ensureTooltipRebuildTool() {
 }
 
 const target = process.argv[2] || "nsis";
-const args = ["--win", target, "--x64"];
+const args = ["--win", target, "--x64", "--publish", "never"];
 const env = {
   ...process.env,
   CSC_IDENTITY_AUTO_DISCOVERY: "false",
