@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -67,6 +67,9 @@ jobs:
 
       - name: Build Electron installer
         run: bun run electron:build
+        env:
+          LEAGUE_RECORD_CARGO_TOOLCHAIN: "+nightly"
+          LEAGUE_RECORD_CARGO_BINDEPS: "1"
 
       - name: Stage Electron artifacts
         shell: pwsh

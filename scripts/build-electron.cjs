@@ -16,7 +16,17 @@ function ensureLibobsBundle() {
   if (ready) return;
 
   console.log("Preparing libobs recorder resources...");
-  const result = spawnSync("cargo", ["build", "--manifest-path", path.join(root, "src-tauri", "Cargo.toml")], {
+  const cargoArgs = [];
+  if (process.env.LEAGUE_RECORD_CARGO_TOOLCHAIN) {
+    cargoArgs.push(process.env.LEAGUE_RECORD_CARGO_TOOLCHAIN);
+  }
+  cargoArgs.push("build");
+  if (process.env.LEAGUE_RECORD_CARGO_BINDEPS === "1") {
+    cargoArgs.push("-Z", "bindeps");
+  }
+  cargoArgs.push("--manifest-path", path.join(root, "src-tauri", "Cargo.toml"));
+
+  const result = spawnSync("cargo", cargoArgs, {
     cwd: root,
     shell: process.platform === "win32",
     stdio: "inherit",
