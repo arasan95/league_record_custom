@@ -3,8 +3,9 @@ import type Player from "video.js/dist/types/player";
 import { MarkersPlugin, type Settings } from "@fffffffxxxxxxx/videojs-markers";
 import "@fffffffxxxxxxx/videojs-markers";
 
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { join, sep } from "@tauri-apps/api/path";
+import { convertFileSrc } from "./platform/core";
+import { join, sep } from "./platform/path";
+import { exists } from "./platform/fs";
 
 import { commands, type ClipAudioTrack, type GameEvent, type Recording } from "./bindings";
 import ListenerManager from "./listeners";
@@ -41,7 +42,7 @@ import {
 const EVENT_DELAY = 2;
 
 const ui = new UI(videojs);
-// new TitleBar();
+new TitleBar();
 
 // Load keybinds & mouse config
 export let currentKeybinds: KeybindMap = loadKeybinds();
@@ -79,11 +80,105 @@ function perfNowMs(): number {
     return Date.now();
 }
 
+function delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function releasePlayerSourceForDelete() {
+    try {
+        player.pause();
+    } catch {}
+    try {
+        player.src("");
+    } catch {}
+    try {
+        const techEl = (player as any).tech?.(true)?.el?.() as HTMLVideoElement | undefined;
+        if (techEl) {
+            techEl.pause();
+            techEl.removeAttribute("src");
+            techEl.load();
+        }
+    } catch {}
+    try {
+        (player as any).load?.();
+    } catch {}
+}
+
+async function prepareVideoForDelete(videoId: string, forceWait: boolean = false): Promise<void> {
+    const activeVideoId = ui.getActiveVideoId();
+    if (activeVideoId && videoIdsMatch(activeVideoId, videoId)) {
+        preferredActiveVideoId = null;
+        ui.setActiveVideoId(null);
+        releasePlayerSourceForDelete();
+        await delay(350);
+        return;
+    }
+    if (forceWait) {
+        await delay(350);
+    }
+}
+
 function logPerf(label: string, startedAtMs: number): void {
     const PERF_LOG_ENABLED = false;
     if (!PERF_LOG_ENABLED) return;
     const elapsedMs = perfNowMs() - startedAtMs;
     console.log(`[perf] ${label}: ${elapsedMs.toFixed(1)}ms`);
+}
+
+function seekDiagnosticsEnabled(): boolean {
+    try {
+        return window.localStorage.getItem("lr.seekDiagnostics") === "1";
+    } catch {
+        return false;
+    }
+}
+
+function installSeekDiagnostics(): void {
+    let lastSeekRequest: { at: number; target: number; method: string } | null = null;
+    const log = (message: string) => {
+        if (seekDiagnosticsEnabled()) {
+            console.log(`[seek-diagnostics] ${message}`);
+        }
+    };
+
+    window.addEventListener("lr:seek-requested", (event) => {
+        const detail = (event as CustomEvent<{ target?: number; method?: string }>).detail ?? {};
+        lastSeekRequest = {
+            at: perfNowMs(),
+            target: Number(detail.target ?? NaN),
+            method: String(detail.method ?? "unknown"),
+        };
+        log(`requested method=${lastSeekRequest.method} target=${lastSeekRequest.target.toFixed(3)} current=${(player.currentTime() ?? 0).toFixed(3)}`);
+    });
+
+    player.on("seeking", () => {
+        if (!lastSeekRequest) {
+            log(`seeking current=${(player.currentTime() ?? 0).toFixed(3)}`);
+            return;
+        }
+        log(`seeking +${(perfNowMs() - lastSeekRequest.at).toFixed(1)}ms current=${(player.currentTime() ?? 0).toFixed(3)}`);
+    });
+
+    player.on("seeked", () => {
+        if (!lastSeekRequest) {
+            log(`seeked current=${(player.currentTime() ?? 0).toFixed(3)}`);
+            return;
+        }
+        log(`seeked +${(perfNowMs() - lastSeekRequest.at).toFixed(1)}ms target=${lastSeekRequest.target.toFixed(3)} current=${(player.currentTime() ?? 0).toFixed(3)}`);
+    });
+
+    player.on("waiting", () => {
+        log(`waiting current=${(player.currentTime() ?? 0).toFixed(3)}`);
+    });
+
+    player.on("playing", () => {
+        if (!lastSeekRequest) return;
+        log(`playing +${(perfNowMs() - lastSeekRequest.at).toFixed(1)}ms current=${(player.currentTime() ?? 0).toFixed(3)}`);
+    });
+
+    if (seekDiagnosticsEnabled()) {
+        log("enabled");
+    }
 }
 
 function metadataDataSignature(data: any): string {
@@ -262,6 +357,7 @@ const player = videojs("video_player", VIDEO_JS_OPTIONS) as Player & {
     markers: (settings?: Settings) => MarkersPlugin;
 };
 ui.setPlayer(player); // Pass player instance to UI
+installSeekDiagnostics();
 
 // Initialize Video Header
 const mainContainer = document.getElementById("main");
@@ -279,10 +375,17 @@ const createClipBtn = document.getElementById("create-clip-btn") as HTMLButtonEl
 let loopStart: number | null = null;
 let loopEnd: number | null = null;
 let isLooping = false;
+let isCreatingClip = false;
+
+function setClipButtonProgress(percent: number) {
+    if (!createClipBtn) return;
+    const normalized = Math.max(0, Math.min(100, Math.floor(percent)));
+    createClipBtn.textContent = `[${normalized}%]`;
+}
 
 function updateClipBtnState() {
     const canCreateClip = loopStart !== null && loopEnd !== null && loopEnd > loopStart;
-    if (createClipBtn) createClipBtn.disabled = !canCreateClip;
+    if (createClipBtn) createClipBtn.disabled = isCreatingClip || !canCreateClip;
 }
 
 function formatLoopTime(seconds: number): string {
@@ -394,10 +497,14 @@ if (createClipBtn) {
     createClipBtn.onclick = async () => {
         const videoId = ui.getActiveVideoId();
         if (!videoId || loopStart === null || loopEnd === null) return;
+        let playClipSound = false;
         
         try {
+            isCreatingClip = true;
             createClipBtn.disabled = true;
-            createClipBtn.textContent = "...";
+            setClipButtonProgress(0);
+            const settings = await commands.getSettings();
+            playClipSound = settings.playRecordingSounds ?? false;
             const tracksResult = await commands.getClipAudioTracks(videoId);
             if (tracksResult.status === "error") {
                 throw tracksResult.error;
@@ -405,7 +512,6 @@ if (createClipBtn) {
 
             let selectedAudioTrackIndex: number | null = null;
             if (tracksResult.data.length > 1) {
-                const settings = await commands.getSettings();
                 const lang = settings.language || "en";
                 const mode = await pickClipAudioMode(tracksResult.data, lang);
                 if (mode === null) {
@@ -413,7 +519,7 @@ if (createClipBtn) {
                 }
                 selectedAudioTrackIndex = mode === "game-only" ? 1 : 0;
             } else if (tracksResult.data.length === 1) {
-                selectedAudioTrackIndex = tracksResult.data[0].index;
+                selectedAudioTrackIndex = 0;
             }
 
             const clipResult = await commands.createClip(
@@ -429,12 +535,15 @@ if (createClipBtn) {
             const newFile = clipResult.data;
             // Wait a bit or refresh? Ideally we should refresh the sidebar
             await  updateSidebar(); 
+            if (playClipSound) playNotificationSound('clip');
             // Show simple alert using error modal for now as it's the only one available
             // Or console log.
             console.log(`Clip created: ${newFile}`);
         } catch (e) {
-            ui.showErrorModal(`Failed to create clip: ${e}`);
+            const message = e instanceof Error ? e.message : String(e);
+            ui.showErrorModal(`Failed to create clip: ${message}`);
         } finally {
+            isCreatingClip = false;
             createClipBtn.textContent = "Clip";
             updateClipBtnState();
         }
@@ -547,6 +656,7 @@ async function main() {
 
     // Loop Logic & Custom Time Display
     player.on("timeupdate", () => {
+        const timeupdateStartedAt = seekDiagnosticsEnabled() ? perfNowMs() : 0;
         // Loop Logic
         if (isLooping && loopStart !== null && loopEnd !== null) {
             const current = player.currentTime();
@@ -577,6 +687,12 @@ async function main() {
         const progressTooltip = document.querySelector(".vjs-play-progress .vjs-time-tooltip");
         if (progressTooltip) {
              progressTooltip.textContent = timeStr;
+        }
+        if (timeupdateStartedAt) {
+            const elapsed = perfNowMs() - timeupdateStartedAt;
+            if (elapsed > 8) {
+                console.log(`[seek-diagnostics] main timeupdate ${elapsed.toFixed(1)}ms current=${current.toFixed(3)}`);
+            }
         }
     });
 
@@ -742,6 +858,10 @@ async function main() {
             void setMetadata(activeVideoId);
         }
     });
+    listenerManager.listen_app("ClipProgress", ({ payload }) => {
+        if (!isCreatingClip) return;
+        setClipButtonProgress(payload.percent);
+    });
     
     listenerManager.listen_app("RecordingStarted", () => {
         if (manualStartPending) {
@@ -880,7 +1000,7 @@ async function main() {
         if (settings.checkUpdatesOnStartup && !sessionStorage.getItem("hasCheckedForUpdates")) {
             sessionStorage.setItem("hasCheckedForUpdates", "true");
             try {
-                const { check } = await import("@tauri-apps/plugin-updater");
+                const { check } = await import("./platform/updater");
                 const update = await check();
                 if (update) {
                     ui.showUpdateModal(update, settings.language || "ja");
@@ -1047,10 +1167,18 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
         if (!completed) {
             scheduleMetadataRetry(cleanVideoId);
         }
-        const normalizedVideoPath = toAssetPath(cleanVideoId + ".mp4");
+        let normalizedVideoPath = toAssetPath(cleanVideoId + ".mp4");
+        let mimeType = "video/mp4";
+        if (!(await exists(normalizedVideoPath))) {
+            const webmCandidate = toAssetPath(cleanVideoId + ".webm");
+            if (await exists(webmCandidate)) {
+                normalizedVideoPath = webmCandidate;
+                mimeType = "video/webm";
+            }
+        }
         const videoSrc = convertFileSrc(normalizedVideoPath);
         console.log(`[diagnose] setVideo clean=${cleanVideoId} normalized=${normalizedVideoPath} src=${videoSrc}`);
-        player.src({ type: "video/mp4", src: videoSrc });
+        player.src({ type: mimeType, src: videoSrc });
         // Re-apply markers after source swap to avoid plugin/source timing clears.
         player.one("loadedmetadata", () => {
             changeMarkers();
@@ -1204,7 +1332,10 @@ function handleDeleteVideoOnly(videoId: string, isFavorite: boolean = false) {
         confirmDelete: commands.confirmDelete,
         showDeleteVideoOnlyModal: ui.showDeleteVideoOnlyModal,
         markRecordingAsVideoDeleted: ui.markRecordingAsVideoDeleted,
-        deleteVideoOnly: commands.deleteVideoOnly,
+        deleteVideoOnly: async (id) => {
+            await prepareVideoForDelete(id);
+            return commands.deleteVideoOnly(id);
+        },
         showErrorModal: ui.showErrorModal,
         updateSidebar: () => updateSidebar(),
     });
@@ -1216,10 +1347,13 @@ async function deleteVideo(videoId: string): Promise<void> {
         videoId,
         getActiveVideoId: ui.getActiveVideoId,
         clearPlayerSource: () => {
-            player.src(null);
+            releasePlayerSourceForDelete();
         },
         removeRecordingItem: ui.removeRecordingItem,
-        deleteVideo: commands.deleteVideo,
+        deleteVideo: async (id) => {
+            await prepareVideoForDelete(id, true);
+            return commands.deleteVideo(id);
+        },
         updateSidebar: () => updateSidebar(),
         showErrorModal: ui.showErrorModal,
     });

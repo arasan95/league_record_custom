@@ -1,6 +1,7 @@
 ﻿/* Scoreboard Overlay - Mapped to Grid Area */
 .scoreboard {
     grid-area: st-scoreboard;
+    --scoreboard-video-fit-snap-offset: 24px;
     display: flex;
     flex-direction: row; 
     gap: 0; 

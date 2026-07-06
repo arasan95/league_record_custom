@@ -48,6 +48,7 @@ export function applyScoreboardTickFlow(params: {
     applyScoreboardLiveSnapshot({
         timeline: params.timeline,
         playerCurrentTimeSec: params.playerCurrentTimeSec,
+        recordingOffset: params.recordingOffset,
         currentGameVersion: params.currentGameVersion,
         scoreboardRefs: params.scoreboardRefs,
         goldTimeline: params.goldTimeline,

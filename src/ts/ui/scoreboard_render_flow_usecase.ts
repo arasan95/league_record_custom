@@ -1,6 +1,6 @@
 import { commands, type GameMetadata, type Participant } from "../bindings";
 import { getChampionEnglishNameByIdSync, getChampionNameById } from "../datadragon";
-import { open } from "@tauri-apps/plugin-shell";
+import { open } from "../platform/shell";
 import { buildGoldDiffRowState } from "./scoreboard_usecase";
 import { buildScoreboardContext } from "./scoreboard_context_usecase";
 import { assignScoreboardHeaderRefs, buildSpectatorHeader } from "./scoreboard_header_usecase";

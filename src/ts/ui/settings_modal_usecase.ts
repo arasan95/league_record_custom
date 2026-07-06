@@ -1,5 +1,5 @@
 import { commands, type Settings } from "../bindings";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../platform/core";
 import { saveKeybinds, saveMouseConfig } from "../keybinds";
 import type { Language } from "../i18n";
 import { createSettingsTabButton, switchSettingsTab } from "./settings_primitives";

@@ -1,7 +1,7 @@
 
-import { exists, mkdir, writeFile, BaseDirectory } from "@tauri-apps/plugin-fs";
-import { appLocalDataDir, join } from "@tauri-apps/api/path";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { exists, mkdir, writeFile, BaseDirectory } from "./platform/fs";
+import { appLocalDataDir, join } from "./platform/path";
+import { convertFileSrc } from "./platform/core";
 
 import { commands } from "./bindings";
 

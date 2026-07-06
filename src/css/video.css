@@ -64,7 +64,8 @@ video {
     align-items: stretch;
     
     width: 100%;
-    height: 100vh !important;
+    height: 100% !important;
+    min-height: 0 !important;
     padding: 0 !important;
     margin: 0 !important;
     overflow: hidden;
@@ -75,7 +76,7 @@ video {
 .video-js,
 #video_player {
     /* Flex Item in #main */
-    flex: 1 1 0 !important; /* Grow and shrink, basis 0 to force fit */
+    flex: 1 1 0 !important; /* Grow and shrink while leaving room for the external controls bar */
     
     /* Internal Layout: Strict Vertical Stack of Internal Components */
     /* 1. Video Content (1fr)
@@ -91,9 +92,9 @@ video {
         "play-controls";
         
     width: 100% !important;
-    height: 100% !important;
+    height: auto !important;
     max-height: none !important;
-    min-height: 200px !important;
+    min-height: 0 !important;
     
     padding: 0 !important;
     margin: 0 !important;
