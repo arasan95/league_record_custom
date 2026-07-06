@@ -1432,7 +1432,12 @@ async function buildRecorderSettings(settings, gameInfo) {
   if (!filenameFormat.toLowerCase().endsWith(".mp4")) filenameFormat += ".mp4";
   const filename = formatRecordingFilename(filenameFormat);
   const outputPath = path.join(settings.recordingsFolder, filename);
-  const inputResolution = await waitForLeagueWindowResolution(gameInfo?.manual ? 20 : 60, gameInfo?.manual ? 200 : 500);
+  const fallbackResolution = defaultGameResolution(settings);
+  const inputResolution = await waitForLeagueWindowResolution(gameInfo?.manual ? 20 : 8, gameInfo?.manual ? 200 : 250)
+    .catch(async (error) => {
+      await writeLog("recording", `window resolution fallback ${fallbackResolution.width}x${fallbackResolution.height}: ${String(error?.message || error)}`);
+      return fallbackResolution;
+    });
   const outputResolution = settings.outputResolution ? resolutionFromStd(settings.outputResolution) : closestStdResolution(inputResolution);
   const logicalPart = inputResolution.logicalWidth && inputResolution.logicalHeight
     ? ` logical=${inputResolution.logicalWidth}x${inputResolution.logicalHeight} dpi=${inputResolution.dpi ?? 96}`
@@ -1600,6 +1605,7 @@ class RecorderController {
     this.captureTickCount = 0;
     this.liveGameStartedFired = false;
     this.liveGameEndStopRequested = false;
+    this.liveClientFailureTicks = 0;
   }
 
   setStatus(status) {
@@ -1656,6 +1662,7 @@ class RecorderController {
     this.captureTickCount = 0;
     this.liveGameStartedFired = false;
     this.liveGameEndStopRequested = false;
+    this.liveClientFailureTicks = 0;
     await this.refreshParticipantMap();
     this.startLiveCapture();
 
@@ -1760,6 +1767,7 @@ class RecorderController {
     if (this.captureTimer) return;
     const tick = () => {
       this.captureTick().catch((error) => {
+        this.liveClientFailureTicks += 1;
         void writeLog("recording", `live capture tick failed: ${String(error?.message || error)}`);
       });
     };
@@ -1776,6 +1784,7 @@ class RecorderController {
   async captureTick() {
     if (!this.current) return;
     const data = await ingameRequest("/liveclientdata/allgamedata");
+    this.liveClientFailureTicks = 0;
     this.lastLiveGameData = data;
     if (!this.liveGameStartedFired) {
       this.liveGameStartedFired = true;
@@ -2827,7 +2836,20 @@ class GameMonitor {
     this.missingWindowTicks += 1;
     if (this.missingWindowTicks >= 3 && !this.missingWindowLogged) {
       this.missingWindowLogged = true;
-      await writeLog("game-monitor", `LoL window missing during recording ticks=${this.missingWindowTicks}; keeping recording until LCU reports game end`);
+      await writeLog("game-monitor", `LoL window missing during recording ticks=${this.missingWindowTicks}; waiting for LCU/live end signal`);
+    }
+    if (
+      this.missingWindowTicks >= 5 &&
+      this.controller.liveClientFailureTicks >= 5 &&
+      this.controller.liveGameStartedFired
+    ) {
+      await writeLog(
+        "game-monitor",
+        `stopping recording because LoL window and Live Client API are gone missingWindowTicks=${this.missingWindowTicks} liveClientFailureTicks=${this.controller.liveClientFailureTicks}`,
+      );
+      await this.controller.stopRecording(false).catch((error) => {
+        void writeLog("recording", `auto stop failed: ${String(error?.stack || error)}`);
+      });
     }
   }
 
