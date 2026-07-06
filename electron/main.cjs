@@ -1668,7 +1668,6 @@ class RecorderController {
     this.liveGameStartedFired = false;
     this.liveGameEndStopRequested = false;
     this.liveClientFailureTicks = 0;
-    this.liveClientStopRequested = false;
     this.lastLiveClientSuccessAt = 0;
   }
 
@@ -1727,7 +1726,6 @@ class RecorderController {
     this.liveGameStartedFired = false;
     this.liveGameEndStopRequested = false;
     this.liveClientFailureTicks = 0;
-    this.liveClientStopRequested = false;
     this.lastLiveClientSuccessAt = 0;
     await this.refreshParticipantMap();
     this.startLiveCapture();
@@ -1835,23 +1833,8 @@ class RecorderController {
     const tick = () => {
       this.captureTick().catch((error) => {
         this.liveClientFailureTicks += 1;
-        const liveClientDownMs = this.lastLiveClientSuccessAt > 0 ? Date.now() - this.lastLiveClientSuccessAt : 0;
-        if (
-          !this.liveClientStopRequested &&
-          this.current &&
-          this.status === "recording" &&
-          this.liveGameStartedFired &&
-          this.liveClientFailureTicks >= 8 &&
-          liveClientDownMs >= 6000
-        ) {
-          this.liveClientStopRequested = true;
-          void writeLog(
-            "recording",
-            `live client unavailable after game start; requesting stop failures=${this.liveClientFailureTicks} downMs=${liveClientDownMs}: ${String(error?.message || error)}`,
-          );
-          setTimeout(() => {
-            void gameMonitor?.stopFromEvent("LiveClientUnavailable");
-          }, 0);
+        if (this.liveClientFailureTicks === 8 && this.current && this.status === "recording" && this.liveGameStartedFired) {
+          void writeLog("recording", "live client unavailable during recording; keeping recording until LCU/live end signal");
         }
         void writeLog("recording", `live capture tick failed: ${String(error?.message || error)}`);
       });
@@ -1870,7 +1853,6 @@ class RecorderController {
     if (!this.current) return;
     const data = await ingameRequest("/liveclientdata/allgamedata");
     this.liveClientFailureTicks = 0;
-    this.liveClientStopRequested = false;
     this.lastLiveClientSuccessAt = Date.now();
     this.lastLiveGameData = data;
     if (!this.liveGameStartedFired) {
@@ -2924,19 +2906,6 @@ class GameMonitor {
     if (this.missingWindowTicks >= 3 && !this.missingWindowLogged) {
       this.missingWindowLogged = true;
       await writeLog("game-monitor", `LoL window missing during recording ticks=${this.missingWindowTicks}; waiting for LCU/live end signal`);
-    }
-    if (
-      this.missingWindowTicks >= 5 &&
-      this.controller.liveClientFailureTicks >= 5 &&
-      this.controller.liveGameStartedFired
-    ) {
-      await writeLog(
-        "game-monitor",
-        `stopping recording because LoL window and Live Client API are gone missingWindowTicks=${this.missingWindowTicks} liveClientFailureTicks=${this.controller.liveClientFailureTicks}`,
-      );
-      await this.controller.stopRecording(false).catch((error) => {
-        void writeLog("recording", `auto stop failed: ${String(error?.stack || error)}`);
-      });
     }
   }
 
