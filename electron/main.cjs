@@ -24,8 +24,10 @@ const https = require("node:https");
 const path = require("node:path");
 const zlib = require("node:zlib");
 const isDev = process.env.LR_ELECTRON_DEV === "1" || !app.isPackaged;
-const APP_NAME = "LeagueRecord";
-const APP_ID = isDev ? "com.leaguerecord.custom.dev" : "com.leaguerecord.custom";
+const APP_NAME = isDev ? "LeagueRecord Electron Dev" : "LeagueRecord Electron";
+const APP_ID = isDev ? "com.leaguerecord.custom.dev" : "com.leaguerecord.custom.electron";
+const APP_LOCAL_DATA_DIR_NAME = isDev ? "com.leaguerecord.custom.dev" : "com.leaguerecord.custom.electron";
+const ELECTRON_RELEASE_TAG_PREFIX = "electron-v";
 const TOOLTIP_DB_REMOTE_URL = "https://raw.githubusercontent.com/arasan95/league_record_custom/main/src-tauri/resources/tooltip_data.db";
 const APP_RELEASES_API_URL = "https://api.github.com/repos/arasan95/League_Record_custom/releases?per_page=20";
 const appFile = (...segments) => path.join(app.getAppPath(), ...segments);
@@ -120,7 +122,7 @@ function getSettingsPath() {
 
 function getAppLocalDataPath() {
   const localAppData = process.env.LOCALAPPDATA || app.getPath("userData");
-  return path.join(localAppData, "com.leaguerecord.custom");
+  return path.join(localAppData, APP_LOCAL_DATA_DIR_NAME);
 }
 
 function defaultSettings() {
@@ -358,6 +360,12 @@ function parseAppVersion(input) {
   };
 }
 
+function parseElectronReleaseVersion(tagName) {
+  const tag = String(tagName ?? "").trim();
+  if (!tag.toLowerCase().startsWith(ELECTRON_RELEASE_TAG_PREFIX)) return null;
+  return parseAppVersion(tag.slice(ELECTRON_RELEASE_TAG_PREFIX.length));
+}
+
 function comparePrereleasePart(left, right) {
   const leftNum = Number(left);
   const rightNum = Number(right);
@@ -388,10 +396,9 @@ function compareAppVersions(left, right) {
 
 function selectWindowsInstallerAsset(release) {
   const assets = Array.isArray(release?.assets) ? release.assets : [];
-  return assets.find((asset) => /LeagueRecord Setup .*\.exe$/i.test(asset?.name ?? ""))
-    ?? assets.find((asset) => /^LeagueRecord[_-].*x64-setup\.exe$/i.test(asset?.name ?? ""))
-    ?? assets.find((asset) => /^LeagueRecord_x64-setup\.exe$/i.test(asset?.name ?? ""))
-    ?? assets.find((asset) => /\.exe$/i.test(asset?.name ?? "") && !/updater|uninstaller|blockmap|\.sig$/i.test(asset?.name ?? ""));
+  return assets.find((asset) => /LeagueRecordElectron Setup .*\.exe$/i.test(asset?.name ?? ""))
+    ?? assets.find((asset) => /^LeagueRecordElectron[_-].*x64-setup\.exe$/i.test(asset?.name ?? ""))
+    ?? assets.find((asset) => /\.exe$/i.test(asset?.name ?? "") && /^LeagueRecordElectron/i.test(asset?.name ?? "") && !/updater|uninstaller|blockmap|\.sig$/i.test(asset?.name ?? ""));
 }
 
 async function checkAppUpdate() {
@@ -409,7 +416,7 @@ async function checkAppUpdate() {
   for (const release of releases) {
     if (release?.draft) continue;
     if (!includePrerelease && release?.prerelease) continue;
-    const next = parseAppVersion(release?.tag_name);
+    const next = parseElectronReleaseVersion(release?.tag_name);
     if (!next) continue;
     const newer = current ? compareAppVersions(next, current) > 0 : next.normalized !== app.getVersion();
     if (!newer) continue;
@@ -422,7 +429,7 @@ async function checkAppUpdate() {
       prerelease: Boolean(release.prerelease),
       publishedAt: release.published_at ?? null,
       installerUrl: installer.browser_download_url,
-      installerName: installer.name ?? `LeagueRecord Setup ${next.normalized}.exe`,
+      installerName: installer.name ?? `LeagueRecordElectron Setup ${next.normalized}.exe`,
     };
   }
   return null;
@@ -433,8 +440,8 @@ async function downloadAndInstallAppUpdate(update) {
   if (!/^https:\/\//i.test(installerUrl)) {
     throw new Error("Update installer URL is missing.");
   }
-  const installerName = sanitizeFileName(update?.installerName || `LeagueRecord Setup ${update?.version ?? "update"}.exe`);
-  const installerPath = path.join(app.getPath("temp"), "LeagueRecord", "updates", installerName);
+  const installerName = sanitizeFileName(update?.installerName || `LeagueRecordElectron Setup ${update?.version ?? "update"}.exe`);
+  const installerPath = path.join(app.getPath("temp"), "LeagueRecordElectron", "updates", installerName);
   await downloadToPath(installerUrl, installerPath);
   const child = spawn(installerPath, [], {
     detached: true,

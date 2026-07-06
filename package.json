@@ -52,10 +52,10 @@
     "oxlint": "^1.38.0"
   },
   "build": {
-    "appId": "com.leaguerecord.custom",
-    "productName": "LeagueRecord",
-    "executableName": "LeagueRecord",
-    "artifactName": "${productName} Setup ${version}.${ext}",
+    "appId": "com.leaguerecord.custom.electron",
+    "productName": "LeagueRecord Electron",
+    "executableName": "LeagueRecordElectron",
+    "artifactName": "LeagueRecordElectron Setup ${version}.${ext}",
     "asar": false,
     "afterPack": "scripts/after-pack-electron.cjs",
     "directories": {
