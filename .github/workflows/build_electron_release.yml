@@ -68,6 +68,29 @@ jobs:
       - name: Build Electron installer
         run: bun run electron:build
 
+      - name: Stage Electron artifacts
+        shell: pwsh
+        run: |
+          $stageDir = ".artifacts/electron"
+          New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
+
+          $setup = Get-ChildItem -Path "release-electron" -Filter "LeagueRecordElectron Setup *.exe" -File |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if ($null -eq $setup) {
+            Write-Error "Electron installer was not found in release-electron."
+            exit 1
+          }
+
+          Copy-Item -Force -LiteralPath $setup.FullName -Destination (Join-Path $stageDir $setup.Name)
+
+          $blockmapPath = "$($setup.FullName).blockmap"
+          if (Test-Path -LiteralPath $blockmapPath) {
+            Copy-Item -Force -LiteralPath $blockmapPath -Destination (Join-Path $stageDir "$($setup.Name).blockmap")
+          } else {
+            Write-Warning "Blockmap was not found: $blockmapPath"
+          }
+
       - name: Build Electron release body
         id: release_body
         shell: pwsh
@@ -97,8 +120,11 @@ jobs:
       - uses: ncipollo/release-action@v1
         with:
           tag: ${{ steps.version.outputs.tag }}
+          commit: ${{ github.sha }}
           name: LeagueRecord Electron v${{ steps.version.outputs.version }}
-          artifacts: "./release-electron/LeagueRecordElectron Setup *.exe, ./release-electron/LeagueRecordElectron Setup *.exe.blockmap"
+          artifacts: "./.artifacts/electron/*"
+          allowUpdates: true
+          replacesArtifacts: true
           draft: ${{ github.event_name == 'workflow_dispatch' }}
           prerelease: true
           body: ${{ steps.release_body.outputs.body }}

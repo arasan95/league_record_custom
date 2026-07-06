@@ -388,6 +388,24 @@ function updateClipBtnState() {
     if (createClipBtn) createClipBtn.disabled = isCreatingClip || !canCreateClip;
 }
 
+function setLoopPlaybackEnabled(enabled: boolean) {
+    isLooping = enabled;
+    if (loopEnabledCheckbox && loopEnabledCheckbox.checked !== enabled) {
+        loopEnabledCheckbox.checked = enabled;
+        loopEnabledCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+}
+
+function isOutsideLoopRange(time: number): boolean {
+    return (
+        isLooping &&
+        loopStart !== null &&
+        loopEnd !== null &&
+        loopEnd > loopStart &&
+        (time < loopStart || time > loopEnd)
+    );
+}
+
 function formatLoopTime(seconds: number): string {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -493,6 +511,25 @@ if (loopStartInput && loopEndInput && loopEnabledCheckbox) {
         isLooping = loopEnabledCheckbox.checked;
     });
 }
+
+playerElement?.addEventListener("pointerdown", (event) => {
+    const target = event.target as HTMLElement | null;
+    const progressHolder = target?.closest(".vjs-progress-holder") as HTMLElement | null;
+    if (!progressHolder) return;
+
+    const duration = player.duration();
+    if (typeof duration !== "number" || duration <= 0) return;
+
+    const rect = progressHolder.getBoundingClientRect();
+    if (rect.width <= 0) return;
+
+    const seekRatio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    const seekTime = seekRatio * duration;
+    if (isOutsideLoopRange(seekTime)) {
+        setLoopPlaybackEnabled(false);
+    }
+});
+
 if (createClipBtn) {
     createClipBtn.onclick = async () => {
         const videoId = ui.getActiveVideoId();
