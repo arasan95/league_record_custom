@@ -13,6 +13,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+release-electron/
 *.local
 
 # Editor directories and files
@@ -29,6 +30,7 @@ dist-ssr
 
 # Rust / Tauri
 src-tauri/target
+src-tauri/devtools/target/
 src-tauri/target_alt_clean*
 src-tauri/target_vt*
 src-tauri/target_no_ext*
@@ -53,11 +55,8 @@ ranked_stats_dump.json
 raw_input_example.py
 *.bak
 .mypy_cache
-scripts
 tmp
-docs
 TOOLTIP_HANDOVER_JA.md
-tools
 .markdownlint.json
 tooltip_exports
 

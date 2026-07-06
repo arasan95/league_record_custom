@@ -18,12 +18,13 @@ export class InventoryTimeline {
     private finalItemsByParticipant?: Map<number, Set<number>>;
     private finalItemOwners?: Map<number, Set<number>>;
 
-    constructor(events: GameEvent[], participants: number[], idMap?: Map<number, number>, finalParticipants?: Participant[]) {
+    constructor(events: GameEvent[], participants: number[] | Participant[], idMap?: Map<number, number>, finalParticipants?: Participant[]) {
         this.idMap = idMap;
-        if (finalParticipants) {
+        const resolvedFinalParticipants = finalParticipants ?? participants.filter((participant): participant is Participant => typeof participant !== "number");
+        if (resolvedFinalParticipants.length > 0) {
             this.finalItemsByParticipant = new Map();
             this.finalItemOwners = new Map();
-            finalParticipants.forEach((p) => {
+            resolvedFinalParticipants.forEach((p) => {
                 const items = [p.stats.item0, p.stats.item1, p.stats.item2, p.stats.item3, p.stats.item4, p.stats.item5, p.stats.item6]
                     .filter((id) => id && id > 0);
                 const itemSet = new Set(items);
@@ -34,11 +35,22 @@ export class InventoryTimeline {
                 });
             });
         }
+        const itemEventPids = new Set<number>();
+        events.forEach((e) => {
+            if ("ItemPurchased" in e) itemEventPids.add(e.ItemPurchased.participant_id);
+            else if ("ItemSold" in e) itemEventPids.add(e.ItemSold.participant_id);
+            else if ("ItemUndo" in e) itemEventPids.add(e.ItemUndo.participant_id);
+        });
+
         // Initialize timelines for all participants
-        participants.forEach(pid => {
+        participants.forEach(participant => {
+            const pid = typeof participant === "number" ? participant : participant.participantId;
+            const initialState = typeof participant === "number" || itemEventPids.has(pid)
+                ? { items: [], trinket: 0 }
+                : this.stateFromParticipantStats(participant);
             this.participantTimelines.set(pid, [{ 
                 timestamp: 0, 
-                state: { items: [], trinket: 0 } 
+                state: initialState,
             }]);
         });
 
@@ -159,9 +171,9 @@ export class InventoryTimeline {
             history.push({ timestamp: event.timestamp, state: newState });
         }
 
-        if (finalParticipants && itemEvents.length > 0) {
+        if (resolvedFinalParticipants.length > 0 && itemEvents.length > 0) {
             const finalTimestamp = Math.max(...itemEvents.map((event) => event.timestamp)) + 1;
-            finalParticipants.forEach((p) => {
+            resolvedFinalParticipants.forEach((p) => {
                 const history = this.participantTimelines.get(p.participantId);
                 if (!history) return;
                 history.push({
@@ -216,6 +228,14 @@ export class InventoryTimeline {
     private cloneState(state: InventoryState): InventoryState {
         // items might contain 0s now
         return { items: [...state.items], trinket: state.trinket };
+    }
+
+    private stateFromParticipantStats(participant: Participant): InventoryState {
+        const stats = participant.stats;
+        return {
+            items: [stats.item0, stats.item1, stats.item2, stats.item3, stats.item4, stats.item5].map((id) => id || 0),
+            trinket: stats.item6 || 0,
+        };
     }
 
     private handlePurchase(state: InventoryState, itemId: number, slot?: number | null) {

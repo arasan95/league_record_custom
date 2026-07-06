@@ -1,7 +1,7 @@
 import type videojs from "video.js";
 import type { ContentDescriptor } from "video.js/dist/types/utils/dom";
-import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import type { WebviewWindow } from "./platform/webviewWindow";
+import { getCurrentWebviewWindow } from "./platform/webviewWindow";
 import { commands, type GameMetadata, type GoldFrame, type MarkerFlags, type Recording, type Settings, type Participant, type GameEvent } from "./bindings";
 import { ensureItemDataLoaded, ensureTftDataLoaded, getChampionEnglishNameByIdSync, getChampionLocalizedNameByIdSync, getGameModeByQueueId } from "./datadragon";
 import { getCurrentPatchVersion } from "./version";
@@ -127,13 +127,17 @@ export default class UI {
     private sidebarContainer: HTMLDivElement | null = null;
     private scoreboardEl: HTMLElement | null = null;
     private scoreboardScale: number | null = null;
+    private pendingScoreboardHeight: { targetHeight: number; baseHeight: number } | null = null;
 
     public setSidebarWidth(newWidth: number) {
         applySidebarWidthLayout(this.sidebarContainer, newWidth);
     }
 
     public setScoreboardHeight(targetHeight: number, baseHeight: number) {
-        if (!this.scoreboardEl) return;
+        if (!this.scoreboardEl) {
+            this.pendingScoreboardHeight = { targetHeight, baseHeight };
+            return;
+        }
         if (targetHeight < 80) targetHeight = 80;
         this.scoreboardEl.classList.remove("collapsed");
         this.scoreboardEl.style.removeProperty("height");
@@ -143,6 +147,27 @@ export default class UI {
         newZoom = Math.min(newZoom, 1.5);
 
         (this.scoreboardEl.style as any).zoom = newZoom.toFixed(3);
+    }
+
+    private flushPendingScoreboardHeight() {
+        if (!this.pendingScoreboardHeight || !this.scoreboardEl) return;
+        const pending = this.pendingScoreboardHeight;
+        this.pendingScoreboardHeight = null;
+        this.setScoreboardHeight(pending.targetHeight, pending.baseHeight);
+    }
+
+    private stabilizeVideoLayout() {
+        const main = document.getElementById("main");
+        const playerEl = this.player?.el?.() as HTMLElement | undefined;
+        if (!main || !playerEl) return;
+
+        playerEl.style.minHeight = "0";
+        playerEl.style.height = "";
+
+        requestAnimationFrame(() => {
+            this.player?.trigger?.("componentresize");
+            this.player?.trigger?.("resize");
+        });
     }
 
     public checkWindowSize() {
@@ -762,7 +787,7 @@ export default class UI {
         this.setTftMode(isTftMatch);
         const playerEl = this.player.el() as HTMLElement;
         playerEl.classList.toggle("lr-tft-mode", isTftMatch);
-        this.timeline = new InventoryTimeline(this.events, data.participants.map(p => p.participantId), undefined, data.participants);
+        this.timeline = new InventoryTimeline(this.events, data.participants, undefined);
 
         const prepared = prepareScoreboardView({
             data,
@@ -801,6 +826,7 @@ export default class UI {
             return;
         }
         this.scoreboardEl = prepared.scoreboardEl;
+        this.flushPendingScoreboardHeight();
 
         const rendered = await renderScoreboardMainRows({
             data,
@@ -820,15 +846,24 @@ export default class UI {
         });
         if (!rendered) return;
 
+        this.stabilizeVideoLayout();
         this.player.off("timeupdate", this.updateTimelineItems);
         this.player.on("timeupdate", this.updateTimelineItems);
     }
 
     private updateTimelineItems = () => {
-         if (!this.timeline || !this.player) return;
+          if (!this.timeline || !this.player) return;
 
-         const currentTime = this.player.currentTime?.() ?? 0;
-         const duration = this.player.duration?.();
+          const diagnose = (() => {
+              try {
+                  return window.localStorage.getItem("lr.seekDiagnostics") === "1";
+              } catch {
+                  return false;
+              }
+          })();
+          const startedAt = diagnose ? performance.now() : 0;
+          const currentTime = this.player.currentTime?.() ?? 0;
+          const duration = this.player.duration?.();
          const hasStarted =
              typeof this.player.hasStarted === "function" ? Boolean(this.player.hasStarted()) : false;
          const keepFinalSnapshotWhileIdle =
@@ -882,9 +917,15 @@ export default class UI {
              dragonTimerIcon: this.dragonTimerIcon,
              monoVoidgrub,
              monoHerald,
-             monoBaron,
-             monoDrake,
-         });
+              monoBaron,
+              monoDrake,
+          });
+          if (startedAt) {
+              const elapsed = performance.now() - startedAt;
+              if (elapsed > 8) {
+                  console.log(`[seek-diagnostics] scoreboard timeupdate ${elapsed.toFixed(1)}ms current=${currentTime.toFixed(3)}`);
+              }
+          }
     };
 
     public showBigPlayButton = (show: boolean) => {

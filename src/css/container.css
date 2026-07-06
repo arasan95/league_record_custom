@@ -1,21 +1,24 @@
 #container {
     display: grid;
     grid-template-columns: [server-nav] 72px [sidebar] var(--sidebar-width, 325px) [main] 1fr;
-    grid-template-rows: 100%;
+    grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "server-nav sidebar main";
     overflow: hidden;
+    min-height: 0;
 }
 
 /* Structural Layout Areas */
 #sidebar {
     grid-area: sidebar;
     overflow: hidden;
+    min-height: 0;
 }
 
 #main {
     grid-area: main;
     overflow: hidden;
     position: relative;
+    min-height: 0;
 }
 
 .btn {

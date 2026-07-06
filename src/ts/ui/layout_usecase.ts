@@ -1,4 +1,4 @@
-import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import type { WebviewWindow } from "../platform/webviewWindow";
 
 export function applySidebarWidthLayout(sidebarContainer: HTMLDivElement | null, newWidth: number): void {
     if (!sidebarContainer) return;

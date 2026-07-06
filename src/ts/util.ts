@@ -29,7 +29,7 @@ export class UnreachableError extends Error {
     }
 }
 
-export function playNotificationSound(type: 'start' | 'stop') {
+export function playNotificationSound(type: 'start' | 'stop' | 'clip') {
     try {
         const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
         if (!AudioContext) return;
@@ -49,6 +49,13 @@ export function playNotificationSound(type: 'start' | 'stop') {
             gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
             osc.start(now);
             osc.stop(now + 0.3);
+        } else if (type === 'clip') {
+            osc.frequency.setValueAtTime(660, now);
+            osc.frequency.setValueAtTime(880, now + 0.12);
+            gain.gain.setValueAtTime(0.045, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+            osc.start(now);
+            osc.stop(now + 0.35);
         } else {
             // Lower pitch, short "bloop"
             osc.frequency.setValueAtTime(440, now); // A4

@@ -1,7 +1,12 @@
 {
   "name": "league_record_custom",
+  "version": "1.2.0",
+  "description": "LeagueRecord Electron build",
+  "author": "arasan95",
+  "copyright": "Copyright (c) arasan95",
   "private": true,
   "type": "module",
+  "main": "electron/bootstrap.mjs",
   "files": [
     "src",
     "index.html",
@@ -10,6 +15,13 @@
   ],
   "scripts": {
     "dev": "bun run --watch --port 1420 src/index.html",
+    "electron:dev": "node scripts/dev-electron.cjs",
+    "electron:start": "node scripts/start-electron.cjs",
+    "electron:build": "bun run build && node scripts/build-electron.cjs nsis",
+    "electron:build:portable": "bun run build && node scripts/build-electron.cjs portable",
+    "logs:path": "node scripts/print-latest-log.cjs",
+    "logs:tail": "node scripts/tail-latest-log.cjs",
+    "logs:analyze": "node scripts/analyze-logs.cjs",
     "dev:safe": "powershell -ExecutionPolicy Bypass -File dev-safe.ps1",
     "build": "rm -rf dist && bun build --minify --target browser --outdir dist src/index.html",
     "preview": "bun dist/index.html",
@@ -24,16 +36,69 @@
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
     "@tauri-apps/plugin-dialog": "2.6.0",
-    "@tauri-apps/plugin-fs": "^2.4.5",
+    "@tauri-apps/plugin-fs": "2.4.5",
     "@tauri-apps/plugin-process": "~2",
     "@tauri-apps/plugin-shell": "^2.3.4",
     "@tauri-apps/plugin-updater": "^2.10.0",
     "@xmldom/xmldom": "^0.8.13",
+    "sql.js": "^1.14.1",
     "video.js": "^8.23.4"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.0",
     "@types/bun": "^1.3.10",
+    "electron": "^37.0.0",
+    "electron-builder": "^26.8.1",
     "oxlint": "^1.38.0"
+  },
+  "build": {
+    "appId": "com.leaguerecord.custom",
+    "productName": "LeagueRecord",
+    "executableName": "LeagueRecord",
+    "artifactName": "${productName} Setup ${version}.${ext}",
+    "asar": false,
+    "afterPack": "scripts/after-pack-electron.cjs",
+    "directories": {
+      "output": "release-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "node_modules/sql.js/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "src-tauri/target/libobs",
+        "to": "libobs"
+      },
+      {
+        "from": "src-tauri/devtools/target/release/rebuild_tooltip_cache.exe",
+        "to": "devtools/rebuild_tooltip_cache.exe"
+      },
+      {
+        "from": "src-tauri/resources/tooltip_data.db",
+        "to": "tooltip_data.db"
+      }
+    ],
+    "win": {
+      "icon": "app-icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }

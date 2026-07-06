@@ -1,6 +1,6 @@
 import { commands, type Participant, type Recording } from "../bindings";
-import { startDrag } from "@crabnebula/tauri-plugin-drag";
-import { open } from "@tauri-apps/plugin-shell";
+import { startDrag } from "../platform/drag";
+import { open } from "../platform/shell";
 import xLogoIcon from "../../assets/share-icons/x-logo.svg";
 import discordSymbolIcon from "../../assets/share-icons/discord-symbol.svg";
 import {
