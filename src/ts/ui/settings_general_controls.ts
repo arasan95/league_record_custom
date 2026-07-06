@@ -160,13 +160,13 @@ export function createSettingsGeneralControls({
 
     const resolutions = [
         { label: "Auto (Window)", value: "" },
-        { label: "720p", value: "1280x720p" },
-        { label: "1080p", value: "1920x1080p" },
-        { label: "1440p", value: "2560x1440p" },
-        { label: "2160p (4K)", value: "3840x2160p" },
+        { label: "720p height (match window ratio)", value: "1280x720p" },
+        { label: "1080p height (match window ratio)", value: "1920x1080p" },
+        { label: "1440p height (match window ratio)", value: "2560x1440p" },
+        { label: "2160p height (match window ratio)", value: "3840x2160p" },
         { label: "2560x1080 (21:9)", value: "2560x1080p" },
         { label: "3440x1440 (21:9)", value: "3440x1440p" },
-        { label: "2880p (5K)", value: "5120x2880p" },
+        { label: "2880p height (match window ratio)", value: "5120x2880p" },
     ];
     const resSelect = createEl("select", {}, { class: "settings-select" }) as HTMLSelectElement;
     resolutions.forEach((res) => {
