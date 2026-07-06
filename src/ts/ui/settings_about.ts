@@ -1,6 +1,6 @@
-import { getVersion } from "@tauri-apps/api/app";
-import { open } from "@tauri-apps/plugin-shell";
-import { check } from "@tauri-apps/plugin-updater";
+import { getVersion } from "../platform/app";
+import { open } from "../platform/shell";
+import { check } from "../platform/updater";
 
 import { commands } from "../bindings";
 import { clearLocalChampionTooltipCache } from "../datadragon";

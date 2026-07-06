@@ -1,5 +1,5 @@
 import type { Recording } from "./bindings";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./platform/core";
 import { beginSidebarImageRun, waitForSidebarImageRun } from "./ui/recording_sidebar_item_usecase";
 const PERF_LOG_ENABLED = false;
 

@@ -21,10 +21,51 @@ export function setupScoreboardResize(input: {
     const { scoreboardEl, resizeHandle, baseHeight, setScoreboardHeight, saveScale } = input;
     let startY = 0;
     let startHeight = 0;
+    let snappedHeight: number | null = null;
+
+    const getVideoFitSnapHeight = (): number | null => {
+        const playerEl = scoreboardEl.closest(".video-js, #video_player") as HTMLElement | null;
+        const videoEl = playerEl?.querySelector("video") as HTMLVideoElement | null;
+        if (!playerEl || !videoEl || !videoEl.videoWidth || !videoEl.videoHeight) return null;
+
+        const playerRect = playerEl.getBoundingClientRect();
+        const controlBar = playerEl.querySelector(".vjs-control-bar") as HTMLElement | null;
+        const controlHeight = controlBar?.getBoundingClientRect().height ?? 0;
+        const idealVideoHeight = playerRect.width * (videoEl.videoHeight / videoEl.videoWidth);
+        const styles = getComputedStyle(scoreboardEl);
+        const snapOffset = parseFloat(styles.getPropertyValue("--scoreboard-video-fit-snap-offset")) || 0;
+        const snapHeight = playerRect.height - controlHeight - idealVideoHeight + snapOffset;
+        if (!Number.isFinite(snapHeight) || snapHeight <= 0) return null;
+        return snapHeight;
+    };
+
+    const applySnap = (targetHeight: number): number => {
+        const snapHeight = getVideoFitSnapHeight();
+        if (snapHeight === null) {
+            snappedHeight = null;
+            return targetHeight;
+        }
+
+        const snapRadius = 18;
+        const releaseRadius = 32;
+        const distance = Math.abs(targetHeight - snapHeight);
+
+        if (snappedHeight !== null) {
+            if (distance <= releaseRadius) return snapHeight;
+            snappedHeight = null;
+        }
+
+        if (distance <= snapRadius) {
+            snappedHeight = snapHeight;
+            return snapHeight;
+        }
+
+        return targetHeight;
+    };
 
     const onMouseMove = (e: MouseEvent) => {
         const dy = startY - e.clientY;
-        const targetHeight = startHeight + dy;
+        const targetHeight = applySnap(startHeight + dy);
         setScoreboardHeight(targetHeight, baseHeight);
     };
 
@@ -32,6 +73,7 @@ export function setupScoreboardResize(input: {
         window.removeEventListener("mousemove", onMouseMove);
         window.removeEventListener("mouseup", stopDrag);
         document.body.style.cursor = "";
+        snappedHeight = null;
         const finalZoom = (scoreboardEl.style as any).zoom;
         if (finalZoom) {
             saveScale(parseFloat(finalZoom));

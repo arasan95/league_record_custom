@@ -1,4 +1,4 @@
-#[path = "../wad/mod.rs"]
+#[path = "../../src/wad/mod.rs"]
 #[allow(dead_code)]
 mod wad;
 

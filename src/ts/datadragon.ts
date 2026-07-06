@@ -1,5 +1,5 @@
-import { exists, mkdir, readFile, writeFile, BaseDirectory } from "@tauri-apps/plugin-fs";
-import { invoke } from "@tauri-apps/api/core";
+import { exists, mkdir, readFile, writeFile, BaseDirectory } from "./platform/fs";
+import { invoke } from "./platform/core";
 import { getCachedAssetUrl } from "./assets";
 import { STATIC_ARAM_QUEUES, STATIC_SR_QUEUES, STATIC_TFT_QUEUES, STATIC_OTHER_QUEUES } from "./queues";
 import { getCurrentPatchVersion } from "./version";

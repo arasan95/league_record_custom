@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./platform/core";
 
 const VERSION_KEY = "lol_patch_version";
 const FALLBACK_VERSION = "14.23.1"; // A recent safe fallback
@@ -45,7 +45,7 @@ export async function initPatchVersion(): Promise<string> {
     } catch (e: any) {
         console.warn("Failed to fetch latest patch version, using stored or fallback:", e);
         try {
-            const { writeFile, BaseDirectory } = await import("@tauri-apps/plugin-fs");
+            const { writeFile, BaseDirectory } = await import("./platform/fs");
             await writeFile("patch_debug.txt", new TextEncoder().encode(`Error: ${e?.toString()}`), { baseDir: BaseDirectory.AppLocalData });
         } catch (_) {}
     }

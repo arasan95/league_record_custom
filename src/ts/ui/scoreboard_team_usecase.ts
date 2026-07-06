@@ -12,7 +12,7 @@ import {
     getSummonerSpellData,
 } from "../datadragon";
 import { getCurrentPatchVersion } from "../version";
-import { open } from "@tauri-apps/plugin-shell";
+import { open } from "../platform/shell";
 import {
     buildItemTooltipHtml,
     buildLocalChampionTooltipHtml,

@@ -1,5 +1,5 @@
-import { BaseDirectory, exists, readFile, writeFile } from "@tauri-apps/plugin-fs";
-import { invoke } from "@tauri-apps/api/core";
+import { BaseDirectory, exists, readFile, writeFile } from "./platform/fs";
+import { invoke } from "./platform/core";
 import { getCurrentPatchVersion } from "./version";
 import { APP_TEXT, getText, type Language } from "./i18n";
 import manualFallbackMappingsRaw from "../assets/fallback_mappings.json";

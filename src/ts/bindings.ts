@@ -183,7 +183,7 @@ appEvent: "app-event"
 
 /** user-defined types **/
 
-export type AppEvent = { type: "RecordingsChanged"; payload: null } | { type: "MetadataChanged"; payload: string[] } | { type: "MarkerflagsChanged"; payload: null } | { type: "RecordingStarted" } | { type: "ManualRecordingStarted" } | { type: "ManualRecordingStopped" } | { type: "GameDetected" } | { type: "GameStarted" } | { type: "RecordingFinished"; payload: [string, boolean] }
+export type AppEvent = { type: "RecordingsChanged"; payload: null } | { type: "MetadataChanged"; payload: string[] } | { type: "MarkerflagsChanged"; payload: null } | { type: "RecordingStarted" } | { type: "ManualRecordingStarted" } | { type: "ManualRecordingStopped" } | { type: "GameDetected" } | { type: "GameStarted" } | { type: "RecordingFinished"; payload: [string, boolean] } | { type: "ClipProgress"; payload: { videoId: string; start: number; end: number; percent: number } }
 export type ApplicationAudioTrackSetting = { application: string | null; enabled: boolean; volumePercent: number }
 export type AudioSource = 
 /**
@@ -356,9 +356,9 @@ export type TowerType = "OUTER_TURRET" | "INNER_TURRET" | "BASE_TURRET" | "NEXUS
 import {
 	invoke as TAURI_INVOKE,
 	Channel as TAURI_CHANNEL,
-} from "@tauri-apps/api/core";
-import * as TAURI_API_EVENT from "@tauri-apps/api/event";
-import { type WebviewWindow as __WebviewWindow__ } from "@tauri-apps/api/webviewWindow";
+} from "./platform/core";
+import * as TAURI_API_EVENT from "./platform/event";
+import { type WebviewWindow as __WebviewWindow__ } from "./platform/webviewWindow";
 
 type __EventObj__<T> = {
 	listen: (

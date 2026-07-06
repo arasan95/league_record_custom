@@ -37,7 +37,7 @@ export function showUpdateModalView(input: {
                 await update.downloadAndInstall();
                 statusMsg.innerText = getText(lang as any, "updateRestart" as any) || "Restarting...";
                 statusMsg.style.color = "#4CAF50";
-                const { relaunch } = await import("@tauri-apps/plugin-process");
+                const { relaunch } = await import("../platform/process");
                 await relaunch();
             } catch (e) {
                 console.error("Install update failed", e);
@@ -53,4 +53,3 @@ export function showUpdateModalView(input: {
     const wrapper = createEl("div", {}, { style: "width: 100%; max-width: 600px; margin: 0 auto; padding: 10px;" }, [title, contentBox, statusMsg, btnContainer]);
     showModal([wrapper]);
 }
-
