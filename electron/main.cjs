@@ -881,9 +881,12 @@ async function runCommand(command, args) {
   });
 }
 
-async function runCommandCollect(command, args) {
+async function runCommandCollect(command, args, options = {}) {
   return await new Promise((resolve, reject) => {
-    const child = spawn(command, args, { windowsHide: true });
+    const child = spawn(command, args, {
+      windowsHide: true,
+      env: options.env ? { ...process.env, ...options.env } : process.env,
+    });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (d) => {
@@ -1018,7 +1021,11 @@ async function updateChampionData() {
 
   await ensureDir(getTooltipCacheDir());
   await writeLog("tooltip-cache", `running helper ${toolPath}`);
-  const result = await runCommandCollect(toolPath, []);
+  const result = await runCommandCollect(toolPath, [], {
+    env: {
+      LR_TOOLTIP_CACHE_DIR: getTooltipCacheDir(),
+    },
+  });
   if (result.code !== 0) {
     const detail = `${result.stderr || result.stdout || ""}`.trim();
     const message = `Tooltip extraction failed (${result.code}): ${detail}`;
