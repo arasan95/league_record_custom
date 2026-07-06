@@ -2921,8 +2921,8 @@ class GameMonitor {
       await writeLog("game-monitor", `LoL window missing during recording ticks=${this.missingWindowTicks}; waiting for LCU/live end signal`);
     }
     if (
-      this.missingWindowTicks >= 8 &&
-      this.controller.liveClientFailureTicks >= 8 &&
+      this.missingWindowTicks >= 3 &&
+      this.controller.liveClientFailureTicks >= 3 &&
       this.controller.liveGameStartedFired &&
       shouldStopRecordingOnClientExit(this.latestGameInfo)
     ) {
