@@ -65,6 +65,7 @@
       "dist/**/*",
       "electron/**/*",
       "package.json",
+      "app-icon.png",
       "node_modules/sql.js/**/*"
     ],
     "extraResources": [

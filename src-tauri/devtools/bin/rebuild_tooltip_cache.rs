@@ -16,10 +16,15 @@ fn main() {
         }
     };
 
-    let local_appdata = std::env::var("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .expect("LOCALAPPDATA is not set");
-    let cache_dir = local_appdata.join("com.leaguerecord.custom").join("tooltip_cache");
+    let cache_dir = match std::env::var("LR_TOOLTIP_CACHE_DIR") {
+        Ok(path) if !path.trim().is_empty() => PathBuf::from(path),
+        _ => {
+            let local_appdata = std::env::var("LOCALAPPDATA")
+                .map(PathBuf::from)
+                .expect("LOCALAPPDATA is not set");
+            local_appdata.join("com.leaguerecord.custom").join("tooltip_cache")
+        }
+    };
     if let Err(e) = fs::create_dir_all(&cache_dir) {
         eprintln!("Failed to create cache dir: {e}");
         std::process::exit(1);
