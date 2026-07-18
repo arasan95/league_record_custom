@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="LeagueRecordは、League of LegendsのゲームプレイをWindows PCへローカル録画し、利用者が自分の録画やクリップを確認・共有できるデスクトップアプリです。">
   <title>LeagueRecord</title>
   <style>
     :root { color-scheme: dark; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -14,12 +15,21 @@
 </head>
 <body>
   <h1>LeagueRecord</h1>
-  <h2>アプリの目的</h2>
-  <p>LeagueRecordは、League of LegendsのゲームプレイをWindows PC上へローカル録画し、利用者が後から録画を確認・共有できるようにするWindows向けデスクトップアプリです。録画ファイルは利用者のPCに保存されます。</p>
+  <p><strong>LeagueRecord</strong> は、League of LegendsのゲームプレイをWindows PCへローカル録画し、利用者が自分の録画・クリップを確認して共有できるようにするデスクトップアプリです。</p>
+
+  <h2>LeagueRecordの目的と主な機能</h2>
+  <p>LeagueRecordの目的は、利用者が自分のゲームプレイを録画して振り返り、必要に応じて共有できるようにすることです。録画ファイルは利用者のPC上の指定フォルダーに保存され、LeagueRecordは録画ファイルを開発者のサーバーへ自動送信しません。</p>
+  <ul>
+    <li>League of Legendsのゲームプレイをローカルへ録画します。</li>
+    <li>利用者が作成した録画およびクリップを一覧で確認できます。</li>
+    <li>利用者が選択した録画を、任意で外部サービスへ共有できます。</li>
+  </ul>
+
   <div class="card">
     <h2>任意のYouTubeアップロード機能</h2>
-    <p>LeagueRecordは、利用者が明示的に選択した完成済みの録画またはクリップを、利用者自身のYouTubeチャンネルへアップロードするためにYouTube Data APIを使用します。</p>
-    <p>本機能は任意です。Googleアカウントへの接続、投稿内容の入力、公開設定の選択および最終確認を利用者が行った場合にのみ動画を送信します。</p>
+    <p>LeagueRecordは、利用者が明示的に選択した完成済みの録画またはクリップを、利用者自身のYouTubeチャンネルへアップロードするために、YouTube Data APIの <code>youtube.upload</code> 権限を使用します。</p>
+    <p>この機能は任意です。LeagueRecordは、利用者がGoogleアカウントを接続し、投稿する動画、タイトル、説明、公開設定および子ども向け設定を選び、最終確認した場合にのみ動画をYouTubeへ送信します。利用者はアプリ内でGoogle接続をいつでも解除できます。</p>
+    <p>LeagueRecordは、Googleアカウントのパスワードを取得せず、OAuth認証トークンやアップロードした動画を開発者のサーバーへ保存しません。詳細は<a href="privacy.html">プライバシーポリシー</a>を確認してください。</p>
   </div>
   <nav>
     <a href="privacy.html">プライバシーポリシー</a>
