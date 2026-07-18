@@ -11,6 +11,10 @@
     z-index: 15;
     background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); /* Subtle backing */
     padding-bottom: 5px;
+    /* When auto-zoomed for a narrow window, keep the remaining board centered
+       instead of anchoring it to the left edge. */
+    align-self: center;
+    min-width: 0;
 }
 
 .scoreboard-center {
@@ -63,6 +67,7 @@
     padding: 2px;
     border-radius: 4px;
     flex: 1; 
+    min-width: 0;
 }
 
 .team-100 { /* Blue Team */
@@ -97,6 +102,7 @@
     background-color: rgba(0, 0, 0, 0.3);
     border-radius: 2px;
     height: 30px; /* Reduced to 30px (~80% of 36px) */
+    min-width: 0;
 }
 
 /* --- Icons & Stats --- */
@@ -491,6 +497,7 @@
     border-radius: 0;
     flex: 1; 
     background-color: transparent; 
+    position: relative;
 }
 
 /* Remove borders from teams in spectator mode */
@@ -506,6 +513,31 @@
     border-left: none !important; /* Explicitly remove left border */
     background: transparent; 
     box-shadow: 4px 0 15px rgba(255, 35, 69, 0.5), inset -10px 0 20px rgba(255, 35, 69, 0.1); 
+}
+
+/* Keep the colored team edges visible above long player names or other row
+   content that reaches the outside edge of the board. */
+.team-100::after,
+.team-200::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.team-100::after {
+    /* Overlay the existing 3px border instead of adding another stripe
+       inside the scoreboard. */
+    left: -3px;
+    background: #0acbe6;
+}
+
+.team-200::after {
+    right: -3px;
+    background: #ff2345;
 }
 
 /* Keep player row styling */
@@ -679,6 +711,10 @@
     height: 30px;
     object-fit: contain;
     flex-shrink: 0;
+}
+
+body.hide-honor-votes .honor-heart-icon {
+    display: none;
 }
 
 /* Remove old order rules */

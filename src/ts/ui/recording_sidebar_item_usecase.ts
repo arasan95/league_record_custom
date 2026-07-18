@@ -1205,9 +1205,14 @@ export function createRecordingSidebarItem(input: {
             const totalCS = meta.stats.totalMinionsKilled + meta.stats.neutralMinionsKilled;
             const csPerMin = calcCsPerMin(totalCS, durationSec);
             const statsCol = createEl("div", {}, { class: "sidebar-stats" });
+            const csSpan = createEl("span", {}, { class: "sidebar-cs" });
+            csSpan.append(
+                createEl("span", {}, { class: "sidebar-cs-total" }, `${totalCS} CS`),
+                createEl("span", {}, { class: "sidebar-cs-per-minute" }, `(${csPerMin}/m)`),
+            );
             statsCol.append(
                 createEl("span", {}, { class: "sidebar-kda" }, kda),
-                createEl("span", {}, { class: "sidebar-cs" }, `${totalCS} CS (${csPerMin}/m)`),
+                csSpan,
                 createEl("span", {}, { class: `sidebar-result ${resultClass}` }, result),
             );
             if (meta.lpDiff !== undefined && meta.lpDiff !== null && meta.queue?.isRanked) {

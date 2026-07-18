@@ -40,10 +40,12 @@ let championLookupPromise = null;
 let appTray = null;
 let recorderController = null;
 let gameMonitor = null;
+let recordingHotkeysGameActive = false;
+let recordingHotkeySettings = null;
 let currentMainWindow = null;
 let externalInstallerPending = false;
 let youtubeService = null;
-let youtubeUiComparisonEnabled = false;
+let youtubeUiComparisonEnabled = true;
 
 const YOUTUBE_UI_COMPARISON_STYLE_ID = "league-record-youtube-ui-comparison";
 const YOUTUBE_UI_COMPARISON_CSS = `
@@ -102,7 +104,7 @@ function isYouTubeEmbedFrame(frame) {
 }
 
 async function applyYouTubeUiComparison(frame, enabled) {
-  if (!isDev || !frame || frame.isDestroyed() || !isYouTubeEmbedFrame(frame)) return false;
+  if (!frame || frame.isDestroyed() || !isYouTubeEmbedFrame(frame)) return false;
   const script = `(() => {
     const styleId = ${JSON.stringify(YOUTUBE_UI_COMPARISON_STYLE_ID)};
     document.getElementById(styleId)?.remove();
@@ -128,7 +130,6 @@ async function applyYouTubeUiComparison(frame, enabled) {
 }
 
 async function setYouTubeUiComparison(win, enabled) {
-  if (!isDev) return { enabled: false, affectedFrames: 0 };
   youtubeUiComparisonEnabled = Boolean(enabled);
   const frames = win.webContents.mainFrame.framesInSubtree;
   const results = await Promise.all(frames.map((frame) => applyYouTubeUiComparison(frame, youtubeUiComparisonEnabled)));
@@ -229,6 +230,22 @@ function defaultSettings() {
   const videosDir = app.getPath("videos");
   return {
     markerFlags: defaultMarkerFlags,
+    markerColors: {
+      kill: "#2bff00",
+      death: "#ff0000",
+      assist: "#fbff00",
+      structure: "#ffffff",
+      dragon: "#00eaff",
+      voidgrub: "#ff1493",
+      herald: "#ea00ff",
+      baron: "#7b00ff",
+    },
+    markerOpacities: {
+      // Preserve the original marker treatment: standard event markers were
+      // rendered at 40%, while the larger dragon and Baron markers used 70%.
+      kill: 0.4, death: 0.4, assist: 0.4, structure: 0.4, dragon: 0.7, voidgrub: 0.4, herald: 0.4, baron: 0.7,
+    },
+    showHonorVotes: true,
     debugLog: false,
     recordingsFolder: path.join(videosDir, "LeagueRecord"),
     clipsFolder: path.join(videosDir, "LeagueRecord", "clips"),
@@ -278,6 +295,21 @@ function sanitizeSettings(settings) {
   if (!Array.isArray(next.framerate) || next.framerate.length !== 2) next.framerate = [60, 1];
   if (!Array.isArray(next.applicationAudioTracks)) next.applicationAudioTracks = [];
   if (!next.clipsFolder) next.clipsFolder = path.join(next.recordingsFolder, "clips");
+  if (!next.markerColors || typeof next.markerColors !== "object" || Array.isArray(next.markerColors)) {
+    next.markerColors = {};
+  }
+  for (const key of Object.keys(defaults.markerColors)) {
+    const value = String(next.markerColors?.[key] ?? defaults.markerColors[key]).trim();
+    next.markerColors[key] = /^#[0-9a-f]{6}$/i.test(value) ? value : defaults.markerColors[key];
+  }
+  if (!next.markerOpacities || typeof next.markerOpacities !== "object" || Array.isArray(next.markerOpacities)) {
+    next.markerOpacities = {};
+  }
+  for (const key of Object.keys(defaults.markerOpacities)) {
+    const value = Number(next.markerOpacities[key]);
+    next.markerOpacities[key] = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : defaults.markerOpacities[key];
+  }
+  next.showHonorVotes = next.showHonorVotes !== false;
   for (const key of [
     "matchHistoryBaseUrl",
     "matchHistorySubUrl",
@@ -2914,6 +2946,7 @@ class GameMonitor {
     } catch {}
     this.ws = null;
     this.stopNonRecordedGameStartedPoll();
+    setRecordingHotkeysGameActive(false);
   }
 
   scheduleWebSocketReconnect() {
@@ -2989,6 +3022,7 @@ class GameMonitor {
     try {
       session = await lcuRequest("GET", "/lol-gameflow/v1/session");
     } catch {
+      setRecordingHotkeysGameActive(false);
       await this.checkMissingLeagueWindow();
       this.lastPhase = "";
       if (!this.controller.current) this.inGameStartedFired = false;
@@ -3060,6 +3094,7 @@ class GameMonitor {
       this.lastPhase = info.phase;
     }
     const gameflowActive = info.phase === "GameStart" || info.phase === "InProgress";
+    setRecordingHotkeysGameActive(gameflowActive);
 
     if (gameflowActive && info.gameId && !this.seenGameIds.has(info.gameId)) {
       broadcastAppEvent("GameDetected", null);
@@ -3131,22 +3166,40 @@ function normalizeAccelerator(value) {
   return normalized || null;
 }
 
-function registerRecordingHotkeys(settings) {
+function syncRecordingHotkeys() {
   globalShortcut.unregisterAll();
+  if (!recordingHotkeysGameActive || !recordingHotkeySettings) return;
+
+  const settings = recordingHotkeySettings;
   const start = normalizeAccelerator(settings.startRecordingHotkey);
   const stop = normalizeAccelerator(settings.stopRecordingHotkey);
   if (start) {
     const ok = globalShortcut.register(start, () => {
+      if (!recordingHotkeysGameActive) return;
       void recorderController?.manualStart();
     });
     void writeLog("hotkey", `register start ${start}: ${ok}`);
   }
   if (stop) {
     const ok = globalShortcut.register(stop, () => {
+      if (!recordingHotkeysGameActive) return;
       void recorderController?.manualStop(true);
     });
     void writeLog("hotkey", `register stop ${stop}: ${ok}`);
   }
+}
+
+function registerRecordingHotkeys(settings) {
+  recordingHotkeySettings = settings;
+  syncRecordingHotkeys();
+}
+
+function setRecordingHotkeysGameActive(active) {
+  const next = Boolean(active);
+  if (recordingHotkeysGameActive === next) return;
+  recordingHotkeysGameActive = next;
+  syncRecordingHotkeys();
+  void writeLog("hotkey", next ? "game active; monitoring enabled" : "game inactive; monitoring disabled");
 }
 
 function getReplayMatchId(metadata) {
@@ -3617,15 +3670,38 @@ function createWindow() {
   });
   // The renderer's developer-mode setting only enabled text selection before.
   // Provide an explicit Electron DevTools entry while that setting is on.
-  win.webContents.on("context-menu", async (event) => {
+  win.webContents.on("context-menu", async (event, params) => {
     try {
       const settings = await readSettings();
       if (!settings.developerMode) return;
       event.preventDefault();
-      Menu.buildFromTemplate([{
-        label: win.webContents.isDevToolsOpened() ? "開発者ツールを閉じる" : "開発者ツールを開く",
-        click: () => win.webContents.toggleDevTools(),
-      }]).popup({ window: win });
+      Menu.buildFromTemplate([
+        { role: "cut", label: "切り取り" },
+        { role: "copy", label: "コピー" },
+        { role: "paste", label: "貼り付け" },
+        { role: "selectAll", label: "すべて選択" },
+        { type: "separator" },
+        {
+          label: "この要素を検証",
+          click: () => {
+            win.webContents.inspectElement(params.x, params.y);
+            win.webContents.openDevTools({ mode: "bottom" });
+          },
+        },
+        {
+          label: win.webContents.isDevToolsOpened() ? "開発者ツールを閉じる" : "開発者ツールを開く",
+          click: () => {
+            if (win.webContents.isDevToolsOpened()) {
+              win.webContents.closeDevTools();
+            } else {
+              // Dock below the app so DevTools uses a horizontal layout.
+              win.webContents.openDevTools({ mode: "bottom" });
+            }
+          },
+        },
+        { type: "separator" },
+        { role: "reload", label: "再読み込み" },
+      ]).popup({ window: win });
     } catch (error) {
       void writeLog("main", `developer context menu failed: ${String(error)}`);
     }
@@ -3646,15 +3722,13 @@ function createWindow() {
       callback({ requestHeaders: details.requestHeaders });
     },
   );
-  if (isDev) {
-    win.webContents.on("frame-created", (_event, details) => {
-      const frame = details.frame;
-      if (!frame) return;
-      frame.on("dom-ready", () => {
-        if (youtubeUiComparisonEnabled) void applyYouTubeUiComparison(frame, true);
-      });
+  win.webContents.on("frame-created", (_event, details) => {
+    const frame = details.frame;
+    if (!frame) return;
+    frame.on("dom-ready", () => {
+      if (youtubeUiComparisonEnabled) void applyYouTubeUiComparison(frame, true);
     });
-  }
+  });
   currentMainWindow = win;
   youtubeService = createYouTubeService({
     app,
@@ -3746,11 +3820,9 @@ function createWindow() {
     clipboard.writeText(String(text ?? ""));
     return null;
   });
-  if (isDev) {
-    safeHandle("lr:youtube-ui-comparison:setEnabled", (_e, enabled) => {
-      return setYouTubeUiComparison(win, Boolean(enabled));
-    });
-  }
+  safeHandle("lr:youtube-ui-comparison:setEnabled", (_e, enabled) => {
+    return setYouTubeUiComparison(win, Boolean(enabled));
+  });
   safeHandle("lr:fs:exists", async (_e, target, options) => {
     try {
       await fs.stat(resolveFsPath(target, options));

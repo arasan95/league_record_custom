@@ -126,8 +126,9 @@ export class TitleBar {
         this.autoHidePreferred = enabled;
         const toggleButton = document.getElementById("titlebar-toggle-autohide");
         if (toggleButton) {
-            toggleButton.textContent = enabled ? "Auto:On" : "Auto:Off";
+            toggleButton.textContent = enabled ? "Hide:On" : "Hide:Off";
             toggleButton.setAttribute("title", enabled ? "Disable titlebar auto-hide" : "Enable titlebar auto-hide");
+            toggleButton.setAttribute("aria-pressed", String(enabled));
         }
         await this.refreshAutoHideState();
     }
