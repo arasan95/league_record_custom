@@ -1,4 +1,4 @@
-import type { Settings } from "../bindings";
+import type { MarkerColors, MarkerOpacities, Settings } from "../bindings";
 
 type MarkerSwitchInputs = {
     kill: boolean;
@@ -69,6 +69,7 @@ export type BuildSettingsPayloadInput = {
     markerSwitches: MarkerSwitchInputs;
     gameModeSwitches: GameModeInputs;
     otherSwitches: OtherSwitchInputs;
+    displayPreferences: { markerColors: MarkerColors; markerOpacities: MarkerOpacities; showHonorVotes: boolean };
 };
 
 export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings {
@@ -131,6 +132,9 @@ export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings
             herald: input.markerSwitches.herald,
             baron: input.markerSwitches.baron,
         },
+        markerColors: input.displayPreferences.markerColors,
+        markerOpacities: input.displayPreferences.markerOpacities,
+        showHonorVotes: input.displayPreferences.showHonorVotes,
         gameModes,
         autostart: input.otherSwitches.autostart,
         autoplayVideo: input.otherSwitches.autoplayVideo,

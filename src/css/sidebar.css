@@ -358,8 +358,7 @@
 }
 
 #youtube-replay-history li.active {
-    background-color: #3a3a3a;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    background-color: #2e2e2e;
 }
 
 .youtube-replay-remove {
@@ -512,41 +511,23 @@
 }
 
 #youtube-ui-comparison {
-    margin: 2px 0 12px;
-    border: 1px solid #745f35;
-    border-radius: 8px;
-    background: rgba(116, 95, 53, 0.16);
-    padding: 11px 12px;
-}
-
-.youtube-ui-comparison-heading {
-    margin-bottom: 9px;
-    color: #e6c77d;
-    font-family: Inter, sans-serif;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    margin: 4px 0 8px;
 }
 
 .youtube-ui-comparison-toggle {
     display: flex !important;
-    align-items: flex-start;
-    gap: 8px;
+    align-items: center;
+    gap: 6px;
     margin: 0 !important;
+    color: #aaa;
+    font-size: 10px;
+    line-height: 1.2;
     cursor: pointer;
-    line-height: 1.45;
 }
 
 .youtube-ui-comparison-toggle input {
     flex: 0 0 auto;
-    margin: 2px 0 0;
-}
-
-#youtube-ui-comparison-note {
-    margin: 8px 0 0;
-    color: #aaa18d;
-    font-size: 10px;
-    line-height: 1.5;
+    margin: 0;
 }
 
 #youtube-replay-summary {
@@ -661,8 +642,10 @@
 }
 
 /* List Item Base */
-#sidebar #sidebar-content li {
+#sidebar #sidebar-content li,
+#youtube-replay-history li {
     position: relative;
+    min-width: 0;
     padding: 10px;
     padding-left: 15px; /* Add space for the bar */
     cursor: pointer;
@@ -676,16 +659,19 @@
 
 /* Remove the ::after separator line */
 
-#sidebar #sidebar-content li:hover {
+#sidebar #sidebar-content li:hover,
+#youtube-replay-history li:hover {
     background-color: #3f3f3f;
 }
 
-#sidebar #sidebar-content li.active {
+#sidebar #sidebar-content li.active,
+#youtube-replay-history li.active {
     background-color: #2e2e2e;
 }
 
 /* Side Indicators (Bar via pseudo-element) */
-#sidebar #sidebar-content li::before {
+#sidebar #sidebar-content li::before,
+#youtube-replay-history li::before {
     content: "";
     position: absolute;
     left: 0px;
@@ -696,16 +682,19 @@
     transition: background-color 0.2s, box-shadow 0.2s;
 }
 
-#sidebar #sidebar-content li.side-blue::before {
+#sidebar #sidebar-content li.side-blue::before,
+#youtube-replay-history li.side-blue::before {
     background-color: #0acbe6;
 }
 
-#sidebar #sidebar-content li.side-red::before {
+#sidebar #sidebar-content li.side-red::before,
+#youtube-replay-history li.side-red::before {
     background-color: #e63b3b;
 }
 
 /* Fallback for active item with no side info - Neutral color */
-#sidebar #sidebar-content li.active:not(.side-blue):not(.side-red)::before {
+#sidebar #sidebar-content li.active:not(.side-blue):not(.side-red)::before,
+#youtube-replay-history li.active:not(.side-blue):not(.side-red)::before {
     background-color: #e0e0e0 !important;
     box-shadow: 
         0 0 8px 2px rgba(220, 220, 220, 0.8),
@@ -714,12 +703,14 @@
 }
 
 /* Fallback for INACTIVE item with no side info - Neutral line */
-#sidebar #sidebar-content li:not(.side-blue):not(.side-red)::before {
+#sidebar #sidebar-content li:not(.side-blue):not(.side-red)::before,
+#youtube-replay-history li:not(.side-blue):not(.side-red)::before {
     background-color: #444;
 }
 
 /* Neon Glow Effect on Active State - Intensified */
-#sidebar #sidebar-content li.active.side-blue::before {
+#sidebar #sidebar-content li.active.side-blue::before,
+#youtube-replay-history li.active.side-blue::before {
     background-color: #b5f6ff !important;
     box-shadow: 
         0 0 8px 2px rgba(10, 203, 230, 0.9),
@@ -727,7 +718,8 @@
     z-index: 10;
 }
 
-#sidebar #sidebar-content li.active.side-red::before {
+#sidebar #sidebar-content li.active.side-red::before,
+#youtube-replay-history li.active.side-red::before {
     background-color: #ffc8c8 !important;
     box-shadow: 
         0 0 8px 2px rgba(255, 0, 0, 0.685),
@@ -736,11 +728,13 @@
 }
 
 /* Yellow Glow for TFT */
-#sidebar #sidebar-content li.tft-match::before {
+#sidebar #sidebar-content li.tft-match::before,
+#youtube-replay-history li.tft-match::before {
     background-color: #bf9d46;
 }
 
-#sidebar #sidebar-content li.active.tft-match::before {
+#sidebar #sidebar-content li.active.tft-match::before,
+#youtube-replay-history li.active.tft-match::before {
     background-color: #fff09c !important;
     box-shadow: 
         0 0 8px 2px rgba(255, 215, 0, 0.8),
@@ -808,7 +802,7 @@
 }
 
 .sidebar-time {
-    font-size: 24px;
+    font-size: 20px;
     font-weight: 700;
     color: #fff;
     text-shadow: 0 0 5px rgba(0,0,0,0.5);
@@ -1016,6 +1010,12 @@
     justify-content: center;
     min-width: 20px;
     height: 25px;
+}
+
+/* Keep the existing full-width CS label as one line. Compact mode below
+   changes only these two parts into separate rows. */
+.sidebar-cs-total::after {
+    content: " ";
 }
 
 .favorite:hover { color: gold; }
@@ -1358,6 +1358,54 @@
 
 #sidebar.sidebar-compact .sub-champ-icon {
     display: none !important;
+}
+
+/* Compact recordings use every available horizontal pixel. */
+#sidebar.sidebar-compact #sidebar-content li,
+#sidebar.sidebar-compact #youtube-replay-history li {
+    padding-left: 4px;
+    padding-right: 2px;
+}
+
+#sidebar.sidebar-compact .recording-content {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding-right: 0;
+}
+
+#sidebar.sidebar-compact .sidebar-main {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+#sidebar.sidebar-compact .sidebar-time {
+    margin-left: 14px;
+}
+
+#sidebar.sidebar-compact .sidebar-stats {
+    margin-left: 0;
+    align-items: flex-start;
+    text-align: left;
+    justify-self: start;
+    font-size: 1.1em;
+}
+
+#sidebar.sidebar-compact .sidebar-body-row {
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: space-evenly;
+    column-gap: 0;
+}
+
+#sidebar.sidebar-compact .sidebar-cs {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.15;
+}
+
+#sidebar.sidebar-compact .sidebar-cs-total::after {
+    content: none;
 }
 
 /* --- Collapsed Mode --- */

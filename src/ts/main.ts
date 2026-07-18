@@ -159,28 +159,30 @@ function initializeYouTubeUiComparison(): void {
     const checkbox = document.querySelector<HTMLInputElement>("#youtube-ui-comparison-enabled");
     if (!panel || !checkbox) return;
 
-    // This switch exists solely for a local comparison submitted to Google.
-    // Electron exposes this local-only flag through the preload bridge.
-    if (window.leagueRecord?.devConfig?.isDevelopment !== true) {
-        panel.remove();
-        return;
-    }
-
     panel.hidden = false;
-    checkbox.checked = false;
+    checkbox.checked = true;
+
+    const setEnabled = async (enabled: boolean): Promise<void> => {
+        player.el().classList.toggle("youtube-ui-comparison", enabled);
+        const result = await (window as any).leagueRecord?.youtubeComparison?.setEnabled(enabled);
+        console.info("[youtube-replay] YouTube UI hidden", result ?? { enabled });
+    };
+
     checkbox.addEventListener("change", async () => {
-        player.el().classList.toggle("youtube-ui-comparison", checkbox.checked);
         checkbox.blur();
         player.el().focus({ preventScroll: true });
         try {
-            const result = await (window as any).leagueRecord?.youtubeComparison?.setEnabled(checkbox.checked);
-            console.info("[youtube-replay] comparison UI injection", result ?? { enabled: checkbox.checked });
+            await setEnabled(checkbox.checked);
         } catch (error) {
             checkbox.checked = false;
             player.el().classList.remove("youtube-ui-comparison");
-            console.error("[youtube-replay] comparison UI injection failed", error);
-            updateYouTubeReplayStatus("比較表示を切り替えられませんでした。開発版を再起動してください。", true);
+            console.error("[youtube-replay] YouTube UI toggle failed", error);
+            updateYouTubeReplayStatus("YouTube UI表示を切り替えられませんでした。", true);
         }
+    });
+
+    void setEnabled(true).catch((error) => {
+        console.error("[youtube-replay] initial YouTube UI setup failed", error);
     });
 }
 
@@ -528,6 +530,42 @@ const player = videojs("video_player", VIDEO_JS_OPTIONS) as Player & {
 };
 ui.setPlayer(player); // Pass player instance to UI
 installSeekDiagnostics();
+
+// Video.js hides the vertical volume control as soon as the pointer leaves the
+// small mute button. Keep it visible for the entire drag, including when the
+// pointer is over the popup itself or outside the button bounds.
+function installVolumeDragVisibility(): void {
+    const playerEl = player.el();
+    if ((playerEl as HTMLElement).dataset.lrVolumeDragVisibilityInstalled === "true") return;
+    (playerEl as HTMLElement).dataset.lrVolumeDragVisibilityInstalled = "true";
+
+    const finishVolumeDrag = () => {
+        const panel = playerEl.querySelector(".vjs-volume-panel") as HTMLElement | null;
+        panel?.classList.remove("lr-volume-dragging");
+        window.removeEventListener("pointerup", finishVolumeDrag, true);
+        window.removeEventListener("pointercancel", finishVolumeDrag, true);
+        window.removeEventListener("mouseup", finishVolumeDrag, true);
+        window.removeEventListener("blur", finishVolumeDrag);
+    };
+    const startVolumeDrag = (event: Event) => {
+        const target = event.target as HTMLElement | null;
+        if (!target?.closest(".vjs-volume-control.vjs-volume-vertical")) return;
+        const panel = playerEl.querySelector(".vjs-volume-panel") as HTMLElement | null;
+        if (!panel) return;
+        panel.classList.add("lr-volume-dragging");
+        window.addEventListener("pointerup", finishVolumeDrag, true);
+        window.addEventListener("pointercancel", finishVolumeDrag, true);
+        window.addEventListener("mouseup", finishVolumeDrag, true);
+        window.addEventListener("blur", finishVolumeDrag);
+    };
+
+    // Capture phase is deliberate: Video.js consumes the slider's own drag
+    // events before they bubble to the panel.
+    playerEl.addEventListener("pointerdown", startVolumeDrag, true);
+    playerEl.addEventListener("mousedown", startVolumeDrag, true);
+}
+installVolumeDragVisibility();
+player.ready(installVolumeDragVisibility);
 
 // Initialize Video Header
 const mainContainer = document.getElementById("main");
