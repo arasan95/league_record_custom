@@ -7,16 +7,19 @@
   <style>
     :root { color-scheme: dark; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
     body { max-width: 760px; margin: 0 auto; padding: 48px 20px; line-height: 1.7; background: #0b1020; color: #e6edf8; }
-    h1 { line-height: 1.2; } a { color: #8cc7ff; } nav { display:flex; gap:16px; flex-wrap:wrap; margin: 28px 0; }
+    h1, h2 { line-height: 1.2; } a { color: #8cc7ff; } nav { display:flex; gap:16px; flex-wrap:wrap; margin: 28px 0; }
     .card { padding: 20px; border: 1px solid #344568; border-radius: 12px; background: #111a30; }
     footer { margin-top: 44px; font-size: .9rem; color: #adbad2; }
   </style>
 </head>
 <body>
   <h1>LeagueRecord</h1>
-  <p>LeagueRecordは、League of LegendsのゲームプレイをWindows PC上へローカル録画するデスクトップアプリです。</p>
+  <h2>アプリの目的</h2>
+  <p>LeagueRecordは、League of LegendsのゲームプレイをWindows PC上へローカル録画し、利用者が後から録画を確認・共有できるようにするWindows向けデスクトップアプリです。録画ファイルは利用者のPCに保存されます。</p>
   <div class="card">
-    <p>任意のYouTubeアップロード機能では、利用者が選択した完成済みの録画またはクリップを、利用者自身のYouTubeチャンネルへ投稿できます。</p>
+    <h2>任意のYouTubeアップロード機能</h2>
+    <p>LeagueRecordは、利用者が明示的に選択した完成済みの録画またはクリップを、利用者自身のYouTubeチャンネルへアップロードするためにYouTube Data APIを使用します。</p>
+    <p>本機能は任意です。Googleアカウントへの接続、投稿内容の入力、公開設定の選択および最終確認を利用者が行った場合にのみ動画を送信します。</p>
   </div>
   <nav>
     <a href="privacy.html">プライバシーポリシー</a>
