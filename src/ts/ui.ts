@@ -26,6 +26,7 @@ import { bindFrameStepWheelHandler } from "./ui/frame_step_wheel_usecase";
 import { buildErrorModalContent, hideModalView, isModalOpen, showModalView } from "./ui/modal_primitives_usecase";
 import { applyMarkerFlags, bindChangeHandler, readMarkerFlags, setBigPlayButtonVisibility, setToggleChecked } from "./ui/ui_controls_usecase";
 import { bindSidebarResizeHandle, loadInitialUiSettings } from "./ui/ui_bootstrap_usecase";
+import { applyDisplayPreferences } from "./ui/display_preferences";
 import { prepareScoreboardView, renderScoreboardMainRows } from "./ui/scoreboard_render_flow_usecase";
 import { applyScoreboardTickFlow } from "./ui/scoreboard_tick_flow_usecase";
 import { clearVideoMetadataView } from "./ui/video_metadata_view_usecase";
@@ -142,9 +143,25 @@ export default class UI {
         this.scoreboardEl.classList.remove("collapsed");
         this.scoreboardEl.style.removeProperty("height");
 
-        let newZoom = targetHeight / baseHeight;
-        newZoom = Math.max(newZoom, 0.2); 
-        newZoom = Math.min(newZoom, 1.5);
+        let requestedZoom = targetHeight / baseHeight;
+        requestedZoom = Math.max(requestedZoom, 0.05);
+        requestedZoom = Math.min(requestedZoom, 1.3);
+
+        // Measure at the natural scale first.  The scoreboard contains fixed-size
+        // item and spell icons, so flexbox alone cannot make every row fit in a
+        // narrow window.  Clamp its requested vertical scale to the available
+        // player width as well, keeping the complete board visible.
+        this.scoreboardEl.style.zoom = "1";
+        const playerEl = this.scoreboardEl.closest(".video-js, #video_player") as HTMLElement | null;
+        const availableWidth = playerEl?.clientWidth ?? 0;
+        const contentWidth = Math.max(this.scoreboardEl.scrollWidth, this.scoreboardEl.getBoundingClientRect().width);
+        // Only constrain scale when the natural-size scoreboard is already
+        // wider than the player.  A previous min(1, ...) capped every wide
+        // window at 100%, preventing the user from enlarging the board.
+        const widthFitZoom = availableWidth > 0 && contentWidth > availableWidth
+            ? availableWidth / contentWidth
+            : Number.POSITIVE_INFINITY;
+        const newZoom = Math.min(requestedZoom, widthFitZoom);
 
         (this.scoreboardEl.style as any).zoom = newZoom.toFixed(3);
     }
@@ -392,6 +409,7 @@ export default class UI {
             setCurrentLanguage: (language) => {
                 this.currentLanguage = language;
             },
+            applyDisplayPreferences,
         });
     }
 
@@ -854,6 +872,9 @@ export default class UI {
         });
         if (!rendered) return;
 
+        // Rows are mounted asynchronously, so calculate the width fit once the
+        // fixed-width icons and both teams are present.
+        this.checkWindowSize();
         this.stabilizeVideoLayout();
         this.player.off("timeupdate", this.updateTimelineItems);
         this.player.on("timeupdate", this.updateTimelineItems);
@@ -1022,6 +1043,7 @@ export default class UI {
                 this.updateAutoPlayBtn(newSettings.autoplayVideo);
                 this.updateAutoSelectBtn(newSettings.autoSelectRecording);
             },
+            applyDisplayPreferences,
         });
     };
 

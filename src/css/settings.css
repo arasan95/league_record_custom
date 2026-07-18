@@ -350,3 +350,109 @@ input[type="range"] {
 .settings-section-title:first-of-type {
   margin-top: 0;
 }
+
+.settings-display-content {
+  font-size: 14px;
+}
+
+.settings-display-marker-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+}
+
+.settings-display-marker-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) 34px minmax(92px, 1fr) 38px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-display-marker-label {
+  overflow: hidden;
+  color: #ddd;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-color-input {
+  width: 34px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background: #333;
+  cursor: pointer;
+}
+
+.settings-marker-opacity {
+  min-width: 0;
+  margin: 0;
+}
+
+.settings-marker-opacity-value {
+  color: #aaa;
+  font-size: 12px;
+  text-align: right;
+}
+
+.settings-display-reset {
+  display: block;
+  margin: -10px 0 18px auto;
+  padding: 6px 10px;
+  border: 1px solid #5c6678;
+  border-radius: 4px;
+  background: #353b47;
+  color: #e6e9ef;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings-display-reset:hover {
+  background: #454d5d;
+}
+
+#settings-modal-content input[type="range"] {
+  width: 100%;
+  height: 6px;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 999px;
+  background: #5b5b5b;
+  cursor: pointer;
+}
+
+#settings-modal-content input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #5b5b5b;
+}
+
+#settings-modal-content input[type="range"]::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  margin-top: -5px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid #b9b9b9;
+  border-radius: 50%;
+  background: #f5f5f5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+#settings-modal-content input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #5b5b5b;
+}
+
+#settings-modal-content input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #b9b9b9;
+  border-radius: 50%;
+  background: #f5f5f5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}

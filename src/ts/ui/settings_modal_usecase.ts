@@ -5,6 +5,7 @@ import type { Language } from "../i18n";
 import { createSettingsTabButton, switchSettingsTab } from "./settings_primitives";
 import { createSettingsAboutTabContent } from "./settings_about";
 import { createSettingsHotkeysTabContent } from "./settings_hotkeys";
+import { createSettingsDisplayTabContent } from "./settings_display";
 import { createSettingsOptionsSections } from "./settings_options";
 import { createSettingsGeneralControls } from "./settings_general_controls";
 import { buildSettingsPayload } from "./settings_save_payload";
@@ -24,6 +25,7 @@ export function showSettingsModalView(input: {
     onScrollModifierChange: (modifier: string | null) => void;
     onReloadKeybinds: () => void;
     updateAutoButtons: (s: Settings) => void;
+    applyDisplayPreferences: (s: Settings) => void;
 }): void {
     const {
         settings,
@@ -40,6 +42,7 @@ export function showSettingsModalView(input: {
         onScrollModifierChange,
         onReloadKeybinds,
         updateAutoButtons,
+        applyDisplayPreferences,
     } = input;
 
     const lang = ((settings as any).language || "en") as Language;
@@ -78,6 +81,13 @@ export function showSettingsModalView(input: {
         currentBinds,
         getText,
         onScrollModifierChange,
+    });
+
+    const { displayTabContent, getDisplayPreferences } = createSettingsDisplayTabContent({
+        createEl,
+        settings,
+        lang,
+        getText,
     });
 
     const settingsOptions = createSettingsOptionsSections(
@@ -121,31 +131,43 @@ export function showSettingsModalView(input: {
     );
 
     const btnGeneral = createSettingsTabButton(createEl, getText(lang, "tabGeneral"), true, () => {
-        switchSettingsTab("general", { general: btnGeneral, hotkeys: btnHotkeys, about: btnAbout }, {
+        switchSettingsTab("general", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, about: btnAbout }, {
             general: generalTabContent,
+            display: displayTabContent,
+            hotkeys: hotkeysTabContent,
+            about: aboutTabContent,
+        });
+    });
+    const btnDisplay = createSettingsTabButton(createEl, getText(lang, "tabDisplay"), false, () => {
+        switchSettingsTab("display", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, about: btnAbout }, {
+            general: generalTabContent,
+            display: displayTabContent,
             hotkeys: hotkeysTabContent,
             about: aboutTabContent,
         });
     });
     const btnHotkeys = createSettingsTabButton(createEl, getText(lang, "tabHotkeys"), false, () => {
-        switchSettingsTab("hotkeys", { general: btnGeneral, hotkeys: btnHotkeys, about: btnAbout }, {
+        switchSettingsTab("hotkeys", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, about: btnAbout }, {
             general: generalTabContent,
+            display: displayTabContent,
             hotkeys: hotkeysTabContent,
             about: aboutTabContent,
         });
     });
     const btnAbout = createSettingsTabButton(createEl, getText(lang, "tabAbout" as any) || "About", false, () => {
-        switchSettingsTab("about", { general: btnGeneral, hotkeys: btnHotkeys, about: btnAbout }, {
+        switchSettingsTab("about", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, about: btnAbout }, {
             general: generalTabContent,
+            display: displayTabContent,
             hotkeys: hotkeysTabContent,
             about: aboutTabContent,
         });
     });
 
-    const tabsContainer = createEl("div", {}, { class: "settings-tabs" }, [btnGeneral, btnHotkeys, btnAbout]);
+    const tabsContainer = createEl("div", {}, { class: "settings-tabs" }, [btnGeneral, btnDisplay, btnHotkeys, btnAbout]);
     const modalBody = createEl("div", {}, { style: "display: flex; flex-direction: column; overflow: hidden; flex: 1;" }, [
         tabsContainer,
         generalTabContent,
+        displayTabContent,
         hotkeysTabContent,
         aboutTabContent,
     ]);
@@ -216,12 +238,14 @@ export function showSettingsModalView(input: {
                     keepVideoJsonOnAutoDelete: settingsOptions.refs.otherSwitches.keepVideoJsonOnAutoDelete.input.checked,
                     autoDeleteClips: settingsOptions.refs.otherSwitches.autoDeleteClips.input.checked,
                 },
+                displayPreferences: getDisplayPreferences(),
             });
 
             saveKeybinds(pendingBinds);
             saveMouseConfig(pendingMouseConfig);
             onReloadKeybinds();
             updateAutoButtons(newSettings);
+            applyDisplayPreferences(newSettings);
             closeSettingsModal();
             void saveCallback(newSettings)
                 .then(() => {

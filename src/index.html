@@ -34,12 +34,22 @@
   <body>
     <div id="titlebar-hover-zone" aria-hidden="true"></div>
     <div id="titlebar">
-      <div class="titlebar-drag-region">LeagueRecord</div>
+      <div class="titlebar-drag-region">
+        <img class="titlebar-app-icon" src="../app-icon.png" alt="" aria-hidden="true" />
+        <span>LeagueRecord</span>
+      </div>
       <div class="titlebar-buttons">
-        <button class="titlebar-button" id="titlebar-toggle-autohide" title="Toggle titlebar auto-hide">Auto</button>
-        <button class="titlebar-button" id="titlebar-minimize" title="Minimize">-</button>
-        <button class="titlebar-button" id="titlebar-maximize" title="Maximize">+</button>
-        <button class="titlebar-button" id="titlebar-close" title="Close">x</button>
+        <button class="titlebar-button titlebar-hide-toggle" id="titlebar-toggle-autohide" title="Enable titlebar auto-hide" aria-pressed="false">Hide:Off</button>
+        <!-- Window control icons based on Lucide Icons (ISC License). -->
+        <button class="titlebar-button titlebar-window-control" id="titlebar-minimize" title="Minimize" aria-label="Minimize">
+          <svg class="titlebar-window-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path></svg>
+        </button>
+        <button class="titlebar-button titlebar-window-control" id="titlebar-maximize" title="Maximize" aria-label="Maximize">
+          <svg class="titlebar-window-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
+        </button>
+        <button class="titlebar-button titlebar-window-control" id="titlebar-close" title="Close" aria-label="Close">
+          <svg class="titlebar-window-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
+        </button>
       </div>
     </div>
 
@@ -201,14 +211,10 @@
             <button id="youtube-replay-load" type="button">試合データを読み込む</button>
             <div id="youtube-replay-status" role="status" aria-live="polite"></div>
             <div id="youtube-ui-comparison" hidden>
-              <div class="youtube-ui-comparison-heading">GOOGLE確認用・開発版のみ</div>
               <label class="youtube-ui-comparison-toggle" for="youtube-ui-comparison-enabled">
-                <input id="youtube-ui-comparison-enabled" type="checkbox" />
-                <span>YouTube画面への入力を遮断して比較する</span>
+                <input id="youtube-ui-comparison-enabled" type="checkbox" checked />
+                <span>YouTube UIを隠す</span>
               </label>
-              <p id="youtube-ui-comparison-note">
-                ONではYouTube側の停止表示・タイトル・リンク・ロゴなどを一時的に隠します。比較確認専用で、製品版では利用できません。
-              </p>
             </div>
             <div id="youtube-replay-summary" hidden>
               <div class="youtube-replay-summary-label">読み込み済み</div>
@@ -272,7 +278,7 @@
               <label class="marker-checkbox"><input type="checkbox" id="kill" checked /> Kill</label>
               <label class="marker-checkbox"><input type="checkbox" id="death" checked /> Death</label>
               <label class="marker-checkbox"><input type="checkbox" id="assist" checked /> Assist</label>
-              <label class="marker-checkbox"><input type="checkbox" id="structure" checked /> Structure</label>
+              <label class="marker-checkbox"><input type="checkbox" id="structure" checked /> Tower</label>
               <label class="marker-checkbox"><input type="checkbox" id="dragon" checked /> Dragon</label>
               <label class="marker-checkbox"><input type="checkbox" id="voidgrub" checked /> Voidgrub</label>
               <label class="marker-checkbox"><input type="checkbox" id="herald" checked /> Herald</label>

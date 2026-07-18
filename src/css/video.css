@@ -156,9 +156,9 @@ video {
     display: none !important;
 }
 
-/* Development-only comparison mode. This does not alter the cross-origin
-   YouTube document; it only prevents pointer input from reaching the iframe
-   so playback is operated with LeagueRecord's controls. */
+/* UI-hidden mode. This does not alter the cross-origin YouTube document; it
+   only prevents pointer input from reaching the iframe so playback is
+   operated with LeagueRecord's controls. */
 .video-js.vjs-youtube.youtube-ui-comparison .lr-youtube-tech-wrapper > .vjs-tech {
     pointer-events: none !important;
 }
@@ -337,11 +337,11 @@ body:has(.vjs-fullscreen) {
     position: relative !important;
 }
 
-.vjs-marker.kill { color: rgb(43, 255, 0); z-index: 12; }
-.vjs-marker.assist { color: rgb(251, 255, 0); z-index: 12; }
-.vjs-marker.death { color: red; z-index: 12; }
+.vjs-marker.kill { color: var(--marker-color-kill, rgb(43, 255, 0)); opacity: var(--marker-opacity-kill, 0.4) !important; z-index: 12; }
+.vjs-marker.assist { color: var(--marker-color-assist, rgb(251, 255, 0)); opacity: var(--marker-opacity-assist, 0.4) !important; z-index: 12; }
+.vjs-marker.death { color: var(--marker-color-death, red); opacity: var(--marker-opacity-death, 0.4) !important; z-index: 12; }
 .vjs-marker.turret,
-.vjs-marker.inhibitor { color: rgb(255, 255, 255); z-index: 12; }
+.vjs-marker.inhibitor { color: var(--marker-color-structure, rgb(255, 255, 255)); opacity: var(--marker-opacity-structure, 0.4) !important; z-index: 12; }
 
 .vjs-marker.infernal-dragon,
 .vjs-marker.ocean-dragon,
@@ -351,15 +351,15 @@ body:has(.vjs-fullscreen) {
 .vjs-marker.chemtech-dragon,
 .vjs-marker.elder-dragon,
 .vjs-marker.dragon {
-    color: rgb(0, 234, 255);
+    color: var(--marker-color-dragon, rgb(0, 234, 255));
     z-index: 13;
     --marker-core-width: 6px;
-    opacity: 0.7 !important;
+    opacity: var(--marker-opacity-dragon, 0.7) !important;
 }
 
-.vjs-marker.voidgrub { color: deeppink; z-index: 13 !important; --marker-core-width: 4px; }
-.vjs-marker.herald { color: rgb(234, 0, 255); z-index: 13 !important; --marker-core-width: 6px; }
-.vjs-marker.baron { color: rgb(123, 0, 255); z-index: 13; --marker-core-width: 6px; opacity: 0.7 !important; }
+.vjs-marker.voidgrub { color: var(--marker-color-voidgrub, deeppink); opacity: var(--marker-opacity-voidgrub, 0.4) !important; z-index: 13 !important; --marker-core-width: 4px; }
+.vjs-marker.herald { color: var(--marker-color-herald, rgb(234, 0, 255)); opacity: var(--marker-opacity-herald, 0.4) !important; z-index: 13 !important; --marker-core-width: 6px; }
+.vjs-marker.baron { color: var(--marker-color-baron, rgb(123, 0, 255)); z-index: 13; --marker-core-width: 6px; opacity: var(--marker-opacity-baron, 0.7) !important; }
 .vjs-marker.highlight { color: rgb(255, 170, 0); z-index: 12; }
 .vjs-marker.tft-round { color: rgb(0, 210, 255); z-index: 14; --marker-core-width: 7px; opacity: 0.85 !important; }
 .vjs-marker.tft-round.tft-stage-1 { color: rgb(0, 210, 255); }
@@ -564,10 +564,13 @@ body:has(.vjs-fullscreen) {
     height: 10em !important; 
     bottom: 100% !important;
     margin-bottom: 12px !important;
-    left: 50% !important;
+    /* Align the popup with the visible speaker glyph rather than the slightly
+       wider Video.js button box. */
+    left: calc(50% - 2px) !important;
     transform: translateX(-50%) !important;
     position: absolute !important;
     box-sizing: border-box !important;
+    margin: 0 !important;
     display: none !important; /* Hidden by default */
 }
 /* Bridge to prevent closing on gap transition */
@@ -583,13 +586,39 @@ body:has(.vjs-fullscreen) {
 }
 /* Show Volume on Hover */
 .video-js .vjs-volume-panel:hover .vjs-volume-control.vjs-volume-vertical, 
-.video-js .vjs-volume-panel.vjs-hover .vjs-volume-control.vjs-volume-vertical {
+.video-js .vjs-volume-panel.vjs-hover .vjs-volume-control.vjs-volume-vertical,
+.video-js .vjs-volume-panel.lr-volume-dragging .vjs-volume-control.vjs-volume-vertical,
+.video-js .vjs-volume-panel:has(.vjs-volume-bar.vjs-slider-vertical:active) .vjs-volume-control.vjs-volume-vertical,
+.video-js .vjs-volume-panel:focus-within .vjs-volume-control.vjs-volume-vertical,
+.video-js .vjs-volume-panel .vjs-volume-control.vjs-volume-vertical:active,
+.video-js .vjs-volume-panel .vjs-volume-control.vjs-volume-vertical.vjs-slider-active {
     display: flex !important;
     pointer-events: auto !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background-color: rgba(26, 26, 26, 0.95) !important;
+    transition: none !important;
 }
 .video-js .vjs-volume-bar.vjs-slider-vertical {
     width: 0.5em !important;
-    margin: 1.35em 0 !important;
+    /* Do not rely on flexbox/margins here: the popup background and the level
+       bar must share the same 50% center line at every browser zoom level. */
+    position: absolute !important;
+    top: 1.35em !important;
+    left: 50% !important;
+    margin: 0 !important;
+    transform: translateX(-50%) !important;
+}
+/* The track, white level fill, and its round handle use one shared center
+   line. Video.js otherwise keeps the fill narrower than the custom track. */
+.video-js .vjs-slider-vertical .vjs-volume-level {
+    width: 100% !important;
+    left: 0 !important;
+}
+.video-js .vjs-slider-vertical .vjs-volume-level::before,
+.video-js .vjs-slider-vertical .vjs-volume-level .vjs-svg-icon {
+    left: 50% !important;
+    transform: translateX(-50%) !important;
 }
 
 /* Seek Bar Holder */
@@ -754,6 +783,9 @@ body:has(.vjs-fullscreen) {
     padding: 6px 10px;
     border-radius: 4px;
     font-size: 14px;
+    /* Match the settings and other application UI, rather than the
+       scoreboard's game-style typeface. */
+    font-family: 'Inter', sans-serif;
     pointer-events: none;
     z-index: 20001;
     white-space: nowrap;
@@ -770,6 +802,8 @@ body:has(.vjs-fullscreen) {
     border-radius: 4px;
     font-size: 14px;
     font-weight: bold;
+    /* Keep both seekbar time readouts consistent with the settings UI. */
+    font-family: 'Inter', sans-serif;
     pointer-events: none;
     z-index: 20000;
     white-space: nowrap;
@@ -816,6 +850,16 @@ body:has(.vjs-fullscreen) {
     font-size: 12px;
     opacity: 0.95;
     margin-bottom: 6px;
+}
+#custom-marker-tooltip .lr-marker-tower-lane-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+}
+#custom-marker-tooltip .lr-marker-tower-lane-name {
+    font-size: 11px;
+    font-weight: 700;
+    opacity: 0.85;
 }
 
 #custom-marker-tooltip .lr-marker-tooltip-main {
@@ -1071,15 +1115,17 @@ input[type="checkbox"]:checked::after {
     transform: rotate(45deg);
 }
 
-/* Checkbox Colors */
-#kill:checked { background-color: #145214; border-color: #145214; }
-#assist:checked { background-color: #736e0d; border-color: #736e0d; }
-#death:checked { background-color: #661111; border-color: #661111; }
-#structure:checked { background-color: #9b9b9b; border-color: #9b9b9b; }
-#dragon:checked { background-color: #0d626e; border-color: #0d626e; }
-#voidgrub:checked { background-color: #730d4d; border-color: #730d4d; }
-#herald:checked { background-color: #660d66; border-color: #660d66; }
-#baron:checked { background-color: #3d0d66; border-color: #3d0d66; }
+/* Event controls use the selected marker color. The fixed blend keeps the
+   existing subdued checkbox treatment; marker-opacity settings do not affect
+   these controls. */
+#kill:checked { background-color: color-mix(in srgb, var(--marker-color-kill, #2bff00) 40%, #1a1a1a); border-color: var(--marker-color-kill, #2bff00); }
+#assist:checked { background-color: color-mix(in srgb, var(--marker-color-assist, #fbff00) 40%, #1a1a1a); border-color: var(--marker-color-assist, #fbff00); }
+#death:checked { background-color: color-mix(in srgb, var(--marker-color-death, #ff0000) 40%, #1a1a1a); border-color: var(--marker-color-death, #ff0000); }
+#structure:checked { background-color: color-mix(in srgb, var(--marker-color-structure, #ffffff) 40%, #1a1a1a); border-color: var(--marker-color-structure, #ffffff); }
+#dragon:checked { background-color: color-mix(in srgb, var(--marker-color-dragon, #00eaff) 40%, #1a1a1a); border-color: var(--marker-color-dragon, #00eaff); }
+#voidgrub:checked { background-color: color-mix(in srgb, var(--marker-color-voidgrub, #ff1493) 40%, #1a1a1a); border-color: var(--marker-color-voidgrub, #ff1493); }
+#herald:checked { background-color: color-mix(in srgb, var(--marker-color-herald, #ea00ff) 40%, #1a1a1a); border-color: var(--marker-color-herald, #ea00ff); }
+#baron:checked { background-color: color-mix(in srgb, var(--marker-color-baron, #7b00ff) 40%, #1a1a1a); border-color: var(--marker-color-baron, #7b00ff); }
 
 input[type="checkbox"]:not([id]):checked,
 #loop-enabled:checked,
