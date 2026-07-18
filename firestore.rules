@@ -1,0 +1,199 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isGoogleUser() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+
+    function quotaPath(uid) {
+      return /databases/$(database)/documents/writeQuotas/$(uid);
+    }
+
+    function hasValidQuotaFields(data, uid) {
+      return data.keys().hasAll([
+          'ownerUid',
+          'lastReplayId',
+          'windowStartedAt',
+          'lastWriteAt',
+          'updatedAt',
+          'writeCount',
+          'createCount'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid',
+          'lastReplayId',
+          'windowStartedAt',
+          'lastWriteAt',
+          'updatedAt',
+          'writeCount',
+          'createCount'
+        ])
+        && data.ownerUid == uid
+        && data.lastReplayId is string
+        && data.lastReplayId.matches('^[A-Za-z0-9_-]{11}$')
+        && data.windowStartedAt is timestamp
+        && data.lastWriteAt is timestamp
+        && data.updatedAt is timestamp
+        && data.writeCount is int
+        && data.writeCount > 0
+        && data.writeCount <= 50
+        && data.createCount is int
+        && data.createCount >= 0
+        && data.createCount <= 20
+        && data.createCount <= data.writeCount;
+    }
+
+    function isInitialQuota(after, uid, isCreate) {
+      return !exists(quotaPath(uid))
+        && hasValidQuotaFields(after, uid)
+        && after.windowStartedAt == request.time
+        && after.lastWriteAt == request.time
+        && after.updatedAt == request.time
+        && after.writeCount == 1
+        && after.createCount == (isCreate ? 1 : 0);
+    }
+
+    function isContinuedQuota(before, after, uid, isCreate) {
+      return exists(quotaPath(uid))
+        && hasValidQuotaFields(after, uid)
+        && after.lastWriteAt == request.time
+        && after.updatedAt == request.time
+        && (
+          (request.time >= before.windowStartedAt + duration.value(24, 'h')
+            && after.windowStartedAt == request.time
+            && after.writeCount == 1
+            && after.createCount == (isCreate ? 1 : 0))
+          ||
+          (request.time < before.windowStartedAt + duration.value(24, 'h')
+            && request.time >= before.lastWriteAt + duration.value(10, 's')
+            && after.windowStartedAt == before.windowStartedAt
+            && after.writeCount == before.writeCount + 1
+            && after.createCount == before.createCount + (isCreate ? 1 : 0))
+        );
+    }
+
+    function consumesReplayQuota(isCreate, videoId) {
+      let path = quotaPath(request.auth.uid);
+      let after = getAfter(path).data;
+      return after.lastReplayId == videoId
+        && (isInitialQuota(after, request.auth.uid, isCreate)
+          || isContinuedQuota(get(path).data, after, request.auth.uid, isCreate));
+    }
+
+    match /writeQuotas/{uid} {
+      allow get: if isGoogleUser() && uid == request.auth.uid;
+      allow list: if false;
+      allow create: if isGoogleUser()
+        && uid == request.auth.uid
+        && hasValidQuotaFields(request.resource.data, uid)
+        && request.resource.data.windowStartedAt == request.time
+        && request.resource.data.lastWriteAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.writeCount == 1
+        && (request.resource.data.createCount == 0 || request.resource.data.createCount == 1);
+      allow update: if isGoogleUser()
+        && uid == request.auth.uid
+        && resource.data.ownerUid == uid
+        && hasValidQuotaFields(request.resource.data, uid)
+        && request.resource.data.lastWriteAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && (
+          (request.time >= resource.data.windowStartedAt + duration.value(24, 'h')
+            && request.resource.data.windowStartedAt == request.time
+            && request.resource.data.writeCount == 1
+            && (request.resource.data.createCount == 0 || request.resource.data.createCount == 1))
+          ||
+          (request.time < resource.data.windowStartedAt + duration.value(24, 'h')
+            && request.time >= resource.data.lastWriteAt + duration.value(10, 's')
+            && request.resource.data.windowStartedAt == resource.data.windowStartedAt
+            && request.resource.data.writeCount == resource.data.writeCount + 1
+            && (request.resource.data.createCount == resource.data.createCount
+              || request.resource.data.createCount == resource.data.createCount + 1))
+        );
+      allow delete: if false;
+    }
+
+    match /replays/{videoId} {
+
+      function hasValidFields(data) {
+        return data.keys().hasAll([
+            'format',
+            'schemaVersion',
+            'status',
+            'provider',
+            'youtubeVideoId',
+            'ownerUid',
+            'payloadJson',
+            'payloadBytes',
+            'payloadSha256',
+            'createdAt',
+            'updatedAt'
+          ])
+          && data.keys().hasOnly([
+            'format',
+            'schemaVersion',
+            'status',
+            'provider',
+            'youtubeVideoId',
+            'ownerUid',
+            'payloadJson',
+            'payloadBytes',
+            'payloadSha256',
+            'createdAt',
+            'updatedAt'
+          ]);
+      }
+
+      function isValidReplay(data) {
+        return hasValidFields(data)
+          && data.format == 'league-record-share'
+          && data.schemaVersion == 1
+          && data.status == 'published'
+          && data.provider == 'youtube'
+          && data.youtubeVideoId == videoId
+          && videoId.matches('^[A-Za-z0-9_-]{11}$')
+          && data.ownerUid is string
+          && data.ownerUid.size() > 0
+          && data.ownerUid.size() <= 128
+          && data.payloadJson is string
+          && data.payloadJson.size() > 0
+          && data.payloadJson.size() <= 196608
+          && data.payloadBytes is int
+          && data.payloadBytes > 0
+          && data.payloadBytes <= 196608
+          && data.payloadSha256 is string
+          && data.payloadSha256.matches('^[0-9a-f]{64}$')
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp;
+      }
+
+      // A viewer may open one known published replay, but cannot enumerate all replays.
+      allow get: if videoId.matches('^[A-Za-z0-9_-]{11}$')
+        && (resource == null || isValidReplay(resource.data));
+      allow list: if false;
+      allow create: if isGoogleUser()
+        && request.resource.data.ownerUid == request.auth.uid
+        && consumesReplayQuota(true, videoId)
+        && isValidReplay(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isGoogleUser()
+        && resource.data.ownerUid == request.auth.uid
+        && consumesReplayQuota(false, videoId)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'payloadJson',
+          'payloadBytes',
+          'payloadSha256',
+          'updatedAt'
+        ])
+        && isValidReplay(request.resource.data);
+      allow delete: if isGoogleUser() && resource.data.ownerUid == request.auth.uid;
+    }
+
+  }
+}

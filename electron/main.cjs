@@ -14,6 +14,7 @@ const {
   ipcMain,
   nativeImage,
   protocol,
+  safeStorage,
   shell,
 } = loadElectronMain();
 const { createHash } = require("node:crypto");
@@ -23,6 +24,7 @@ const { promises: fs, watch: fsWatch } = fsNode;
 const https = require("node:https");
 const path = require("node:path");
 const zlib = require("node:zlib");
+const { createYouTubeService } = require("./youtube/service.cjs");
 const isDev = process.env.LR_ELECTRON_DEV === "1" || !app.isPackaged;
 const APP_NAME = isDev ? "LeagueRecord Electron Dev" : "LeagueRecord Electron";
 const APP_ID = isDev ? "com.leaguerecord.custom.dev" : "com.leaguerecord.custom.electron";
@@ -40,6 +42,104 @@ let recorderController = null;
 let gameMonitor = null;
 let currentMainWindow = null;
 let externalInstallerPending = false;
+let youtubeService = null;
+let youtubeUiComparisonEnabled = false;
+
+const YOUTUBE_UI_COMPARISON_STYLE_ID = "league-record-youtube-ui-comparison";
+const YOUTUBE_UI_COMPARISON_CSS = `
+/* Keep the actual media visible while hiding every YouTube-owned overlay.
+   This broad fallback intentionally avoids depending on YouTube's frequently
+   changing internal class names. */
+html,
+body {
+  background: #000 !important;
+}
+
+body * {
+  visibility: hidden !important;
+}
+
+body video,
+body video.html5-main-video {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.ytp-pause-overlay,
+.ytp-chrome-top,
+.ytp-chrome-bottom,
+.ytp-gradient-top,
+.ytp-gradient-bottom,
+.ytp-watermark,
+.ytp-youtube-button,
+.ytp-copylink-button,
+.ytp-impression-link,
+.ytp-title,
+.ytp-title-channel,
+.ytp-show-cards-title,
+.ytp-share-button,
+.ytp-watch-later-button,
+.ytp-cards-button,
+.ytp-cards-teaser,
+.ytp-paid-content-overlay,
+.ytp-bezel,
+.ytp-endscreen-content,
+.ytp-ce-element {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+`;
+
+function isYouTubeEmbedFrame(frame) {
+  try {
+    const host = new URL(frame.url).hostname.toLowerCase();
+    return host === "youtube.com" || host.endsWith(".youtube.com") ||
+      host === "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com");
+  } catch {
+    return false;
+  }
+}
+
+async function applyYouTubeUiComparison(frame, enabled) {
+  if (!isDev || !frame || frame.isDestroyed() || !isYouTubeEmbedFrame(frame)) return false;
+  const script = `(() => {
+    const styleId = ${JSON.stringify(YOUTUBE_UI_COMPARISON_STYLE_ID)};
+    document.getElementById(styleId)?.remove();
+    if (!${enabled ? "true" : "false"}) {
+      return { applied: false, videoCount: document.querySelectorAll("video").length };
+    }
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = ${JSON.stringify(YOUTUBE_UI_COMPARISON_CSS)};
+    (document.head || document.documentElement).appendChild(style);
+    return {
+      applied: true,
+      videoCount: document.querySelectorAll("video").length,
+      url: location.href,
+    };
+  })()`;
+  try {
+    return await frame.executeJavaScript(script);
+  } catch (error) {
+    await writeLog("youtube", `comparison CSS injection failed url=${frame.url} error=${String(error)}`);
+    return false;
+  }
+}
+
+async function setYouTubeUiComparison(win, enabled) {
+  if (!isDev) return { enabled: false, affectedFrames: 0 };
+  youtubeUiComparisonEnabled = Boolean(enabled);
+  const frames = win.webContents.mainFrame.framesInSubtree;
+  const results = await Promise.all(frames.map((frame) => applyYouTubeUiComparison(frame, youtubeUiComparisonEnabled)));
+  const affectedFrames = results.filter((result) => Boolean(result?.applied)).length;
+  const diagnostics = results.filter(Boolean);
+  await writeLog(
+    "youtube",
+    `comparison CSS enabled=${youtubeUiComparisonEnabled} affectedFrames=${affectedFrames} diagnostics=${safeJson(diagnostics)}`,
+  );
+  return { enabled: youtubeUiComparisonEnabled, affectedFrames, diagnostics };
+}
 
 app.setName(APP_NAME);
 app.setAppUserModelId(APP_ID);
@@ -3285,6 +3385,24 @@ function makeInvokeHandler(win) {
     switch (command) {
       case "get_marker_flags":
         return settings.markerFlags ?? defaultMarkerFlags;
+      case "youtube_get_auth_status":
+        return youtubeService.getAuthStatus();
+      case "youtube_sign_in":
+        return youtubeService.signIn();
+      case "youtube_get_firebase_id_token":
+        return youtubeService.getFirebaseIdToken();
+      case "youtube_sign_out":
+        return youtubeService.signOut();
+      case "youtube_get_upload_job":
+        return youtubeService.getUploadJob();
+      case "youtube_start_upload":
+        return youtubeService.startUpload({ videoId: args.videoId, metadata: args.metadata });
+      case "youtube_cancel_upload":
+        return youtubeService.cancelUpload();
+      case "youtube_find_missing_videos":
+        return youtubeService.findMissingVideos(args.videoIds);
+      case "youtube_is_public_video_available":
+        return youtubeService.isPublicVideoAvailable(args.videoId);
       case "set_marker_flags":
         settings.markerFlags = args.markerFlags ?? settings.markerFlags;
         await writeSettings(settings);
@@ -3337,15 +3455,19 @@ function makeInvokeHandler(win) {
       case "toggle_favorite": {
         const id = toAbsoluteRecordingId(settings, args.videoId);
         const current = (await readMetadataFor(id)) ?? { NoData: { favorite: false } };
+        let favorite = false;
         if (current.Metadata) {
           current.Metadata.favorite = !current.Metadata.favorite;
+          favorite = current.Metadata.favorite;
         } else if (current.Deferred) {
           current.Deferred.favorite = !current.Deferred.favorite;
+          favorite = current.Deferred.favorite;
         } else if (current.NoData) {
           current.NoData.favorite = !current.NoData.favorite;
+          favorite = current.NoData.favorite;
         }
         await fs.writeFile(`${id}.json`, JSON.stringify(current, null, 2), "utf8");
-        return true;
+        return favorite;
       }
       case "confirm_delete":
         return Boolean(settings.confirmDelete ?? true);
@@ -3469,7 +3591,82 @@ function createWindow() {
       backgroundThrottling: false,
     },
   });
+  const openExternalLink = (url) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return;
+      void shell.openExternal(parsed.toString());
+    } catch {
+      // Ignore malformed URLs supplied by an embedded page.
+    }
+  };
+  // YouTube's title, channel, share and logo controls open new windows. Keep
+  // the desktop player in LeagueRecord and hand those destinations to the
+  // user's default browser instead.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalLink(url);
+    return { action: "deny" };
+  });
+  win.webContents.on("will-navigate", (event, url) => {
+    const isAppUrl = isDev
+      ? url.startsWith("http://localhost:1420/")
+      : url.startsWith("file:");
+    if (isAppUrl) return;
+    event.preventDefault();
+    openExternalLink(url);
+  });
+  // The renderer's developer-mode setting only enabled text selection before.
+  // Provide an explicit Electron DevTools entry while that setting is on.
+  win.webContents.on("context-menu", async (event) => {
+    try {
+      const settings = await readSettings();
+      if (!settings.developerMode) return;
+      event.preventDefault();
+      Menu.buildFromTemplate([{
+        label: win.webContents.isDevToolsOpened() ? "開発者ツールを閉じる" : "開発者ツールを開く",
+        click: () => win.webContents.toggleDevTools(),
+      }]).popup({ window: win });
+    } catch (error) {
+      void writeLog("main", `developer context menu failed: ${String(error)}`);
+    }
+  });
+  // YouTube requires desktop WebView embeds to identify the API client with
+  // an HTTP Referer. Packaged Electron pages otherwise originate from file://.
+  win.webContents.session.webRequest.onBeforeSendHeaders(
+    {
+      urls: [
+        "https://www.youtube.com/*",
+        "https://*.youtube.com/*",
+        "https://www.youtube-nocookie.com/*",
+        "https://*.youtube-nocookie.com/*",
+      ],
+    },
+    (details, callback) => {
+      details.requestHeaders.Referer = "https://www.leaguerecord.f5.si/";
+      callback({ requestHeaders: details.requestHeaders });
+    },
+  );
+  if (isDev) {
+    win.webContents.on("frame-created", (_event, details) => {
+      const frame = details.frame;
+      if (!frame) return;
+      frame.on("dom-ready", () => {
+        if (youtubeUiComparisonEnabled) void applyYouTubeUiComparison(frame, true);
+      });
+    });
+  }
   currentMainWindow = win;
+  youtubeService = createYouTubeService({
+    app,
+    shell,
+    safeStorage,
+    fs,
+    fsNode,
+    getSettings: readSettings,
+    isRecording: () => Boolean(recorderController?.current),
+    emit: (type, payload) => emitAppEvent(win, type, payload),
+    log: (message) => writeLog("youtube", message),
+  });
   initTray();
   if (!recorderController) recorderController = new RecorderController(win);
   if (!gameMonitor) {
@@ -3479,8 +3676,8 @@ function createWindow() {
   win.setMenuBarVisibility(false);
   void writeLog("main", `window created dev=${isDev}`);
   win.__recordingWatcher = createRecordingWatcher(win);
-  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-    void writeLog("renderer", `level=${level} ${sourceId}:${line} ${message}`);
+  win.webContents.on("console-message", (details) => {
+    void writeLog("renderer", `level=${details.level} ${details.sourceId}:${details.lineNumber} ${details.message}`);
   });
   win.webContents.on("did-fail-load", (_event, code, desc, validatedUrl) => {
     void writeLog("renderer", `did-fail-load code=${code} url=${validatedUrl} desc=${desc}`);
@@ -3523,7 +3720,19 @@ function createWindow() {
     return path.join(app.getPath("userData"), "logs", "latest.log");
   });
   safeHandle("lr:path:join", (_e, ...parts) => path.join(...parts.filter(Boolean)));
-  safeHandle("lr:shell:open", (_e, url) => shell.openExternal(String(url)));
+  safeHandle("lr:shell:open", async (_e, url) => {
+    let parsed;
+    try {
+      parsed = new URL(String(url));
+    } catch {
+      throw new Error("外部リンクのURLが不正です。");
+    }
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      throw new Error("HTTPまたはHTTPS以外の外部リンクは開けません。");
+    }
+    await shell.openExternal(parsed.toString());
+    return null;
+  });
   safeHandle("lr:drag:start", (event, options = {}) => {
     const file = Array.isArray(options.item) ? options.item[0] : null;
     if (!file) throw new Error("No file supplied for drag");
@@ -3537,6 +3746,11 @@ function createWindow() {
     clipboard.writeText(String(text ?? ""));
     return null;
   });
+  if (isDev) {
+    safeHandle("lr:youtube-ui-comparison:setEnabled", (_e, enabled) => {
+      return setYouTubeUiComparison(win, Boolean(enabled));
+    });
+  }
   safeHandle("lr:fs:exists", async (_e, target, options) => {
     try {
       await fs.stat(resolveFsPath(target, options));

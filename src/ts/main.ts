@@ -6,6 +6,8 @@ import "@fffffffxxxxxxx/videojs-markers";
 import { convertFileSrc } from "./platform/core";
 import { join, sep } from "./platform/path";
 import { exists } from "./platform/fs";
+import { registerYouTubeTech } from "./platform/videojs_youtube_tech";
+import { YOUTUBE_AUTH_CONNECTED_EVENT } from "./platform/youtube";
 
 import { commands, type ClipAudioTrack, type GameEvent, type Recording } from "./bindings";
 import ListenerManager from "./listeners";
@@ -27,6 +29,10 @@ import { initializeMarkerHoverTooltips } from "./main_marker_tooltip_usecase";
 import { createKeyboardHandlers } from "./main_keyboard_usecase";
 import { refreshSidebar, retrySidebarUpdateLoop } from "./main_recordings_usecase";
 import { buildTimelineRows } from "./main_timeline_usecase";
+import { loadReplayShare, type LoadedReplayShare } from "./replay_share";
+import { cleanupDeletedReplayShares } from "./platform/firebase";
+import { hasYouTubeUploadHistory, removeYouTubeUploadsByVideoIds } from "./youtube_upload_history";
+import { bindYouTubeReplaySidebar, updateYouTubeReplayStatus } from "./ui/youtube_replay_sidebar_usecase";
 import {
     deleteVideoFlow,
     deleteVideoOnlyWithConfirm,
@@ -41,6 +47,7 @@ import {
 // jumps to (eventTime - EVENT_DELAY) when a marker is clicked
 const EVENT_DELAY = 2;
 
+registerYouTubeTech(videojs);
 const ui = new UI(videojs);
 new TitleBar();
 
@@ -72,6 +79,161 @@ let recordingsSizeFetchInFlight: Promise<number> | null = null;
 let manualStartPending = false;
 let manualStartPendingTimeout: ReturnType<typeof setTimeout> | null = null;
 const RECORDINGS_SIZE_CACHE_MS = 5000;
+const YOUTUBE_REPLAY_HISTORY_STORAGE_KEY = "league-record.youtube-replay-history.v1";
+const YOUTUBE_REPLAY_HISTORY_LIMIT = 100;
+let youtubeReplayHistoryRestoreGeneration = 0;
+let remotePlaybackActive = false;
+
+function readYouTubeReplayHistory(): string[] {
+    try {
+        const parsed: unknown = JSON.parse(localStorage.getItem(YOUTUBE_REPLAY_HISTORY_STORAGE_KEY) ?? "[]");
+        if (!Array.isArray(parsed)) return [];
+        return [...new Set(parsed.filter((value): value is string => (
+            typeof value === "string" && /^[A-Za-z0-9_-]{11}$/.test(value)
+        )))].slice(0, YOUTUBE_REPLAY_HISTORY_LIMIT);
+    } catch (error) {
+        console.warn("[youtube-replay] could not read replay history", error);
+        return [];
+    }
+}
+
+async function runDeletedYouTubeReplayCleanup(): Promise<void> {
+    if (!hasYouTubeUploadHistory()) return;
+    try {
+        const deletedVideoIds = await cleanupDeletedReplayShares();
+        removeYouTubeUploadsByVideoIds(deletedVideoIds);
+        for (const videoId of deletedVideoIds) removeYouTubeReplayHistoryItem(videoId);
+        if (deletedVideoIds.length > 0) console.info(`[youtube-replay] removed ${deletedVideoIds.length} deleted YouTube share(s)`);
+    } catch (error) {
+        // Offline, signed-out, missing-scope, and temporarily unavailable API
+        // states are expected. Never remove data unless the check succeeds.
+        console.info("[youtube-replay] automatic cleanup skipped", error);
+    }
+}
+
+function writeYouTubeReplayHistory(videoIds: string[]): void {
+    try {
+        localStorage.setItem(
+            YOUTUBE_REPLAY_HISTORY_STORAGE_KEY,
+            JSON.stringify(videoIds.slice(0, YOUTUBE_REPLAY_HISTORY_LIMIT)),
+        );
+    } catch (error) {
+        console.warn("[youtube-replay] could not save replay history", error);
+    }
+}
+
+function rememberYouTubeReplay(videoId: string): void {
+    writeYouTubeReplayHistory([videoId, ...readYouTubeReplayHistory().filter((id) => id !== videoId)]);
+}
+
+function updateYouTubeReplayHistoryVisibility(): void {
+    const history = document.querySelector<HTMLUListElement>("#youtube-replay-history");
+    const header = document.querySelector<HTMLElement>("#youtube-replay-history-header");
+    if (!history || !header) return;
+    const hasItems = history.childElementCount > 0;
+    history.hidden = !hasItems;
+    header.hidden = !hasItems;
+}
+
+function removeYouTubeReplayHistoryItem(videoId: string): void {
+    const history = document.querySelector<HTMLUListElement>("#youtube-replay-history");
+    const item = Array.from(history?.querySelectorAll<HTMLElement>("[data-shared-replay-id]") ?? [])
+        .find((candidate) => candidate.dataset.sharedReplayId === videoId);
+    const wasActive = item?.classList.contains("active") ?? false;
+    item?.remove();
+    writeYouTubeReplayHistory(readYouTubeReplayHistory().filter((id) => id !== videoId));
+    if (wasActive) ui.setActiveVideoId(null);
+    updateYouTubeReplayHistoryVisibility();
+}
+
+function clearYouTubeReplayHistory(): void {
+    youtubeReplayHistoryRestoreGeneration++;
+    document.querySelector<HTMLUListElement>("#youtube-replay-history")?.replaceChildren();
+    writeYouTubeReplayHistory([]);
+    ui.setActiveVideoId(null);
+    updateYouTubeReplayHistoryVisibility();
+}
+
+function initializeYouTubeUiComparison(): void {
+    const panel = document.querySelector<HTMLElement>("#youtube-ui-comparison");
+    const checkbox = document.querySelector<HTMLInputElement>("#youtube-ui-comparison-enabled");
+    if (!panel || !checkbox) return;
+
+    // This switch exists solely for a local comparison submitted to Google.
+    // Electron exposes this local-only flag through the preload bridge.
+    if (window.leagueRecord?.devConfig?.isDevelopment !== true) {
+        panel.remove();
+        return;
+    }
+
+    panel.hidden = false;
+    checkbox.checked = false;
+    checkbox.addEventListener("change", async () => {
+        player.el().classList.toggle("youtube-ui-comparison", checkbox.checked);
+        checkbox.blur();
+        player.el().focus({ preventScroll: true });
+        try {
+            const result = await (window as any).leagueRecord?.youtubeComparison?.setEnabled(checkbox.checked);
+            console.info("[youtube-replay] comparison UI injection", result ?? { enabled: checkbox.checked });
+        } catch (error) {
+            checkbox.checked = false;
+            player.el().classList.remove("youtube-ui-comparison");
+            console.error("[youtube-replay] comparison UI injection failed", error);
+            updateYouTubeReplayStatus("比較表示を切り替えられませんでした。開発版を再起動してください。", true);
+        }
+    });
+}
+
+function ensureYouTubeTechLoaded(): void {
+    registerYouTubeTech(videojs);
+    // videojs-youtube calls Object.keys(customVars) whenever this option is
+    // present. Video.js may normalize an omitted value to null, so always
+    // provide a real object before the YouTube tech is instantiated.
+    const youtubeOptions = ((player.options_ as any).youtube ??= {});
+    youtubeOptions.ytControls = 0;
+    youtubeOptions.disablekb = 1;
+    youtubeOptions.fs = 0;
+    youtubeOptions.customVars = {
+        ...(youtubeOptions.customVars ?? {}),
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        modestbranding: 1,
+        playsinline: 1,
+        rel: 0,
+    };
+
+    // video.js constructs the tech options later and can still turn an
+    // absent customVars value into null. Guard the library boundary as
+    // well, immediately before videojs-youtube calls Object.keys().
+    const youtubeTech = videojs.getTech("Youtube") as any;
+    if (!youtubeTech) {
+        throw new Error("Video.jsにYouTubeプレイヤーを登録できませんでした。");
+    }
+    if (youtubeTech.prototype?.createEl && !youtubeTech.prototype.__leagueRecordLayoutGuard) {
+        const createEl = youtubeTech.prototype.createEl;
+        youtubeTech.prototype.createEl = function(this: unknown, ...args: unknown[]) {
+            const element = createEl.apply(this, args) as HTMLElement;
+            element.classList.add("lr-youtube-tech-wrapper");
+            return element;
+        };
+        youtubeTech.prototype.__leagueRecordLayoutGuard = true;
+    }
+    if (youtubeTech?.prototype?.initYTPlayer && !youtubeTech.prototype.__leagueRecordCustomVarsGuard) {
+        const initYTPlayer = youtubeTech.prototype.initYTPlayer;
+        youtubeTech.prototype.initYTPlayer = function(this: { options_?: { customVars?: unknown } }, ...args: unknown[]) {
+            if (!this.options_ || typeof this.options_.customVars !== "object" || this.options_.customVars === null) {
+                this.options_ = { ...(this.options_ ?? {}), customVars: {} };
+            }
+            return initYTPlayer.apply(this, args);
+        };
+        youtubeTech.prototype.__leagueRecordCustomVarsGuard = true;
+    }
+    if (!player.options_.techOrder.includes("youtube")) {
+        player.options_.techOrder.push("youtube");
+    }
+    console.info("[youtube-replay] YouTube tech ready", { techOrder: player.options_.techOrder });
+}
 
 function perfNowMs(): number {
     if (typeof performance !== "undefined" && typeof performance.now === "function") {
@@ -329,6 +491,8 @@ const VIDEO_JS_OPTIONS = {
     // fill: true, // - Removed
     // aspectRatio: "16:9", // - Removed
     playbackRates: [0.5, 1, 1.5, 2],
+    // Register the YouTube tech lazily when a shared URL is actually opened.
+    techOrder: ["html5"],
     autoplay: false,
     controls: true,
     preload: "auto",
@@ -338,6 +502,12 @@ const VIDEO_JS_OPTIONS = {
         doubleClick: false,
     },
     bigPlayButton: false,
+    youtube: {
+        ytControls: false,
+        enablePrivacyEnhancedMode: true,
+        playsinline: 1,
+        customVars: {},
+    },
     controlBar: {
         volumePanel: { inline: false }, // Horizontal=inline:true. Vertical=inline:false
         currentTimeDisplay: false, // User requested hide
@@ -385,7 +555,7 @@ function setClipButtonProgress(percent: number) {
 
 function updateClipBtnState() {
     const canCreateClip = loopStart !== null && loopEnd !== null && loopEnd > loopStart;
-    if (createClipBtn) createClipBtn.disabled = isCreatingClip || !canCreateClip;
+    if (createClipBtn) createClipBtn.disabled = remotePlaybackActive || isCreatingClip || !canCreateClip;
 }
 
 function setLoopPlaybackEnabled(enabled: boolean) {
@@ -591,6 +761,7 @@ if (createClipBtn) {
 const keyboardHandlers = createKeyboardHandlers({
     player,
     ui,
+    hasActivePlayback: () => remotePlaybackActive || ui.getActiveVideoId() !== null,
     matchesAction: (event, action) => isAction(event, action as any, currentKeybinds),
     getLoopState: () => ({ loopStart, loopEnd, isLooping }),
     setLoopState: (patch) => {
@@ -688,6 +859,22 @@ async function main() {
             // re-show the bigplaybutton and controlbar when a new video src is set
             ui.showBigPlayButton(true);
             player.controls(true);
+        }
+    });
+
+    player.on("error", () => {
+        if (!remotePlaybackActive) return;
+        const playerError = player.error();
+        const message = String(playerError?.message || "YouTube動画を再生できませんでした。");
+        console.error("[youtube-replay] Video.js player error", { code: playerError?.code, message });
+        if (/disabled|101|150/i.test(message)) {
+            updateYouTubeReplayStatus("この動画は所有者により埋め込み再生が許可されていません。", true);
+        } else if (/private|find the video|100/i.test(message)) {
+            updateYouTubeReplayStatus("YouTube動画が非公開、削除済み、または見つかりません。", true);
+        } else if (/153|referer|client identification/i.test(message)) {
+            updateYouTubeReplayStatus("YouTubeプレイヤーのクライアント識別に失敗しました（エラー153）。", true);
+        } else {
+            updateYouTubeReplayStatus(message, true);
         }
     });
 
@@ -825,6 +1012,24 @@ async function main() {
         changeMarkers();
         commands.setMarkerFlags(ui.getMarkerFlags());
     });
+    bindYouTubeReplaySidebar({
+        loadReplay: async (url) => {
+            const loaded = await loadReplayShare(url);
+            await setYouTubeReplay(loaded);
+            return loaded;
+        },
+    });
+    document.querySelector<HTMLButtonElement>("#youtube-replay-history-clear")?.addEventListener("click", () => {
+        clearYouTubeReplayHistory();
+    });
+    const restore = restoreYouTubeReplayHistory();
+    void restore.finally(() => {
+        void runDeletedYouTubeReplayCleanup();
+    });
+    window.addEventListener(YOUTUBE_AUTH_CONNECTED_EVENT, () => {
+        void runDeletedYouTubeReplayCleanup();
+    });
+    initializeYouTubeUiComparison();
     // ui.setShowTimestampsOnClickHandler(showTimestamps);
 
     // listen if the videojs player fills the whole window
@@ -1179,6 +1384,8 @@ async function retrySidebarUpdate(attemptsLeft: number, targetId: string) {
 // use this function to set the video (null => no video)
 async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
     const startedAt = perfNowMs();
+    remotePlaybackActive = false;
+    updateClipBtnState();
     if (videoId === null) {
         preferredActiveVideoId = null;
         ui.setActiveVideoId(null);
@@ -1224,6 +1431,137 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
             void player.play()?.catch(() => {});
         }
         logPerf("setVideo(total)", startedAt);
+    }
+}
+
+async function setYouTubeReplay(loaded: LoadedReplayShare): Promise<void> {
+    console.info("[youtube-replay] initializing YouTube tech", { videoId: loaded.youtubeVideoId });
+    ensureYouTubeTechLoaded();
+    console.info("[youtube-replay] rendering shared metadata", { videoId: loaded.youtubeVideoId });
+    metadataRenderRequestSerial++;
+    preferredActiveVideoId = null;
+    ui.setActiveVideoId(null);
+    remotePlaybackActive = true;
+    updateClipBtnState();
+    clearMetadataRetry(loaded.youtubeVideoId);
+
+    const rendered = await renderMetadataState({
+        data: loaded.metadataFile,
+        requestedVideoId: `youtube:${loaded.youtubeVideoId}`,
+        resolvedVideoId: `youtube:${loaded.youtubeVideoId}`,
+        ui,
+    });
+    currentEvents = rendered.currentEvents;
+    highlightEvents = rendered.highlightEvents;
+    tftRoundEvents = rendered.tftRoundEvents;
+    changeMarkers();
+    addYouTubeReplayHistoryCard(loaded);
+
+    let autoplayVideo = false;
+    try {
+        autoplayVideo = (await commands.getSettings()).autoplayVideo;
+    } catch (error) {
+        console.warn("[youtube-replay] could not read autoplay setting", error);
+    }
+
+    console.info("[youtube-replay] setting YouTube source", { videoId: loaded.youtubeVideoId });
+    player.src({ type: "video/youtube", src: loaded.youtubeUrl });
+    player.one("loadedmetadata", () => {
+        console.info("[youtube-replay] YouTube metadata loaded", {
+            videoId: loaded.youtubeVideoId,
+            duration: player.duration(),
+        });
+        changeMarkers();
+        const duration = player.duration();
+        if (typeof duration === "number" && duration > 0) ui.createTimeRuler(duration);
+        if (autoplayVideo) {
+            void player.play()?.catch((error) => {
+                console.warn("[youtube-replay] autoplay was blocked", error);
+            });
+        }
+    });
+    player.controls(true);
+    ui.showBigPlayButton(true);
+}
+
+function addYouTubeReplayHistoryCard(
+    loaded: LoadedReplayShare,
+    options: { activate?: boolean; persist?: boolean; append?: boolean } = {},
+): void {
+    const history = document.querySelector<HTMLUListElement>("#youtube-replay-history");
+    if (!history) return;
+    const { activate = true, persist = true, append = false } = options;
+
+    const sharedVideoId = `youtube:${loaded.youtubeVideoId}`;
+    const previous = Array.from(history.querySelectorAll<HTMLElement>("[data-shared-replay-id]"))
+        .find((candidate) => candidate.dataset.sharedReplayId === loaded.youtubeVideoId);
+    // A startup restore must never replace a card that the user has already
+    // selected while restoration was still in progress.
+    if (previous && !activate) return;
+    if (previous) {
+        previous.remove();
+    }
+    const item = ui.createRecordingItem(
+        {
+            videoId: sharedVideoId,
+            metadata: loaded.metadataFile,
+            videoExists: true,
+        },
+        () => void setYouTubeReplay(loaded),
+        async () => null,
+        () => {},
+        () => {},
+    );
+    // Shared replays use the familiar match card, with only a local history
+    // removal action. Removing it never deletes the YouTube or Firestore data.
+    item.querySelector(".sidebar-actions")?.remove();
+    item.querySelector<HTMLElement>(".sidebar-date")?.replaceChildren(`YouTube: ${loaded.youtubeVideoId}`);
+    item.dataset.sharedReplayId = loaded.youtubeVideoId;
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "youtube-replay-remove";
+    removeButton.title = "この履歴を削除";
+    removeButton.setAttribute("aria-label", "この履歴を削除");
+    removeButton.textContent = "✕";
+    removeButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        removeYouTubeReplayHistoryItem(loaded.youtubeVideoId);
+    });
+    item.append(removeButton);
+    if (append) history.append(item);
+    else history.prepend(item);
+    if (persist) rememberYouTubeReplay(loaded.youtubeVideoId);
+    updateYouTubeReplayHistoryVisibility();
+    if (activate) {
+        history.querySelectorAll("li.active").forEach((candidate) => candidate.classList.remove("active"));
+        item.classList.add("active");
+        ui.setActiveVideoId(sharedVideoId);
+    }
+}
+
+async function restoreYouTubeReplayHistory(): Promise<void> {
+    const restoreGeneration = ++youtubeReplayHistoryRestoreGeneration;
+    const videoIds = readYouTubeReplayHistory();
+    if (videoIds.length === 0) {
+        updateYouTubeReplayHistoryVisibility();
+        return;
+    }
+
+    let restoredCount = 0;
+    for (const videoId of videoIds) {
+        try {
+            const loaded = await loadReplayShare(videoId);
+            if (restoreGeneration !== youtubeReplayHistoryRestoreGeneration) return;
+            addYouTubeReplayHistoryCard(loaded, { activate: false, persist: false, append: true });
+            restoredCount++;
+        } catch (error) {
+            // Keep the ID in storage so a temporary network or Firestore issue
+            // does not silently erase the user's history.
+            console.warn("[youtube-replay] could not restore history item", { videoId, error });
+        }
+    }
+    if (restoredCount > 0) {
+        updateYouTubeReplayStatus(`${restoredCount}件の読み込み履歴を復元しました。`);
     }
 }
 

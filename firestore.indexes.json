@@ -1,0 +1,10 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "replays",
+      "fieldPath": "payloadJson",
+      "indexes": []
+    }
+  ]
+}
