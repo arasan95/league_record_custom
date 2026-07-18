@@ -23,6 +23,7 @@ const RULES = [
   { area: "frontend.data", pattern: /^src\/ts\/datadragon\.ts$/ },
   { area: "frontend.data", pattern: /^src\/ts\/assets\.ts$/ },
   { area: "frontend.data", pattern: /^src\/ts\/version\.ts$/ },
+  { area: "frontend.update", pattern: /^src\/ts\/update_checker\.ts$/ },
   { area: "frontend.domain", pattern: /^src\/ts\/queues\.ts$/ },
   { area: "frontend.domain", pattern: /^src\/ts\/objectives\.ts$/ },
   { area: "frontend.domain", pattern: /^src\/ts\/timeline\.ts$/ },
