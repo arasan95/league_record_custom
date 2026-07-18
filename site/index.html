@@ -8,13 +8,13 @@
   <meta name="theme-color" content="#070b14">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LeagueRecord">
-  <meta property="og:title" content="LeagueRecord — 試合を録画し、振り返りをもっと簡単に">
+  <meta property="og:title" content="LeagueRecord">
   <meta property="og:description" content="League of Legendsの試合をローカル録画し、イベントから素早く振り返り、必要な場面をクリップとして残せるWindowsアプリ。">
   <meta property="og:url" content="https://www.leaguerecord.f5.si/">
   <meta property="og:image" content="https://www.leaguerecord.f5.si/assets/screenshot.png">
   <link rel="canonical" href="https://www.leaguerecord.f5.si/">
   <link rel="icon" type="image/png" href="assets/app-icon.png">
-  <title>LeagueRecord — League of Legends 録画・振り返りアプリ</title>
+  <title>LeagueRecord</title>
   <style>
     :root {
       color-scheme: dark;
@@ -160,14 +160,14 @@
       line-height: .98;
       letter-spacing: -.065em;
     }
-    .hero h1 span {
-      display: block;
-      margin-top: 16px;
+    .hero-title {
+      margin: 16px auto 0;
       background: linear-gradient(90deg, #f7fbff 15%, #81eee6 58%, #d9b76e 100%);
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
-      font-size: .51em;
+      font-size: clamp(1.65rem, 4.1vw, 3.45rem);
+      font-weight: 800;
       letter-spacing: -.04em;
       line-height: 1.15;
     }
@@ -192,6 +192,23 @@
     }
     .trust-list li { display: inline-flex; align-items: center; gap: 8px; }
     .trust-list li::before { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); content: ""; }
+
+    .purpose-summary {
+      display: grid;
+      max-width: 980px;
+      grid-template-columns: 1fr 1fr;
+      margin: 48px auto 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(11, 18, 32, .68);
+      text-align: left;
+    }
+    .purpose-summary article { padding: 25px 28px; }
+    .purpose-summary article + article { border-left: 1px solid var(--line); }
+    .purpose-summary h2, .purpose-summary h3 { margin: 0 0 8px; font-size: 1.05rem; letter-spacing: -.015em; }
+    .purpose-summary p { margin: 0; color: var(--muted); font-size: .88rem; }
+    .purpose-summary code { color: var(--accent-strong); }
 
     .product-stage { margin-top: 76px; }
     .product-stage img {
@@ -385,9 +402,11 @@
       .hero { padding-top: 76px; }
       .eyebrow { font-size: .68rem; letter-spacing: .1em; }
       .hero h1 { font-size: clamp(2.65rem, 13vw, 3.4rem); }
-      .hero h1 span { font-size: .48em; }
+      .hero-title { font-size: clamp(1.55rem, 7vw, 2rem); }
       .hero-actions { width: min(100%, 320px); margin-inline: auto; flex-direction: column; }
       .hero-actions .button { width: 100%; }
+      .purpose-summary { grid-template-columns: 1fr; }
+      .purpose-summary article + article { border-top: 1px solid var(--line); border-left: 0; }
       .product-stage { margin-top: 55px; }
       .section { padding: 78px 0; }
       .feature-grid { grid-template-columns: 1fr; }
@@ -450,7 +469,8 @@
     <section class="hero">
       <div class="container">
         <p class="eyebrow">Windows desktop game recorder</p>
-        <h1>LeagueRecord<span>試合を録画し、振り返りをもっと簡単に。</span></h1>
+        <h1>LeagueRecord</h1>
+        <p class="hero-title">試合を録画し、振り返りをもっと簡単に。</p>
         <p class="hero-copy"><strong>LeagueRecord</strong>は、League of LegendsのゲームプレイをWindows PCへローカル録画し、重要な場面を素早く見返してクリップとして残せるオープンソースのデスクトップアプリです。</p>
         <div class="hero-actions">
           <a class="button button-primary" href="https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_x64-setup.exe">
@@ -464,6 +484,17 @@
           <li>無料・オープンソース</li>
           <li>Windows x64対応</li>
         </ul>
+
+        <div class="purpose-summary">
+          <article>
+            <h2>LeagueRecordの目的</h2>
+            <p>League of Legendsの試合を利用者のWindows PCへ録画し、録画の振り返り、重要場面の確認、クリップ作成を簡単にすることです。</p>
+          </article>
+          <article>
+            <h3>Googleユーザーデータを利用する目的</h3>
+            <p>利用者が選択した録画またはクリップを、利用者自身のYouTubeチャンネルへ送信するためだけに<code>youtube.upload</code>権限を使用します。</p>
+          </article>
+        </div>
 
         <figure class="product-stage">
           <img src="assets/screenshot.png" width="2551" height="1381" alt="LeagueRecordのアプリ画面。左側に録画一覧、中央に試合映像とツールチップ、下部にイベントタイムラインとクリップ操作が表示されています。" fetchpriority="high">
