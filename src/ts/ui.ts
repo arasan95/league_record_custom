@@ -501,6 +501,10 @@ export default class UI {
         forceUpdateIds: string[] = []
     ) => {
         const activeVideoId = this.getActiveVideoId();
+        // Metadata writes (such as toggling a favorite) are observed by the
+        // recording watcher and cause this list to be reinserted. Preserve the
+        // reader's position instead of allowing scroll anchoring to nudge it.
+        const sidebarScrollTop = this.sidebar.scrollTop;
         this.lastRecordingsSizeGb = recordingsSizeGb;
         this.lastRecordings = recordings;
         this.lastOnVideo = onVideo;
@@ -562,6 +566,10 @@ export default class UI {
         if (activeVideoId) {
             this.setActiveVideoId(activeVideoId);
         }
+        this.sidebar.scrollTop = sidebarScrollTop;
+        requestAnimationFrame(() => {
+            this.sidebar.scrollTop = sidebarScrollTop;
+        });
     };
 
     public createRecordingItem = (

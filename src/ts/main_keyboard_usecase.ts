@@ -32,6 +32,7 @@ type LoopState = {
 export function createKeyboardHandlers(input: {
     player: PlayerLike;
     ui: UiLike;
+    hasActivePlayback?: () => boolean;
     matchesAction: (event: KeyboardEvent, action: string) => boolean;
     getLoopState: () => LoopState;
     setLoopState: (patch: Partial<LoopState>) => void;
@@ -44,6 +45,7 @@ export function createKeyboardHandlers(input: {
     const {
         player,
         ui,
+        hasActivePlayback,
         matchesAction,
         getLoopState,
         setLoopState,
@@ -176,7 +178,7 @@ export function createKeyboardHandlers(input: {
             }
             return;
         }
-        if (ui.getActiveVideoId() === null) return;
+        if (!(hasActivePlayback?.() ?? ui.getActiveVideoId() !== null)) return;
 
         let handled = false;
 

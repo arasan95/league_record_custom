@@ -15,6 +15,7 @@ dist
 dist-ssr
 release-electron/
 *.local
+electron/youtube/local-config.cjs
 
 # Editor directories and files
 .vscode/*

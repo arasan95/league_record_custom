@@ -26,6 +26,11 @@
     "build": "rm -rf dist && bun build --minify --target browser --outdir dist src/index.html",
     "preview": "bun dist/index.html",
     "check:responsibility": "node ci/check-responsibility-coverage.mjs",
+    "test:security:metadata": "bun test tests/replay_share_security.test.ts",
+    "test:security:rules": "firebase emulators:exec --only firestore --project demo-leaguerecord \"bun test tests/firestore.rules.test.ts\"",
+    "test:security": "bun run test:security:metadata && bun run test:security:rules",
+    "test:youtube-defaults": "bun test tests/youtube_upload_defaults.test.ts",
+    "backend:replay:dev": "firebase emulators:exec --only firestore --project leaguerecord \"bun backend/replay-share-server.ts\"",
     "diag:tooltip": "python tools/tooltip-diagnostics/run_tooltip_diagnostics.py",
     "diag:tooltip:ja": "python tools/tooltip-diagnostics/run_tooltip_diagnostics.py --locales ja_JP"
   },
@@ -41,14 +46,19 @@
     "@tauri-apps/plugin-shell": "^2.3.4",
     "@tauri-apps/plugin-updater": "^2.10.0",
     "@xmldom/xmldom": "^0.8.13",
+    "firebase": "^12.16.0",
+    "firebase-admin": "^14.2.0",
     "sql.js": "^1.14.1",
-    "video.js": "^8.23.4"
+    "video.js": "^8.23.4",
+    "videojs-youtube": "^3.0.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@tauri-apps/cli": "^2.10.0",
     "@types/bun": "^1.3.10",
     "electron": "^37.0.0",
     "electron-builder": "^26.8.1",
+    "firebase-tools": "^15.24.0",
     "oxlint": "^1.38.0"
   },
   "build": {
@@ -80,6 +90,10 @@
       {
         "from": "src-tauri/resources/tooltip_data.db",
         "to": "tooltip_data.db"
+      },
+      {
+        "from": "electron/youtube/local-config.cjs",
+        "to": "youtube/local-config.cjs"
       }
     ],
     "win": {

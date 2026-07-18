@@ -124,6 +124,45 @@ video {
     z-index: 1;
 }
 
+/* videojs-youtube returns an extra anonymous wrapper around its iframe.
+   Make that wrapper occupy the same video-content area as a local <video>. */
+.video-js.vjs-youtube .lr-youtube-tech-wrapper {
+    grid-area: video-content;
+    flex: 1 1 0 !important;
+    align-self: stretch !important;
+    position: relative !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    background: #000 !important;
+}
+
+.video-js.vjs-youtube .lr-youtube-tech-wrapper > .vjs-tech {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+}
+
+/* Do not obscure YouTube attribution, links, or pause-state UI. LeagueRecord's
+   seek controls live below the iframe and continue to control it through the
+   documented IFrame Player API. */
+.video-js.vjs-youtube .vjs-iframe-blocker {
+    display: none !important;
+}
+
+/* Development-only comparison mode. This does not alter the cross-origin
+   YouTube document; it only prevents pointer input from reaching the iframe
+   so playback is operated with LeagueRecord's controls. */
+.video-js.vjs-youtube.youtube-ui-comparison .lr-youtube-tech-wrapper > .vjs-tech {
+    pointer-events: none !important;
+}
+
 /* Fullscreen Behavior */
 /* Force root elements to black in fullscreen */
 html:has(.vjs-fullscreen),
