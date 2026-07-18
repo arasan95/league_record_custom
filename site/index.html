@@ -193,32 +193,13 @@
     .trust-list li { display: inline-flex; align-items: center; gap: 8px; }
     .trust-list li::before { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); content: ""; }
 
-    .product-stage { position: relative; margin-top: 76px; }
-    .product-stage::before {
-      position: absolute;
-      inset: -16% 8% auto;
-      height: 55%;
-      border-radius: 50%;
-      background: rgba(43, 214, 218, .17);
-      filter: blur(90px);
-      content: "";
+    .product-stage { margin-top: 76px; }
+    .product-stage img {
+      width: 100%;
+      height: auto;
+      aspect-ratio: 2551 / 1381;
+      object-fit: contain;
     }
-    .window {
-      position: relative;
-      overflow: hidden;
-      padding: 10px;
-      border: 1px solid var(--line-strong);
-      border-radius: 22px;
-      background: linear-gradient(145deg, rgba(255,255,255,.1), rgba(255,255,255,.015));
-      box-shadow: var(--shadow);
-    }
-    .window-bar { display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 4px 8px; }
-    .window-bar i { width: 9px; height: 9px; border-radius: 50%; background: #3b465a; }
-    .window-bar i:first-child { background: var(--danger); }
-    .window-bar i:nth-child(2) { background: var(--gold); }
-    .window-bar i:nth-child(3) { background: var(--accent); }
-    .window img { width: 100%; border-radius: 13px; background: #020407; }
-    .screen-caption { margin: 19px auto 0; color: var(--muted); font-size: .86rem; }
 
     .section { padding: 108px 0; }
     .section-tinted { border-block: 1px solid var(--line); background: rgba(11, 18, 32, .62); }
@@ -408,9 +389,6 @@
       .hero-actions { width: min(100%, 320px); margin-inline: auto; flex-direction: column; }
       .hero-actions .button { width: 100%; }
       .product-stage { margin-top: 55px; }
-      .window { padding: 5px; border-radius: 15px; }
-      .window-bar { height: 22px; padding-bottom: 5px; }
-      .window img { border-radius: 10px; }
       .section { padding: 78px 0; }
       .feature-grid { grid-template-columns: 1fr; }
       .feature-card { min-height: auto; }
@@ -488,11 +466,7 @@
         </ul>
 
         <figure class="product-stage">
-          <div class="window">
-            <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>
-            <img src="assets/screenshot.png" width="2551" height="1381" alt="LeagueRecordのアプリ画面。左側に録画一覧、中央に試合映像とツールチップ、下部にイベントタイムラインとクリップ操作が表示されています。" fetchpriority="high">
-          </div>
-          <figcaption class="screen-caption">録画一覧、試合映像、イベント、クリップ操作をひとつの画面に。</figcaption>
+          <img src="assets/screenshot.png" width="2551" height="1381" alt="LeagueRecordのアプリ画面。左側に録画一覧、中央に試合映像とツールチップ、下部にイベントタイムラインとクリップ操作が表示されています。" fetchpriority="high">
         </figure>
       </div>
     </section>
