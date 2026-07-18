@@ -4,6 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="LeagueRecordは、League of LegendsのゲームプレイをWindows PCへローカル録画し、利用者が自分の録画やクリップを確認・共有できるデスクトップアプリです。">
+  <meta name="application-name" content="LeagueRecord">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="LeagueRecord">
+  <meta property="og:title" content="LeagueRecord">
+  <meta property="og:description" content="LeagueRecord is a Windows desktop application for locally recording, reviewing, and optionally uploading League of Legends gameplay to the user's own YouTube channel.">
+  <meta property="og:url" content="https://www.leaguerecord.f5.si/">
+  <link rel="canonical" href="https://www.leaguerecord.f5.si/">
   <title>LeagueRecord</title>
   <style>
     :root { color-scheme: dark; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -12,9 +19,26 @@
     .card { padding: 20px; border: 1px solid #344568; border-radius: 12px; background: #111a30; }
     footer { margin-top: 44px; font-size: .9rem; color: #adbad2; }
   </style>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "LeagueRecord",
+    "url": "https://www.leaguerecord.f5.si/",
+    "applicationCategory": "MultimediaApplication",
+    "operatingSystem": "Windows",
+    "description": "LeagueRecord is a Windows desktop application that records League of Legends gameplay locally, lets users review recordings and clips, and optionally uploads a user-selected video to the user's own YouTube channel.",
+    "featureList": [
+      "Local gameplay recording",
+      "Recording and clip review",
+      "Optional user-initiated YouTube upload"
+    ]
+  }
+  </script>
 </head>
 <body>
   <h1>LeagueRecord</h1>
+  <p><strong>LeagueRecord公式ホームページ</strong></p>
   <p><strong>LeagueRecord</strong> は、League of LegendsのゲームプレイをWindows PCへローカル録画し、利用者が自分の録画・クリップを確認して共有できるようにするデスクトップアプリです。</p>
 
   <h2>LeagueRecordの目的と主な機能</h2>
@@ -29,11 +53,17 @@
     <h2>任意のYouTubeアップロード機能</h2>
     <p>LeagueRecordは、利用者が明示的に選択した完成済みの録画またはクリップを、利用者自身のYouTubeチャンネルへアップロードするために、YouTube Data APIの <code>youtube.upload</code> 権限を使用します。</p>
     <p>この機能は任意です。LeagueRecordは、利用者がGoogleアカウントを接続し、投稿する動画、タイトル、説明、公開設定および子ども向け設定を選び、最終確認した場合にのみ動画をYouTubeへ送信します。利用者はアプリ内でGoogle接続をいつでも解除できます。</p>
-    <p>LeagueRecordは、Googleアカウントのパスワードを取得せず、OAuth認証トークンやアップロードした動画を開発者のサーバーへ保存しません。詳細は<a href="privacy.html">プライバシーポリシー</a>を確認してください。</p>
+    <p>LeagueRecordは、Googleアカウントのパスワードを取得せず、OAuth認証トークンやアップロードした動画を開発者のサーバーへ保存しません。詳細は<a href="https://www.leaguerecord.f5.si/privacy.html">プライバシーポリシー</a>を確認してください。</p>
   </div>
+
+  <section lang="en" aria-labelledby="about-leaguerecord">
+    <h2 id="about-leaguerecord">About LeagueRecord</h2>
+    <p><strong>LeagueRecord</strong> is a Windows desktop application for locally recording League of Legends gameplay, reviewing recordings and clips, and sharing a user-selected video when the user chooses to do so.</p>
+    <p>Its optional YouTube feature uses the YouTube Data API only to upload a recording or clip explicitly selected by the user to the user's own YouTube channel. LeagueRecord uploads nothing without the user's Google authorization, upload settings, and final confirmation.</p>
+  </section>
   <nav>
-    <a href="privacy.html">プライバシーポリシー</a>
-    <a href="terms.html">利用規約</a>
+    <a href="https://www.leaguerecord.f5.si/privacy.html">プライバシーポリシー</a>
+    <a href="https://www.leaguerecord.f5.si/terms.html">利用規約</a>
     <a href="https://github.com/arasan95/league_record_custom">GitHub</a>
     <a href="https://github.com/arasan95/league_record_custom/issues">問い合わせ</a>
   </nav>
