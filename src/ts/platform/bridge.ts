@@ -1,6 +1,11 @@
 export type BaseDir = "AppLocalData" | "AppData";
 
 export type LeagueRecordBridge = {
+    devConfig: {
+        isDevelopment: boolean;
+        replayShareBackendUrl: string;
+        firestoreEmulatorHost: string;
+    };
     invoke: (command: string, args?: Record<string, unknown>) => Promise<any>;
     event: {
         listen: (name: string, cb: (event: { payload: any }) => void) => Promise<() => void>;

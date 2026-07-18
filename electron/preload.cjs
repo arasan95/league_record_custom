@@ -16,6 +16,11 @@ function onEvent(event, cb) {
 
 contextBridge.exposeInMainWorld("__TAURI_INTERNALS__", {});
 contextBridge.exposeInMainWorld("leagueRecord", {
+  devConfig: Object.freeze({
+    isDevelopment: process.env.LR_ELECTRON_DEV === "1",
+    replayShareBackendUrl: process.env.VITE_REPLAY_SHARE_BACKEND_URL || "",
+    firestoreEmulatorHost: process.env.VITE_FIRESTORE_EMULATOR_HOST || "",
+  }),
   invoke: (command, args) => ipcRenderer.invoke("tauri:invoke", { command, args }),
   event: {
     listen: (name, cb) => onEvent(name, cb),
@@ -50,6 +55,9 @@ contextBridge.exposeInMainWorld("leagueRecord", {
   },
   clipboard: {
     writeText: (text) => ipcRenderer.invoke("lr:clipboard:writeText", text),
+  },
+  youtubeComparison: {
+    setEnabled: (enabled) => ipcRenderer.invoke("lr:youtube-ui-comparison:setEnabled", Boolean(enabled)),
   },
   app: {
     getVersion: () => ipcRenderer.invoke("lr:app:getVersion"),
