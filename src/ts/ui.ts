@@ -139,31 +139,25 @@ export default class UI {
             this.pendingScoreboardHeight = { targetHeight, baseHeight };
             return;
         }
-        if (targetHeight < 80) targetHeight = 80;
+        const collapseThreshold = 80;
+        if (targetHeight < collapseThreshold) {
+            // Below the smallest usable size, hide the board while keeping its
+            // resize handle available. Store a sub-threshold scale so the
+            // collapsed state survives a resize or scoreboard re-render.
+            this.scoreboardEl.classList.add("collapsed");
+            (this.scoreboardEl.style as any).zoom = ((collapseThreshold - 1) / baseHeight).toFixed(3);
+            return;
+        }
         this.scoreboardEl.classList.remove("collapsed");
         this.scoreboardEl.style.removeProperty("height");
 
         let requestedZoom = targetHeight / baseHeight;
         requestedZoom = Math.max(requestedZoom, 0.05);
-        requestedZoom = Math.min(requestedZoom, 1.3);
+        requestedZoom = Math.min(requestedZoom, 1.4);
 
-        // Measure at the natural scale first.  The scoreboard contains fixed-size
-        // item and spell icons, so flexbox alone cannot make every row fit in a
-        // narrow window.  Clamp its requested vertical scale to the available
-        // player width as well, keeping the complete board visible.
-        this.scoreboardEl.style.zoom = "1";
-        const playerEl = this.scoreboardEl.closest(".video-js, #video_player") as HTMLElement | null;
-        const availableWidth = playerEl?.clientWidth ?? 0;
-        const contentWidth = Math.max(this.scoreboardEl.scrollWidth, this.scoreboardEl.getBoundingClientRect().width);
-        // Only constrain scale when the natural-size scoreboard is already
-        // wider than the player.  A previous min(1, ...) capped every wide
-        // window at 100%, preventing the user from enlarging the board.
-        const widthFitZoom = availableWidth > 0 && contentWidth > availableWidth
-            ? availableWidth / contentWidth
-            : Number.POSITIVE_INFINITY;
-        const newZoom = Math.min(requestedZoom, widthFitZoom);
-
-        (this.scoreboardEl.style as any).zoom = newZoom.toFixed(3);
+        // Keep manual resizing responsive while preventing the board from
+        // taking over most of the player area.
+        (this.scoreboardEl.style as any).zoom = requestedZoom.toFixed(3);
     }
 
     private flushPendingScoreboardHeight() {
@@ -987,7 +981,7 @@ export default class UI {
         });
     };
 
-    public showMarkerFlags = (show: boolean) => {
+    public showMarkerFlags = (_show: boolean) => {
     };
 
     public updateAutoStopBtn = (enabled: boolean) => {
