@@ -1025,7 +1025,7 @@
     opacity: 0.65;
     pointer-events: none;
 }
-.rename:hover { color: rgb(69, 255, 137); }
+.rename:hover { color: #c084fc; }
 .delete:hover { color: red; }
 .delete-video-only:hover { color: orange; }
 
