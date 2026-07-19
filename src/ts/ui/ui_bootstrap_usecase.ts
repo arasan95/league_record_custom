@@ -44,7 +44,7 @@ export async function loadInitialUiSettings(params: {
     setMaxStorageGb: (maxStorageGb: number) => void;
     setScoreboardScale: (scoreboardScale: number | null) => void;
     setCurrentLanguage: (language: string) => void;
-    applyDisplayPreferences: (settings: Settings) => void;
+    applyDisplayPreferences?: (settings: Settings) => void;
 }): Promise<void> {
     const {
         setScrollFrameStepModifier,
@@ -74,7 +74,7 @@ export async function loadInitialUiSettings(params: {
         if (s.language) {
             setCurrentLanguage(s.language);
         }
-        applyDisplayPreferences(s);
+        applyDisplayPreferences?.(s);
     } catch (err) {
         console.error("Failed to load settings:", err);
     }
