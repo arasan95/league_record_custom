@@ -3,6 +3,7 @@ const path = require("node:path");
 const { createHash, randomBytes } = require("node:crypto");
 const { Transform, Readable } = require("node:stream");
 const { getYouTubeOAuthConfig } = require("./config.cjs");
+const { generateThumbnail } = require("./thumbnail-generator.cjs");
 
 // Firebase needs a Google identity token, but LeagueRecord does not use the
 // user's display name or profile image. Avoid the unnecessary profile scope.
@@ -15,6 +16,7 @@ const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const RESUMABLE_URL = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status";
 const VIDEOS_LIST_URL = "https://www.googleapis.com/youtube/v3/videos";
 const MAX_FILE_BYTES = 256 * 1024 * 1024 * 1024;
+const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 
 function base64Url(value) {
@@ -98,7 +100,7 @@ function missingYouTubeReadScopeError() {
   );
 }
 
-function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings, isRecording, emit, log }) {
+function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings, getImageCacheRoots, isRecording, emit, log }) {
   let activeJob = null;
   let authInProgress = false;
 
@@ -222,7 +224,7 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
       connected: Boolean(tokens?.refreshToken && tokens?.uploadScopeGranted === true && tokens?.readScopeGranted === true),
       identityEnabled: tokens?.identityEnabled === true,
       cleanupEnabled: tokens?.readScopeGranted === true,
-      uploading: Boolean(activeJob && ["preparing", "uploading"].includes(activeJob.state)),
+      uploading: Boolean(activeJob && ["thumbnail_preparing", "preparing", "uploading", "thumbnail_uploading", "processing"].includes(activeJob.state)),
     };
   }
 
@@ -372,15 +374,21 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
     return makeError(youtubeApiUserMessage(phase, info), `youtube_${info.reason.toLowerCase()}`);
   }
 
-  async function startUpload({ videoId, metadata }) {
-    if (activeJob && ["preparing", "uploading"].includes(activeJob.state)) throw makeError("別のアップロードが進行中です。", "upload_in_progress");
+  async function startUpload({ videoId, metadata, thumbnail }) {
+    if (activeJob && ["thumbnail_preparing", "preparing", "uploading", "thumbnail_uploading", "processing"].includes(activeJob.state)) throw makeError("別のアップロードが進行中です。", "upload_in_progress");
     if (isRecording()) throw makeError("録画中のファイルはアップロードできません。録画を停止してから実行してください。", "recording_active");
     const { filePath, stat } = await resolveVideo(videoId);
     const data = validateMetadata(metadata, filePath);
     const controller = new AbortController();
-    activeJob = { state: "preparing", sourceVideoId: videoId, fileName: path.basename(filePath), totalBytes: stat.size, sentBytes: 0, youtubeVideoId: null, youtubeUrl: null, error: null, controller };
+    activeJob = { state: "thumbnail_preparing", sourceVideoId: videoId, fileName: path.basename(filePath), totalBytes: stat.size, sentBytes: 0, youtubeVideoId: null, youtubeUrl: null, error: null, controller };
     publish();
     try {
+      const preparedThumbnail = await createThumbnail(thumbnail?.metadata, {
+        isClip: Boolean(thumbnail?.isClip),
+        customThumbnailPath: thumbnail?.customThumbnailPath,
+      });
+      activeJob.state = "preparing";
+      publish();
       const accessToken = await getAccessToken();
       const start = await fetch(RESUMABLE_URL, {
         method: "POST",
@@ -419,10 +427,18 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
       });
       const result = await uploaded.json().catch(() => ({}));
       if (!uploaded.ok || !result.id) throw await makeYouTubeApiError(uploaded, result, "uploading");
-      activeJob.state = "completed";
       activeJob.sentBytes = stat.size;
       activeJob.youtubeVideoId = result.id;
       activeJob.youtubeUrl = `https://youtu.be/${result.id}`;
+      activeJob.state = "thumbnail_uploading";
+      publish();
+      await uploadThumbnailData(result.id, preparedThumbnail, accessToken, controller.signal);
+      activeJob.state = "processing";
+      activeJob.processingStatus = "pending";
+      publish();
+      const processingCompleted = await waitForYouTubeProcessing(result.id, accessToken, controller.signal);
+      activeJob.state = "completed";
+      activeJob.processingStatus = processingCompleted ? "succeeded" : "pending";
       publish();
       return { ...activeJob, controller: undefined };
     } catch (error) {
@@ -441,7 +457,7 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
   }
 
   function cancelUpload() {
-    if (activeJob?.controller && ["preparing", "uploading"].includes(activeJob.state)) activeJob.controller.abort();
+    if (activeJob?.controller && ["thumbnail_preparing", "preparing", "uploading", "thumbnail_uploading", "processing"].includes(activeJob.state)) activeJob.controller.abort();
     return getUploadJob();
   }
 
@@ -481,7 +497,141 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
     throw makeError("YouTube動画の公開状態を確認できませんでした。インターネット接続を確認してもう一度お試しください。", "youtube_public_check_failed");
   }
 
-  return { getAuthStatus, getFirebaseIdToken, signIn, signOut, startUpload, getUploadJob, cancelUpload, findMissingVideos, isPublicVideoAvailable };
+  /**
+   * Set a custom thumbnail for a YouTube video.
+   *
+   * Generates a thumbnail from game metadata and uploads it to YouTube.
+   *
+   * @param {object} options
+   * @param {string} options.videoId - The YouTube video ID
+   * @param {object} options.metadata - Game metadata (Metadata or Deferred format)
+   * @returns {Promise<object>} Thumbnail result from YouTube API
+   */
+  async function uploadThumbnailData(videoId, thumbnail, accessToken, signal) {
+    const thumbUrl = new URL("https://www.googleapis.com/upload/youtube/v3/thumbnails/set");
+    thumbUrl.searchParams.set("videoId", videoId);
+    thumbUrl.searchParams.set("uploadType", "media");
+    const response = await fetch(thumbUrl.toString(), {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": thumbnail.mimeType,
+        "content-length": String(thumbnail.buffer.length),
+      },
+      body: thumbnail.buffer,
+      signal,
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const info = youtubeApiErrorInfo(response, result);
+      await log(`youtube thumbnail set failed video=${videoId} http=${info.httpStatus} reason=${info.reason}`);
+      const reason = info.reason.toLowerCase();
+      const message = info.httpStatus === 403
+        ? "サムネイルを設定できませんでした。YouTubeチャンネルでカスタムサムネイルが有効か確認してください。"
+        : info.httpStatus === 429
+          ? "サムネイルの設定回数が上限に達しました。時間をおいて再試行してください。"
+          : `サムネイルの設定に失敗しました（${info.reason}${info.detail ? `: ${info.detail}` : ""}）。`;
+      throw makeError(message, `youtube_thumbnail_${reason}`);
+    }
+    await log(`youtube thumbnail set success video=${videoId}`);
+    return result;
+  }
+
+  async function waitForYouTubeProcessing(videoId, accessToken, signal) {
+    const deadline = Date.now() + 15 * 60 * 1000;
+    let checkFailures = 0;
+    while (Date.now() < deadline) {
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+      const url = new URL(VIDEOS_LIST_URL);
+      url.searchParams.set("part", "status,processingDetails");
+      url.searchParams.set("id", videoId);
+      const response = await fetch(url, { headers: { authorization: `Bearer ${accessToken}` }, signal });
+      const result = await response.json().catch(() => ({}));
+      const video = result?.items?.[0];
+      if (response.ok && video) {
+        checkFailures = 0;
+        const processing = String(video.processingDetails?.processingStatus || "");
+        const uploadStatus = String(video.status?.uploadStatus || "");
+        const progress = video.processingDetails?.processingProgress;
+        if (progress?.partsTotal > 0) {
+          activeJob.processingPercent = Math.min(100, Math.floor(progress.partsProcessed / progress.partsTotal * 100));
+        }
+        activeJob.processingStatus = processing || uploadStatus || "pending";
+        publish();
+        if (processing === "succeeded" || uploadStatus === "processed") return true;
+        if (["failed", "terminated", "rejected", "deleted"].includes(processing) || ["failed", "rejected", "deleted"].includes(uploadStatus)) {
+          throw makeError("動画は送信されましたが、YouTube側の処理に失敗しました。YouTube Studioを確認してください。", "youtube_processing_failed");
+        }
+      } else {
+        checkFailures += 1;
+        await log(`youtube processing check failed video=${videoId} http=${response.status} attempt=${checkFailures}`);
+        if (checkFailures >= 3) {
+          activeJob.processingStatus = "pending";
+          publish();
+          return false;
+        }
+      }
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 3000);
+        signal.addEventListener("abort", () => { clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); }, { once: true });
+      });
+    }
+    activeJob.processingStatus = "pending";
+    await log(`youtube processing wait timed out video=${videoId}`);
+    return false;
+  }
+
+  async function setThumbnail({ videoId, metadata, options }) {
+    const id = String(videoId || "");
+    if (!YOUTUBE_VIDEO_ID.test(id)) throw makeError("YouTube動画IDが不正です。", "validation");
+    if (!metadata && !options?.customThumbnailPath) throw makeError("サムネイル生成に必要なゲームデータがありません。", "validation");
+
+    const accessToken = await getAccessToken();
+    await log(`youtube thumbnail generating for video=${id}`);
+    const thumbnail = await createThumbnail(metadata, options);
+    const { buffer, mimeType } = thumbnail;
+    await log(`youtube thumbnail generated size=${buffer.length} bytes mime=${mimeType}`);
+
+    return uploadThumbnailData(id, thumbnail, accessToken);
+  }
+
+  async function createThumbnail(metadata, options = {}) {
+    if (options.customThumbnailPath) {
+      const customPath = await fs.realpath(String(options.customThumbnailPath)).catch(() => null);
+      if (!customPath) throw makeError("選択したサムネイル画像が見つかりません。", "youtube_thumbnail_file_unavailable");
+      const stat = await fs.stat(customPath);
+      if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_THUMBNAIL_BYTES) {
+        throw makeError("サムネイル画像は2MB以下のPNGまたはJPEGにしてください。", "youtube_thumbnail_invalid_file");
+      }
+      const buffer = await fs.readFile(customPath);
+      const isPng = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
+      if (!isPng && !isJpeg) throw makeError("サムネイルにはPNGまたはJPEG画像を選択してください。", "youtube_thumbnail_invalid_file");
+      return { buffer, mimeType: isPng ? "image/png" : "image/jpeg" };
+    }
+    const appPath = app.getAppPath();
+    const localImageCacheRoots = getImageCacheRoots();
+    let thumbnail;
+    try {
+      thumbnail = await generateThumbnail(metadata, appPath, localImageCacheRoots, { isClip: Boolean(options.isClip) });
+    } catch (error) {
+      await log(`youtube thumbnail generation failed code=${error?.code || "unknown"} error=${String(error?.message || error)}`);
+      if (error?.code === "thumbnail_metadata_unavailable") {
+        throw makeError("サムネイルを作成できる試合データがありません。", "youtube_thumbnail_metadata_unavailable");
+      }
+      throw makeError("サムネイル画像の作成に失敗しました。", "youtube_thumbnail_generation_failed");
+    }
+    return thumbnail;
+  }
+
+  async function previewThumbnail(metadata, options = {}) {
+    await log("youtube thumbnail preview generating");
+    const { buffer, mimeType } = await createThumbnail(metadata, options);
+    await log(`youtube thumbnail preview generated size=${buffer.length} bytes mime=${mimeType}`);
+    return { dataUrl: `data:${mimeType};base64,${buffer.toString("base64")}`, mimeType, bytes: buffer.length };
+  }
+
+  return { getAuthStatus, getFirebaseIdToken, signIn, signOut, startUpload, setThumbnail, previewThumbnail, getUploadJob, cancelUpload, findMissingVideos, isPublicVideoAvailable };
 }
 
 module.exports = { createYouTubeService };

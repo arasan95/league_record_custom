@@ -11,7 +11,7 @@ export type YouTubeAuthStatus = {
     firebaseIdToken?: string;
 };
 export type YouTubeUploadJob = {
-    state: "idle" | "preparing" | "uploading" | "completed" | "cancelled" | "failed";
+    state: "idle" | "thumbnail_preparing" | "preparing" | "uploading" | "thumbnail_uploading" | "processing" | "completed" | "cancelled" | "failed";
     sourceVideoId?: string;
     fileName?: string;
     totalBytes?: number;
@@ -19,6 +19,8 @@ export type YouTubeUploadJob = {
     youtubeVideoId?: string | null;
     youtubeUrl?: string | null;
     error?: string | null;
+    processingStatus?: string;
+    processingPercent?: number;
 };
 
 export function getYouTubeAuthStatus(): Promise<YouTubeAuthStatus> {
@@ -37,8 +39,8 @@ export function getYouTubeFirebaseIdToken(): Promise<string> {
     return invoke("youtube_get_firebase_id_token");
 }
 
-export function startYouTubeUpload(videoId: string, metadata: { title: string; description: string; madeForKids: boolean; privacyStatus: "private" | "unlisted" | "public"; policyAccepted: boolean; communityGuidelinesConfirmed: boolean }): Promise<YouTubeUploadJob> {
-    return invoke("youtube_start_upload", { videoId, metadata });
+export function startYouTubeUpload(videoId: string, metadata: { title: string; description: string; madeForKids: boolean; privacyStatus: "private" | "unlisted" | "public"; policyAccepted: boolean; communityGuidelinesConfirmed: boolean }, thumbnail: { metadata: unknown; isClip: boolean; customThumbnailPath?: string | null }): Promise<YouTubeUploadJob> {
+    return invoke("youtube_start_upload", { videoId, metadata, thumbnail });
 }
 
 export function getYouTubeUploadJob(): Promise<YouTubeUploadJob> {
@@ -55,4 +57,16 @@ export function findMissingYouTubeVideos(videoIds: string[]): Promise<string[]> 
 
 export function isPublicYouTubeVideoAvailable(videoId: string): Promise<boolean> {
     return invoke("youtube_is_public_video_available", { videoId });
+}
+
+export function setYouTubeThumbnail(videoId: string, metadata: unknown, options?: { isClip?: boolean; customThumbnailPath?: string | null }): Promise<unknown> {
+    return invoke("youtube_set_thumbnail", { videoId, metadata, options });
+}
+
+export function previewYouTubeThumbnail(metadata: unknown, options?: { isClip?: boolean; customThumbnailPath?: string | null }): Promise<{ dataUrl: string; mimeType: string; bytes: number }> {
+    return invoke("youtube_preview_thumbnail", { metadata, options });
+}
+
+export function chooseYouTubeThumbnail(): Promise<string | null> {
+    return invoke("youtube_choose_thumbnail");
 }
