@@ -1816,3 +1816,21 @@ img.tft-trait {
     background-color: #3f3f3f;
     color: #fff;
 }
+
+/* Share Modal Compact View & Unified Options Alignment */
+.recording-share-modal {
+    transition: width 0.15s ease-out;
+}
+
+.recording-share-modal.recording-share-modal-compact {
+    width: min(340px, calc(100vw - 32px));
+}
+
+.recording-share-modal-compact .recording-share-modal-title {
+    text-align: center;
+}
+
+.recording-share-modal-options {
+    justify-content: center;
+    gap: 12px;
+}

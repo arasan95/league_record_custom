@@ -32,7 +32,7 @@ describe("YouTube upload defaults", () => {
     test("builds title, teams, hashtags and self-event chapters without links", async () => {
         const names: Record<number, string> = { 51: "Caitlyn", 26: "Zilean", 18: "Tristana", 63: "Brand" };
         const result = await buildYouTubeUploadDefaults(metadata(), async (id) => names[id] ?? null);
-        expect(result.title).toBe("Caitlyn ADC vs Tristana | SILVER I | Patch 16.13");
+        expect(result.title).toBe("Caitlyn vs Tristana [BOT] SILVER I Patch 16.13");
         expect(result.description).toContain("Side: Blue Side");
         expect(result.description).toContain("Blue Team: Caitlyn / Zilean");
         expect(result.description).toContain("Red Team: Tristana / Brand");
@@ -52,6 +52,6 @@ describe("YouTube upload defaults", () => {
             ...[6, 7, 8, 9, 10].map((participantId) => ({ participantId, teamId: 200, championId: participantId, lane: "NONE", role: "SUPPORT", stats: {} } as any)),
         ];
         const result = await buildYouTubeUploadDefaults(replay, async (id) => `Champion${id}`);
-        expect(result.title).toBe("Champion4 ADC vs Champion9 | GOLD IV | Patch 16.13");
+        expect(result.title).toBe("Champion4 vs Champion9 [BOT] GOLD IV Patch 16.13");
     });
 });

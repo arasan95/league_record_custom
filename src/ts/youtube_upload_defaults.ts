@@ -117,9 +117,10 @@ export async function buildYouTubeUploadDefaults(
     const selfChampion = names.get(self.participantId) || metadata.championName || `Champion ${self.championId}`;
     const opponentChampion = opponent ? names.get(opponent.participantId) || `Champion ${opponent.championId}` : "Unknown Opponent";
     const role = normalizedLane(self, metadata.participants);
+    const roleTag = role === "ADC" ? "BOT" : role;
     const rank = String(self.rank || "Unranked");
     const patch = shortPatch(metadata.gameVersion);
-    const title = `${selfChampion} ${role} vs ${opponentChampion} | ${rank} | Patch ${patch}`.slice(0, 100);
+    const title = `${selfChampion} vs ${opponentChampion} [${roleTag}] ${rank} Patch ${patch}`.slice(0, 100);
 
     const teamLine = (teamId: number, label: string): string => {
         const champions = metadata.participants
