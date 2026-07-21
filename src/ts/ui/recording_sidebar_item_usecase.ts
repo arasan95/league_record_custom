@@ -4,9 +4,12 @@ import { writeText } from "../platform/clipboard";
 import { open } from "../platform/shell";
 import {
     cancelYouTubeUpload,
+    chooseYouTubeThumbnail,
     getYouTubeAuthStatus,
     getYouTubeFirebaseIdToken,
     getYouTubeUploadJob,
+    previewYouTubeThumbnail,
+    setYouTubeThumbnail,
     signInToYouTube,
     signOutFromYouTube,
     startYouTubeUpload,
@@ -134,6 +137,7 @@ function refreshYouTubeUploadBadges(): void {
 window.addEventListener(YOUTUBE_UPLOAD_HISTORY_CHANGED_EVENT, refreshYouTubeUploadBadges);
 
 function formatUploadProgress(job: YouTubeUploadJob): string {
+    if (job.state === "thumbnail_preparing") return "サムネイルを作成・検証しています…";
     if (job.state === "preparing") return "アップロードを準備しています…";
     if (job.state === "uploading") {
         const sent = job.sentBytes || 0;
@@ -142,6 +146,11 @@ function formatUploadProgress(job: YouTubeUploadJob): string {
         const sentMiB = (sent / 1024 / 1024).toFixed(1);
         const totalMiB = (total / 1024 / 1024).toFixed(1);
         return `アップロード中: ${percent}%（${sentMiB} / ${totalMiB} MiB）`;
+    }
+    if (job.state === "thumbnail_uploading") return "動画の送信が完了しました。サムネイルをYouTubeへ設定しています…";
+    if (job.state === "processing") {
+        const percent = typeof job.processingPercent === "number" ? ` ${job.processingPercent}%` : "";
+        return `YouTubeで動画を処理しています${percent}（${job.processingStatus || "保留中"}）…`;
     }
     if (job.state === "completed") return "YouTubeへのアップロードが完了しました。";
     if (job.state === "cancelled") return "アップロードをキャンセルしました。";
@@ -415,6 +424,7 @@ function closeShareModal(): void {
 async function showShareModal(recording: Recording): Promise<void> {
     closeShareModal();
     const videoId = recording.videoId;
+    const isClipUpload = videoId.includes("_clip");
     const settings = await commands.getSettings().catch(() => null);
     const currentLanguage = (settings?.language || "en") as string;
 
@@ -690,6 +700,77 @@ async function showShareModal(recording: Recording): Promise<void> {
         openVideo.type = "button";
         openVideo.textContent = "YouTubeで開く";
         openVideo.style.display = "none";
+        const retryThumbnail = document.createElement("button");
+        retryThumbnail.className = "recording-share-option";
+        retryThumbnail.type = "button";
+        retryThumbnail.textContent = "サムネイル設定を再試行";
+        retryThumbnail.style.display = "none";
+        const previewThumbnail = document.createElement("button");
+        previewThumbnail.className = "recording-share-option";
+        previewThumbnail.type = "button";
+        previewThumbnail.textContent = "サムネイルをプレビュー";
+        let customThumbnailPath: string | null = null;
+        const thumbnailPicker = document.createElement("div");
+        thumbnailPicker.style.display = "flex";
+        thumbnailPicker.style.gap = "8px";
+        thumbnailPicker.style.alignItems = "center";
+        const thumbnailPathDisplay = document.createElement("input");
+        thumbnailPathDisplay.className = "recording-thumbnail-path";
+        thumbnailPathDisplay.readOnly = true;
+        thumbnailPathDisplay.placeholder = "自動生成サムネイルを使用";
+        thumbnailPathDisplay.style.flex = "1";
+        thumbnailPathDisplay.style.background = "#4b5563";
+        thumbnailPathDisplay.style.color = "#ffffff";
+        thumbnailPathDisplay.style.border = "1px solid #6b7280";
+        const browseThumbnail = document.createElement("button");
+        browseThumbnail.type = "button";
+        browseThumbnail.className = "recording-share-option";
+        browseThumbnail.textContent = "参照…";
+        browseThumbnail.onclick = async () => {
+            const selected = await chooseYouTubeThumbnail();
+            if (!selected) return;
+            customThumbnailPath = selected;
+            thumbnailPathDisplay.value = selected;
+            thumbnailPreviewImage.hidden = true;
+            previewThumbnail.textContent = "サムネイルをプレビュー";
+        };
+        const clearThumbnail = document.createElement("button");
+        clearThumbnail.type = "button";
+        clearThumbnail.className = "recording-share-option";
+        clearThumbnail.textContent = "自動生成に戻す";
+        clearThumbnail.onclick = () => {
+            customThumbnailPath = null;
+            thumbnailPathDisplay.value = "";
+            thumbnailPreviewImage.hidden = true;
+            previewThumbnail.textContent = "サムネイルをプレビュー";
+        };
+        thumbnailPicker.append(thumbnailPathDisplay, browseThumbnail, clearThumbnail);
+        const thumbnailPreviewImage = document.createElement("img");
+        thumbnailPreviewImage.alt = "YouTubeサムネイルのプレビュー";
+        thumbnailPreviewImage.hidden = true;
+        thumbnailPreviewImage.style.width = "100%";
+        thumbnailPreviewImage.style.aspectRatio = "16 / 9";
+        thumbnailPreviewImage.style.objectFit = "contain";
+        thumbnailPreviewImage.style.borderRadius = "10px";
+        thumbnailPreviewImage.style.background = "#0b0e14";
+        previewThumbnail.onclick = async () => {
+            previewThumbnail.disabled = true;
+            status.textContent = "サムネイルのプレビューを作成しています…";
+            try {
+                const preview = await previewYouTubeThumbnail(recording.metadata, {
+                    isClip: isClipUpload,
+                    customThumbnailPath,
+                });
+                thumbnailPreviewImage.src = preview.dataUrl;
+                thumbnailPreviewImage.hidden = false;
+                status.textContent = `サムネイルのプレビューを作成しました（${Math.ceil(preview.bytes / 1024)}KB）。`;
+                previewThumbnail.textContent = "プレビューを更新";
+            } catch (error) {
+                status.textContent = error instanceof Error ? error.message : String(error);
+            } finally {
+                previewThumbnail.disabled = false;
+            }
+        };
         const uploadedVideoId = document.createElement("div");
         uploadedVideoId.className = "recording-share-uploaded-id";
         uploadedVideoId.hidden = true;
@@ -732,6 +813,7 @@ async function showShareModal(recording: Recording): Promise<void> {
         let uploadHasStarted = false;
         let shouldPublishMetadata = false;
         let replayShareState: "idle" | "publishing" | "published" | "not_requested" | "unavailable" | "failed" = "idle";
+        let thumbnailState: "idle" | "setting" | "set" | "failed" = "idle";
         let completedJob: YouTubeUploadJob | null = null;
         const normalizedSourceName = (value: string) => value.replace(/\\/g, "/").split("/").pop()?.replace(/\.(mp4|webm)$/i, "") ?? "";
         const jobBelongsToRecording = (job: YouTubeUploadJob) => (
@@ -751,6 +833,23 @@ async function showShareModal(recording: Recording): Promise<void> {
                 return true;
             } catch (error) {
                 status.textContent = `試合データを登録できません。${error instanceof Error ? error.message : String(error)}`;
+                return false;
+            }
+        };
+        const setThumbnailForJob = async (job: YouTubeUploadJob): Promise<boolean> => {
+            if (!job.youtubeVideoId || thumbnailState === "setting") return false;
+            thumbnailState = "setting";
+            retryThumbnail.style.display = "none";
+            try {
+                status.textContent = "サムネイルを生成して設定しています…";
+                await setYouTubeThumbnail(job.youtubeVideoId, recording.metadata, { isClip: isClipUpload, customThumbnailPath });
+                thumbnailState = "set";
+                return true;
+            } catch (error) {
+                thumbnailState = "failed";
+                retryThumbnail.style.display = "";
+                console.warn("Failed to set YouTube thumbnail:", error);
+                status.textContent = `動画のアップロードは完了しましたが、サムネイルを設定できませんでした。${error instanceof Error ? error.message : String(error)}`;
                 return false;
             }
         };
@@ -779,6 +878,31 @@ async function showShareModal(recording: Recording): Promise<void> {
                 upload.disabled = false;
             }
         };
+        const finishCompletedUpload = async (job: YouTubeUploadJob) => {
+            completedJob = job;
+            if (shouldPublishMetadata) {
+                await publishMetadata(job);
+                if (replayShareState === "published") {
+                    status.textContent = "YouTubeへのアップロード、サムネイル設定、試合データ登録が完了しました。";
+                }
+                return;
+            }
+            replayShareState = "not_requested";
+            status.textContent = job.processingStatus === "pending"
+                ? "動画とサムネイルのアップロードが完了しました。YouTube側では動画処理が引き続き保留中です。"
+                : "YouTubeへのアップロードとサムネイル設定が完了しました。試合データは登録していません。";
+        };
+        retryThumbnail.onclick = async () => {
+            if (!completedJob) return;
+            retryThumbnail.disabled = true;
+            thumbnailState = "idle";
+            const succeeded = await setThumbnailForJob(completedJob);
+            retryThumbnail.disabled = false;
+            if (succeeded) {
+                retryThumbnail.style.display = "none";
+                status.textContent = "サムネイルを設定しました。";
+            }
+        };
         const showJob = (job: YouTubeUploadJob) => {
             // The first status poll can race the IPC command and still be
             // idle. Keep the optimistic "preparing" state in that case.
@@ -786,10 +910,19 @@ async function showShareModal(recording: Recording): Promise<void> {
             if (job.state !== "completed" || replayShareState === "idle") {
                 status.textContent = formatUploadProgress(job);
             }
-            const inFlight = job.state === "preparing" || job.state === "uploading";
+            const inFlight = ["thumbnail_preparing", "preparing", "uploading", "thumbnail_uploading", "processing"].includes(job.state);
             if (inFlight) uploadHasStarted = true;
             upload.disabled = inFlight;
             cancel.style.display = inFlight ? "" : "none";
+            if (job.youtubeVideoId && job.youtubeUrl && jobBelongsToRecording(job)) {
+                openVideo.style.display = "";
+                openVideo.onclick = () => void open(job.youtubeUrl!);
+                uploadedVideoIdValue.textContent = job.youtubeVideoId;
+                uploadedVideoId.hidden = false;
+                rememberYouTubeUpload(videoId, job.youtubeVideoId);
+                completedJob = job;
+                if (job.state === "failed") retryThumbnail.style.display = "";
+            }
             if (job.state === "completed" && job.youtubeUrl) {
                 openVideo.style.display = "";
                 openVideo.onclick = () => void open(job.youtubeUrl!);
@@ -800,12 +933,9 @@ async function showShareModal(recording: Recording): Promise<void> {
                 if (job.youtubeVideoId && jobBelongsToRecording(job)) {
                     rememberYouTubeUpload(videoId, job.youtubeVideoId);
                 }
-                if (shouldPublishMetadata && replayShareState === "idle") {
-                    void publishMetadata(job);
-                } else if (!shouldPublishMetadata && replayShareState === "idle") {
-                    replayShareState = "not_requested";
-                    status.textContent = "YouTubeへのアップロードが完了しました。試合データは登録していません。HD画質はYouTubeの処理完了後に利用できます。";
-                } else if (replayShareState === "idle" && job.youtubeVideoId && jobBelongsToRecording(job)) {
+                if (uploadHasStarted && job.youtubeVideoId && jobBelongsToRecording(job) && replayShareState === "idle") {
+                    void finishCompletedUpload(job);
+                } else if (!uploadHasStarted && replayShareState === "idle" && job.youtubeVideoId && jobBelongsToRecording(job)) {
                     completedJob = job;
                     replayShareState = "failed";
                     status.textContent = "YouTubeへのアップロードは完了しています。試合データの登録を再試行できます。";
@@ -841,7 +971,7 @@ async function showShareModal(recording: Recording): Promise<void> {
             upload.disabled = true;
             uploadHasStarted = true;
             shouldPublishMetadata = registerReplayShare.checked;
-            showJob({ state: "preparing" });
+            showJob({ state: "thumbnail_preparing" });
             try {
                 void startYouTubeUpload(videoId, {
                     title: titleInput.value,
@@ -850,6 +980,10 @@ async function showShareModal(recording: Recording): Promise<void> {
                     privacyStatus: privacyStatus.value as "private" | "unlisted" | "public",
                     policyAccepted: policyAccepted.checked,
                     communityGuidelinesConfirmed: guidelinesConfirmed.checked,
+                }, {
+                    metadata: recording.metadata,
+                    isClip: isClipUpload,
+                    customThumbnailPath,
                 })
                     .then(showJob)
                     .catch((error) => {
@@ -863,8 +997,8 @@ async function showShareModal(recording: Recording): Promise<void> {
             }
         };
         cancel.onclick = () => { void cancelYouTubeUpload().then(showJob); };
-        actions.prepend(upload, cancel, openVideo, disconnect);
-        content.append(title, status, titleInput, description, privacyStatus, registerReplayShareLabel, anonymousShareLabel, policyLabel, guidelinesLabel, note, existingVideoUrl, republishMetadata, uploadedVideoId, actions);
+        actions.prepend(upload, cancel, previewThumbnail, retryThumbnail, openVideo, disconnect);
+        content.append(title, status, thumbnailPicker, thumbnailPreviewImage, titleInput, description, privacyStatus, registerReplayShareLabel, anonymousShareLabel, policyLabel, guidelinesLabel, note, existingVideoUrl, republishMetadata, uploadedVideoId, actions);
         const existing = await getYouTubeUploadJob();
         showJob(existing);
     };
