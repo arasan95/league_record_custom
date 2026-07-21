@@ -28,6 +28,7 @@ import {
 } from "../youtube_upload_history";
 import xLogoIcon from "../../assets/share-icons/x-logo.svg";
 import discordSymbolIcon from "../../assets/share-icons/discord-symbol.svg";
+import youtubeIcon from "../../assets/share-icons/youtube-icon.svg";
 import {
     getChampionIconUrl,
     getChampionIconUrlById,
@@ -86,12 +87,12 @@ function createReplayActionButton(videoId: string, titleText: string): HTMLSpanE
     return button;
 }
 
-function createShareIcon(kind: "x" | "discord"): HTMLImageElement {
+function createShareIcon(kind: "x" | "discord" | "youtube"): HTMLImageElement {
     const img = document.createElement("img");
     img.className = "recording-share-option-icon";
     img.alt = "";
     img.draggable = false;
-    img.src = kind === "x" ? xLogoIcon : discordSymbolIcon;
+    img.src = kind === "x" ? xLogoIcon : kind === "discord" ? discordSymbolIcon : youtubeIcon;
     return img;
 }
 
@@ -429,6 +430,7 @@ async function showShareModal(recording: Recording): Promise<void> {
     content.className = "recording-share-modal-content";
 
     const renderSelectView = () => {
+        panel.classList.add("recording-share-modal-compact");
         content.replaceChildren();
 
         const title = document.createElement("div");
@@ -455,11 +457,11 @@ async function showShareModal(recording: Recording): Promise<void> {
         discordButton.onclick = () => renderDiscordView();
 
         const youtubeButton = document.createElement("button");
-        youtubeButton.className = "recording-share-option recording-share-option-youtube";
+        youtubeButton.className = "recording-share-option recording-share-option-icon-only";
         youtubeButton.type = "button";
         youtubeButton.title = "YouTube";
         youtubeButton.setAttribute("aria-label", "YouTubeへアップロード");
-        youtubeButton.textContent = "▶ YouTube";
+        youtubeButton.append(createShareIcon("youtube"));
         youtubeButton.onclick = () => void renderYouTubeView();
 
         const uploaded = findYouTubeUploadForSource(videoId);
@@ -503,6 +505,7 @@ async function showShareModal(recording: Recording): Promise<void> {
     };
 
     const renderYouTubeView = async () => {
+        panel.classList.remove("recording-share-modal-compact");
         content.replaceChildren();
         const videoPath = getRecordingMp4Path(videoId);
         const defaultTitle = basename(videoPath).replace(/\.(mp4|webm)$/i, "");
@@ -867,6 +870,7 @@ async function showShareModal(recording: Recording): Promise<void> {
     };
 
     const renderXView = () => {
+        panel.classList.add("recording-share-modal-compact");
         content.replaceChildren();
         const videoPath = getRecordingMp4Path(videoId);
         const fileName = basename(videoPath);
@@ -925,6 +929,7 @@ async function showShareModal(recording: Recording): Promise<void> {
     };
 
     const renderDiscordView = () => {
+        panel.classList.add("recording-share-modal-compact");
         content.replaceChildren();
         const videoPath = getRecordingMp4Path(videoId);
         const fileName = basename(videoPath);
