@@ -610,6 +610,7 @@ async function rmFileWithRetry(filePath, options = {}) {
 
 async function clearCache() {
   await clearDirectory(path.join(app.getPath("userData"), "img_cache"));
+  await clearDirectory(path.join(getAppLocalDataPath(), "img_cache"));
   await clearDirectory(path.join(app.getPath("userData"), "items_cache"));
   await clearDirectory(path.join(app.getPath("userData"), "tooltip_cache"));
   return null;
@@ -617,6 +618,7 @@ async function clearCache() {
 
 async function clearCacheForPatchUpdate() {
   await clearDirectory(path.join(app.getPath("userData"), "img_cache"));
+  await clearDirectory(path.join(getAppLocalDataPath(), "img_cache"));
   await clearDirectory(path.join(app.getPath("userData"), "items_cache"));
   return null;
 }
@@ -3449,7 +3451,19 @@ function makeInvokeHandler(win) {
       case "youtube_get_upload_job":
         return youtubeService.getUploadJob();
       case "youtube_start_upload":
-        return youtubeService.startUpload({ videoId: args.videoId, metadata: args.metadata });
+        return youtubeService.startUpload({ videoId: args.videoId, metadata: args.metadata, thumbnail: args.thumbnail });
+      case "youtube_set_thumbnail":
+        return youtubeService.setThumbnail({ videoId: args.videoId, metadata: args.metadata, options: args.options });
+      case "youtube_preview_thumbnail":
+        return youtubeService.previewThumbnail(args.metadata, args.options);
+      case "youtube_choose_thumbnail": {
+        const result = await dialog.showOpenDialog(win, {
+          title: "YouTubeサムネイルを選択",
+          properties: ["openFile"],
+          filters: [{ name: "画像", extensions: ["png", "jpg", "jpeg"] }],
+        });
+        return result.canceled ? null : result.filePaths[0] || null;
+      }
       case "youtube_cancel_upload":
         return youtubeService.cancelUpload();
       case "youtube_find_missing_videos":
@@ -3587,7 +3601,7 @@ function makeInvokeHandler(win) {
         return clearCacheForPatchUpdate();
       case "download_image": {
         const rel = path.join("img_cache", args.category ?? "misc", args.filename ?? "image.png");
-        const abs = path.join(app.getPath("userData"), rel);
+        const abs = path.join(getAppLocalDataPath(), rel);
         try {
           await downloadToPath(args.url, abs);
           return abs;
@@ -3737,6 +3751,7 @@ function createWindow() {
     fs,
     fsNode,
     getSettings: readSettings,
+    getImageCacheRoots: () => [getAppLocalDataPath(), app.getPath("userData")],
     isRecording: () => Boolean(recorderController?.current),
     emit: (type, payload) => emitAppEvent(win, type, payload),
     log: (message) => writeLog("youtube", message),

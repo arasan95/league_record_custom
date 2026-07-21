@@ -61,6 +61,11 @@ TOOLTIP_HANDOVER_JA.md
 .markdownlint.json
 tooltip_exports
 
+# Local YouTube thumbnail design/verification artifacts
+src/thumbnail_preview.html
+scripts/verify-thumbnail.cjs
+league-record-thumbnail-*.png
+
 av-triage-results/
 
 # Bundled binaries are prepared in CI, not tracked in git.
