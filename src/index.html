@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="css/settings.css" />
     <link rel="stylesheet" href="css/tooltip.css" />
     <link rel="stylesheet" href="css/titlebar.css" />
+    <link rel="stylesheet" href="css/review-comments.css" />
     <script>
       window.addEventListener("error", (event) => {
         const details = event.error && event.error.stack ? event.error.stack : event.message;
@@ -60,7 +61,7 @@
     <div id="container">
       <nav id="server-nav">
           <button class="server-icon active" id="nav-filter-all" title="All Matches">All</button>
-          <button class="server-icon" id="nav-youtube-replay" title="YouTube共有リプレイ" aria-label="YouTube共有リプレイ">
+          <button class="server-icon" id="nav-youtube-replay" title="YouTube共有リプレイ" aria-label="YouTube共有リプレイ" data-ui-title="youtubeSharedReplay" data-ui-aria-label="youtubeSharedReplay">
               <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="3" y="5" width="18" height="14" rx="3"></rect>
                   <path d="m10 9 5 3-5 3z" fill="currentColor" stroke="none"></path>
@@ -204,33 +205,47 @@
         <section id="youtube-replay-sidebar" aria-labelledby="youtube-replay-title">
           <div class="youtube-replay-sidebar-inner">
             <div class="youtube-replay-eyebrow">SHARED REPLAY</div>
-            <h2 id="youtube-replay-title">YouTubeから再生</h2>
-            <p>LeagueRecordで共有されたYouTube URLを入力してください。</p>
-            <label for="youtube-replay-url">YouTube URL</label>
-            <textarea id="youtube-replay-url" rows="3" placeholder="https://www.youtube.com/watch?v=..." spellcheck="false"></textarea>
-            <button id="youtube-replay-load" type="button">試合データを読み込む</button>
-            <div id="youtube-replay-status" role="status" aria-live="polite"></div>
-            <div id="youtube-ui-comparison" hidden>
-              <label class="youtube-ui-comparison-toggle" for="youtube-ui-comparison-enabled">
-                <input id="youtube-ui-comparison-enabled" type="checkbox" checked />
-                <span>YouTube UIを隠す</span>
-              </label>
+            <h2 id="youtube-replay-title" data-ui-text="youtubePlayTitle">YouTubeから再生</h2>
+            <div class="youtube-replay-tabs" role="tablist" aria-label="共有リプレイの表示" data-ui-aria-label="sharedReplayView">
+              <button id="youtube-replay-history-tab" type="button" role="tab" aria-selected="true" aria-controls="youtube-replay-history-panel" data-ui-text="loadHistory">読み込み履歴</button>
+              <button id="youtube-replay-owned-tab" type="button" role="tab" aria-selected="false" aria-controls="youtube-replay-owned-panel" data-ui-text="myUploads">自分の投稿</button>
             </div>
-            <div id="youtube-replay-summary" hidden>
-              <div class="youtube-replay-summary-label">読み込み済み</div>
-              <strong id="youtube-replay-summary-title"></strong>
-              <span id="youtube-replay-summary-id"></span>
+            <div id="youtube-replay-history-panel" class="youtube-replay-tab-panel" role="tabpanel" aria-labelledby="youtube-replay-history-tab">
+              <p data-ui-text="youtubeUrlHelp">LeagueRecordで共有されたYouTube URLを入力してください。</p>
+              <label for="youtube-replay-url">YouTube URL</label>
+              <textarea id="youtube-replay-url" rows="3" placeholder="https://www.youtube.com/watch?v=..." spellcheck="false"></textarea>
+              <button id="youtube-replay-load" type="button" data-ui-text="loadMatchData">試合データを読み込む</button>
+              <div id="youtube-replay-status" role="status" aria-live="polite"></div>
+              <div id="youtube-ui-comparison" hidden>
+                <label class="youtube-ui-comparison-toggle" for="youtube-ui-comparison-enabled">
+                  <input id="youtube-ui-comparison-enabled" type="checkbox" checked />
+                  <span data-ui-text="hideYoutubeUi">YouTube UIを隠す</span>
+                </label>
+              </div>
+              <div id="youtube-replay-summary" hidden>
+                <div class="youtube-replay-summary-label" data-ui-text="loaded">読み込み済み</div>
+                <strong id="youtube-replay-summary-title"></strong>
+                <span id="youtube-replay-summary-id"></span>
+              </div>
+              <div id="youtube-replay-history-header" hidden>
+                <span data-ui-text="loadHistory">読み込み履歴</span>
+                <button id="youtube-replay-history-clear" type="button" data-ui-text="clearAll">すべてクリア</button>
+              </div>
+              <ul id="youtube-replay-history" aria-label="読み込み済みの共有リプレイ" data-ui-aria-label="loadedSharedReplays" hidden></ul>
             </div>
-            <div id="youtube-replay-history-header" hidden>
-              <span>読み込み履歴</span>
-              <button id="youtube-replay-history-clear" type="button">すべてクリア</button>
+            <div id="youtube-replay-owned-panel" class="youtube-replay-tab-panel" role="tabpanel" aria-labelledby="youtube-replay-owned-tab" hidden>
+              <div class="youtube-replay-owned-toolbar">
+                <span id="youtube-replay-owned-status" role="status" aria-live="polite" data-ui-text="ownedInitial">Googleアカウントから取得します。</span>
+                <button id="youtube-replay-owned-refresh" type="button" data-ui-text="refresh">更新</button>
+              </div>
+              <ul id="youtube-replay-owned" aria-label="自分が投稿した共有リプレイ" data-ui-aria-label="ownedSharedReplays" hidden></ul>
             </div>
-            <ul id="youtube-replay-history" aria-label="読み込み済みの共有リプレイ" hidden></ul>
           </div>
         </section>
       </div>
 
       <div id="main" class="hide-scrollbar">
+        <button id="review-comments-collapse-toggle" type="button" aria-label="コメント欄を格納" title="コメント欄を格納" data-ui-title="collapseComments" data-ui-aria-label="collapseComments">›</button>
         <video id="video_player" class="video-js vjs-big-play-centered">
           <p class="vjs-no-js">Error: JavaScript not enabled</p>
         </video>
@@ -287,6 +302,110 @@
           </div>
         </div>
       </div>
+
+      <aside id="review-comments" aria-label="復習コメント" data-ui-aria-label="reviewCommentsAria">
+        <div id="review-comments-resizer" class="review-comments-resizer" role="separator" aria-label="コメント欄の幅を変更" data-ui-aria-label="resizeComments" aria-orientation="vertical" tabindex="0"></div>
+        <header class="review-comments-header">
+          <div>
+            <span class="review-comments-eyebrow">VIDEO REVIEW</span>
+            <h2 data-ui-text="reviewComments">コメント</h2>
+          </div>
+          <span id="review-comment-count" class="review-comment-count">0</span>
+        </header>
+
+        <div class="review-comment-filters" role="group" aria-label="コメント評価で絞り込み" data-ui-aria-label="filterComments">
+          <button type="button" data-comment-filter="all" class="active" data-ui-text="all">すべて</button>
+          <button type="button" data-comment-filter="good"><span aria-hidden="true">●</span> GOOD</button>
+          <button type="button" data-comment-filter="bad"><span aria-hidden="true">▲</span> BAD</button>
+          <button type="button" data-comment-filter="question"><span aria-hidden="true">?</span> Question</button>
+        </div>
+
+        <div class="review-comment-display-options">
+          <label class="review-comment-display-option">
+            <input id="review-comments-flow-enabled" type="checkbox" checked />
+            <span data-ui-text="flowComments">コメントを動画上に流す</span>
+          </label>
+          <button id="review-comments-visibility" type="button" aria-pressed="false" data-ui-text="hideComments">◉ コメント非表示</button>
+        </div>
+
+        <section id="community-comments-panel" class="community-comments-panel" hidden>
+          <div class="community-comments-title-row">
+            <strong data-ui-text="sharedComments">共有コメント</strong>
+            <span id="community-comments-status" data-ui-text="checking">確認中…</span>
+          </div>
+          <button id="community-comments-signin" type="button" hidden data-ui-text="connectGoogle">Googleアカウントを接続</button>
+          <div id="community-comments-owner-controls" hidden>
+            <label><span data-ui-text="posting">投稿</span>
+              <select id="community-write-access">
+                <option value="public" data-ui-text="allSignedInUsers">ログインユーザー全員</option>
+                <option value="invite_only" data-ui-text="invitedUsersOnly">招待ユーザーのみ</option>
+              </select>
+            </label>
+            <label><span data-ui-text="viewing">閲覧</span>
+              <select id="community-read-access">
+                <option value="public" data-ui-text="everyone">全員</option>
+                <option value="invite_only" data-ui-text="invitedUsersOnly">招待ユーザーのみ</option>
+              </select>
+            </label>
+            <button id="community-settings-save" type="button" data-ui-text="saveSettings">設定を保存</button>
+            <button id="community-invite-create" type="button" data-ui-text="createInvite">招待コードを発行</button>
+            <input id="community-invite-output" type="text" readonly hidden aria-label="発行した招待コード" data-ui-aria-label="issuedInvite" />
+          </div>
+          <div class="community-invite-redeem">
+            <input id="community-invite-code" type="text" placeholder="招待コード" data-ui-placeholder="inviteCode" autocomplete="off" spellcheck="false" />
+            <button id="community-invite-redeem" type="button" data-ui-text="join">参加</button>
+          </div>
+          <label class="community-group-filter"><span data-ui-text="displayGroup">表示グループ</span>
+            <select id="community-group-filter">
+              <option value="all" data-ui-text="all">すべて</option>
+              <option value="invited" data-ui-text="invitedUsersOnly">招待ユーザーのみ</option>
+            </select>
+          </label>
+        </section>
+
+        <div id="review-comment-empty" class="review-comment-empty" data-ui-text="chooseVideoComments">
+          動画を選ぶと、その動画のコメントが表示されます。
+        </div>
+        <ol id="review-comment-list" class="review-comment-list" aria-live="polite"></ol>
+
+        <form id="review-comment-form" class="review-comment-form">
+          <textarea id="review-comment-input" rows="2" maxlength="280" placeholder="現在の時刻にコメントを追加…" data-ui-placeholder="addAtCurrentTime" disabled></textarea>
+          <div class="review-comment-options">
+            <div class="review-comment-rating" role="group" aria-label="評価" data-ui-aria-label="rating">
+              <button type="button" data-comment-rating="good" class="active good">●</button>
+              <button type="button" data-comment-rating="bad" class="bad">▲</button>
+              <button type="button" data-comment-rating="question" class="question">?</button>
+            </div>
+            <label class="review-color-control" title="文字色" data-ui-title="textColor">
+              <span data-ui-text="color">色</span>
+              <input id="review-comment-color" type="color" value="#ffffff" />
+            </label>
+            <label>
+              <span data-ui-text="size">大きさ</span>
+              <select id="review-comment-size">
+                <option value="small" data-ui-text="small">小</option>
+                <option value="medium" selected data-ui-text="medium">中</option>
+                <option value="large" data-ui-text="large">大</option>
+              </select>
+            </label>
+            <label>
+              <span data-ui-text="duration">秒数</span>
+              <select id="review-comment-duration">
+                <option value="3" data-ui-text="seconds3">3秒</option>
+                <option value="5" selected data-ui-text="seconds5">5秒</option>
+                <option value="8" data-ui-text="seconds8">8秒</option>
+                <option value="12" data-ui-text="seconds12">12秒</option>
+              </select>
+            </label>
+          </div>
+          <label id="review-comment-private-label" class="review-comment-private" hidden>
+            <input id="review-comment-private" type="checkbox" />
+            <span data-ui-text="privateComment">自分だけに表示</span>
+          </label>
+          <button id="review-comment-submit" type="submit" disabled data-ui-text="postCurrentTime">現在時刻に投稿</button>
+          <p class="review-comment-hint" data-ui-text="dragHint">コメントを動画へドラッグすると、その位置に固定表示できます。</p>
+        </form>
+      </aside>
     </div>
   </body>
 </html>

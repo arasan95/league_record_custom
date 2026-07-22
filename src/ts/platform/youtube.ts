@@ -1,6 +1,7 @@
 import { invoke } from "./core";
 
 export const YOUTUBE_AUTH_CONNECTED_EVENT = "league-record-youtube-auth-connected";
+export const YOUTUBE_AUTH_CHANGED_EVENT = "league-record-youtube-auth-changed";
 
 export type YouTubeAuthStatus = {
     configured: boolean;

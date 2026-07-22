@@ -5,7 +5,7 @@ export type UiCreateEl = (
     content?: unknown,
 ) => HTMLElement;
 
-export type SettingsTabName = "general" | "display" | "hotkeys" | "about";
+export type SettingsTabName = "general" | "display" | "hotkeys" | "account" | "about";
 
 export type LabeledSwitch = {
     container: HTMLDivElement;
@@ -66,10 +66,12 @@ export function switchSettingsTab(
     tabs.general.classList.toggle("active", tabName === "general");
     tabs.display.classList.toggle("active", tabName === "display");
     tabs.hotkeys.classList.toggle("active", tabName === "hotkeys");
+    tabs.account.classList.toggle("active", tabName === "account");
     tabs.about.classList.toggle("active", tabName === "about");
 
     contents.general.classList.toggle("hidden", tabName !== "general");
     contents.display.classList.toggle("hidden", tabName !== "display");
     contents.hotkeys.classList.toggle("hidden", tabName !== "hotkeys");
+    contents.account.classList.toggle("hidden", tabName !== "account");
     contents.about.classList.toggle("hidden", tabName !== "about");
 }

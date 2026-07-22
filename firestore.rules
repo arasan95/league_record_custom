@@ -115,6 +115,111 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    function commentQuotaPath(uid, videoId) {
+      return /databases/$(database)/documents/commentWriteQuotas/$(uid + '_' + videoId);
+    }
+
+    function hasValidCommentQuota(data, uid, videoId) {
+      return data.keys().hasAll(['uid', 'videoId', 'lastCommentId', 'windowStartedAt', 'lastWriteAt', 'writeCount'])
+        && data.keys().hasOnly(['uid', 'videoId', 'lastCommentId', 'windowStartedAt', 'lastWriteAt', 'writeCount'])
+        && data.uid == uid
+        && data.videoId == videoId
+        && data.lastCommentId is string
+        && data.lastCommentId.matches('^[A-Za-z0-9_-]{8,80}$')
+        && data.windowStartedAt is timestamp
+        && data.lastWriteAt is timestamp
+        && data.writeCount is int
+        && data.writeCount > 0
+        && data.writeCount <= 200;
+    }
+
+    function isInitialCommentQuota(after, uid, videoId, commentId) {
+      return !exists(commentQuotaPath(uid, videoId))
+        && hasValidCommentQuota(after, uid, videoId)
+        && after.lastCommentId == commentId
+        && after.windowStartedAt == request.time
+        && after.lastWriteAt == request.time
+        && after.writeCount == 1;
+    }
+
+    function isContinuedCommentQuota(before, after, uid, videoId, commentId) {
+      return exists(commentQuotaPath(uid, videoId))
+        && hasValidCommentQuota(after, uid, videoId)
+        && after.lastCommentId == commentId
+        && after.lastWriteAt == request.time
+        && (
+          (request.time >= before.windowStartedAt + duration.value(24, 'h')
+            && after.windowStartedAt == request.time
+            && after.writeCount == 1)
+          ||
+          (request.time < before.windowStartedAt + duration.value(24, 'h')
+            && request.time >= before.lastWriteAt + duration.value(2, 's')
+            && after.windowStartedAt == before.windowStartedAt
+            && after.writeCount == before.writeCount + 1)
+        );
+    }
+
+    function consumesCommentQuota(uid, videoId, commentId) {
+      let path = commentQuotaPath(uid, videoId);
+      let after = getAfter(path).data;
+      return isInitialCommentQuota(after, uid, videoId, commentId)
+        || isContinuedCommentQuota(get(path).data, after, uid, videoId, commentId);
+    }
+
+    match /commentWriteQuotas/{quotaId} {
+      allow get: if isGoogleUser() && (resource == null || resource.data.uid == request.auth.uid);
+      allow list, delete: if false;
+      allow create, update: if isGoogleUser()
+        && quotaId == request.auth.uid + '_' + request.resource.data.videoId
+        && hasValidCommentQuota(request.resource.data, request.auth.uid, request.resource.data.videoId)
+        && request.resource.data.lastWriteAt == request.time;
+    }
+
+    function hasValidCommunityProfile(data, uid) {
+      return data.keys().hasAll(['uid', 'publicId', 'accountName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'publicId', 'accountName', 'createdAt', 'updatedAt'])
+        && data.uid == uid
+        && data.publicId is string
+        && data.publicId.matches('^[A-Za-z0-9]{10}$')
+        && (data.accountName == null || (data.accountName is string
+          && data.accountName.size() > 0 && data.accountName.size() <= 32))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /communityProfiles/{uid} {
+      allow get: if isGoogleUser() && request.auth.uid == uid;
+      allow list, delete: if false;
+      allow create: if isGoogleUser()
+        && request.auth.uid == uid
+        && hasValidCommunityProfile(request.resource.data, uid)
+        && request.resource.data.accountName == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/communityPublicIds/$(request.resource.data.publicId))
+        && getAfter(/databases/$(database)/documents/communityPublicIds/$(request.resource.data.publicId)).data.uid == uid;
+      allow update: if isGoogleUser()
+        && request.auth.uid == uid
+        && hasValidCommunityProfile(request.resource.data, uid)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.publicId == resource.data.publicId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['accountName', 'updatedAt']);
+    }
+
+    match /communityPublicIds/{publicId} {
+      allow get, list, update, delete: if false;
+      allow create: if isGoogleUser()
+        && publicId.matches('^[A-Za-z0-9]{10}$')
+        && request.resource.data.keys().hasAll(['uid', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && existsAfter(/databases/$(database)/documents/communityProfiles/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.publicId == publicId;
+    }
+
     match /replays/{videoId} {
 
       function hasValidFields(data) {
@@ -169,10 +274,14 @@ service cloud.firestore {
           && data.updatedAt is timestamp;
       }
 
-      // A viewer may open one known published replay, but cannot enumerate all replays.
+      // A viewer may open one known published replay. Authenticated owners may
+      // query only their own replay documents (the query must filter ownerUid).
       allow get: if videoId.matches('^[A-Za-z0-9_-]{11}$')
         && (resource == null || isValidReplay(resource.data));
-      allow list: if false;
+      allow list: if isGoogleUser()
+        && resource.data.ownerUid == request.auth.uid
+        && request.query.limit != null
+        && request.query.limit <= 100;
       allow create: if isGoogleUser()
         && request.resource.data.ownerUid == request.auth.uid
         && consumesReplayQuota(true, videoId)
@@ -193,6 +302,306 @@ service cloud.firestore {
         ])
         && isValidReplay(request.resource.data);
       allow delete: if isGoogleUser() && resource.data.ownerUid == request.auth.uid;
+
+      function replayOwnerUid() {
+        return get(/databases/$(database)/documents/replays/$(videoId)).data.ownerUid;
+      }
+
+      function isReplayCommentOwner() {
+        return isGoogleUser() && request.auth.uid == replayOwnerUid();
+      }
+
+      function isActiveCommentMember() {
+        return isGoogleUser()
+          && exists(/databases/$(database)/documents/replays/$(videoId)/commentMembers/$(request.auth.uid))
+          && get(/databases/$(database)/documents/replays/$(videoId)/commentMembers/$(request.auth.uid)).data.status == 'active';
+      }
+
+      function canReadPublicComments() {
+        return !exists(/databases/$(database)/documents/replays/$(videoId)/commentSettings/access)
+          || get(/databases/$(database)/documents/replays/$(videoId)/commentSettings/access).data.readAccess == 'public'
+          || isReplayCommentOwner()
+          || isActiveCommentMember();
+      }
+
+      function canWriteCommunityComments() {
+        return canReadPublicComments()
+          && (
+            isReplayCommentOwner()
+            || isActiveCommentMember()
+            || (exists(/databases/$(database)/documents/replays/$(videoId)/commentSettings/access)
+              && get(/databases/$(database)/documents/replays/$(videoId)/commentSettings/access).data.writeAccess == 'public')
+          );
+      }
+
+      function hasValidSettings(data) {
+        return data.keys().hasAll(['ownerUid', 'writeAccess', 'readAccess', 'createdAt', 'updatedAt'])
+          && data.keys().hasOnly(['ownerUid', 'writeAccess', 'readAccess', 'createdAt', 'updatedAt'])
+          && data.ownerUid == replayOwnerUid()
+          && (data.writeAccess == 'public' || data.writeAccess == 'invite_only')
+          && (data.readAccess == 'public' || data.readAccess == 'invite_only')
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp;
+      }
+
+      match /commentSettings/{settingsId} {
+        allow get: if settingsId == 'access';
+        allow list, delete: if false;
+        allow create: if settingsId == 'access'
+          && isReplayCommentOwner()
+          && hasValidSettings(request.resource.data)
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time;
+        allow update: if settingsId == 'access'
+          && isReplayCommentOwner()
+          && hasValidSettings(request.resource.data)
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['writeAccess', 'readAccess', 'updatedAt']);
+      }
+
+      match /commentMembers/{uid} {
+        allow get: if isGoogleUser() && (request.auth.uid == uid || isReplayCommentOwner());
+        allow list: if isReplayCommentOwner();
+        allow create: if isGoogleUser()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasAll([
+            'uid', 'role', 'status', 'displayName', 'groupIds', 'invitedByUid', 'grantedAt', 'updatedAt'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'uid', 'role', 'status', 'displayName', 'groupIds', 'invitedByUid', 'grantedAt', 'updatedAt'
+          ])
+          && request.resource.data.uid == uid
+          && request.resource.data.role == 'commenter'
+          && request.resource.data.status == 'active'
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() > 0
+          && request.resource.data.displayName.size() <= 64
+          && request.resource.data.groupIds is list
+          && request.resource.data.groupIds.size() == 1
+          && request.resource.data.groupIds[0] is string
+          && request.resource.data.groupIds[0].matches('^[0-9a-f]{48}$')
+          && request.resource.data.grantedAt == request.time
+          && request.resource.data.updatedAt == request.time
+          && exists(/databases/$(database)/documents/replays/$(videoId)/commentInvites/$(request.resource.data.groupIds[0]))
+          && get(/databases/$(database)/documents/replays/$(videoId)/commentInvites/$(request.resource.data.groupIds[0])).data.createdByUid == request.resource.data.invitedByUid
+          && getAfter(/databases/$(database)/documents/replays/$(videoId)/commentInvites/$(request.resource.data.groupIds[0])).data.usedCount
+            == get(/databases/$(database)/documents/replays/$(videoId)/commentInvites/$(request.resource.data.groupIds[0])).data.usedCount + 1;
+        allow update, delete: if false;
+      }
+
+      match /commentInvites/{inviteId} {
+        allow get: if isGoogleUser();
+        allow list, delete: if false;
+        allow create: if isReplayCommentOwner()
+          && inviteId.matches('^[0-9a-f]{48}$')
+          && request.resource.data.keys().hasAll([
+            'status', 'role', 'createdByUid', 'createdAt', 'expiresAt', 'maxUses', 'usedCount'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'status', 'role', 'createdByUid', 'createdAt', 'expiresAt', 'maxUses', 'usedCount'
+          ])
+          && request.resource.data.status == 'active'
+          && request.resource.data.role == 'commenter'
+          && request.resource.data.createdByUid == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.expiresAt is timestamp
+          && request.resource.data.expiresAt > request.time + duration.value(23, 'h')
+          && request.resource.data.expiresAt < request.time + duration.value(25, 'h')
+          && request.resource.data.maxUses == 1
+          && request.resource.data.usedCount == 0;
+        allow update: if isGoogleUser()
+          && inviteId.matches('^[0-9a-f]{48}$')
+          && resource.data.status == 'active'
+          && resource.data.role == 'commenter'
+          && resource.data.expiresAt > request.time
+          && resource.data.usedCount < resource.data.maxUses
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'usedCount', 'usedAt'])
+          && request.resource.data.status == 'used'
+          && request.resource.data.usedCount == resource.data.usedCount + 1
+          && request.resource.data.usedCount == resource.data.maxUses
+          && request.resource.data.usedAt == request.time
+          && existsAfter(/databases/$(database)/documents/replays/$(videoId)/commentMembers/$(request.auth.uid))
+          && getAfter(/databases/$(database)/documents/replays/$(videoId)/commentMembers/$(request.auth.uid)).data.uid == request.auth.uid
+          && getAfter(/databases/$(database)/documents/replays/$(videoId)/commentMembers/$(request.auth.uid)).data.groupIds[0] == inviteId;
+      }
+
+      function hasValidComment(data, commentId) {
+        return data.keys().hasAll([
+            'schemaVersion', 'text', 'videoTimeMs', 'rating', 'color', 'size', 'durationMs',
+            'mode', 'x', 'y', 'visibility', 'clientRequestId', 'authorName', 'authorPublicId',
+            'authorGroupIds', 'status', 'createdAt', 'updatedAt'
+          ])
+          && data.keys().hasOnly([
+            'schemaVersion', 'text', 'videoTimeMs', 'rating', 'color', 'size', 'durationMs',
+            'mode', 'x', 'y', 'visibility', 'clientRequestId', 'authorUid', 'authorName',
+            'authorPublicId', 'authorGroupIds', 'status', 'createdAt', 'updatedAt'
+          ])
+          && data.schemaVersion == 1
+          && data.text is string
+          && data.text.size() > 0
+          && data.text.size() <= 280
+          && data.videoTimeMs is int
+          && data.videoTimeMs >= 0
+          && data.videoTimeMs <= 86400000
+          && (data.rating == null || data.rating == 'good' || data.rating == 'bad' || data.rating == 'question')
+          && data.color is string
+          && data.color.matches('^#[0-9a-fA-F]{6}$')
+          && (data.size == 'small' || data.size == 'medium' || data.size == 'large')
+          && data.durationMs is int
+          && data.durationMs >= 1000
+          && data.durationMs <= 30000
+          && (data.mode == 'scroll' || data.mode == 'fixed')
+          && ((data.mode == 'scroll' && data.x == null && data.y == null)
+            || (data.mode == 'fixed' && data.x is int && data.x >= 0 && data.x <= 10000
+              && data.y is int && data.y >= 0 && data.y <= 10000))
+          && (data.visibility == 'public' || data.visibility == 'private')
+          && data.clientRequestId == commentId
+          && commentId.matches('^[A-Za-z0-9_-]{8,80}$')
+          && (!data.keys().hasAny(['authorUid']) || data.authorUid is string)
+          && data.authorName is string
+          && data.authorName.size() > 0
+          && data.authorName.size() <= 64
+          && data.authorPublicId is string
+          && data.authorPublicId.matches('^[A-Za-z0-9]{10}$')
+          && data.authorGroupIds is list
+          && data.authorGroupIds.size() <= 20
+          && data.authorGroupIds == (isActiveCommentMember()
+            ? get(/databases/$(database)/documents/replays/$(videoId)/commentMembers/$(request.auth.uid)).data.groupIds
+            : [])
+          && data.status == 'published'
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp;
+      }
+
+      function commentAuthorPath(commentId) {
+        return /databases/$(database)/documents/replays/$(videoId)/commentAuthors/$(commentId);
+      }
+
+      function commentPath(commentId) {
+        return /databases/$(database)/documents/replays/$(videoId)/comments/$(commentId);
+      }
+
+      function isSeparatedCommentAuthor(commentId) {
+        return isGoogleUser()
+          && exists(commentAuthorPath(commentId))
+          && get(commentAuthorPath(commentId)).data.uid == request.auth.uid;
+      }
+
+      function isLegacyCommentAuthor(data) {
+        return isGoogleUser()
+          && data.keys().hasAny(['authorUid'])
+          && data.authorUid == request.auth.uid;
+      }
+
+      function isCommentAuthor(commentId, data) {
+        return isSeparatedCommentAuthor(commentId) || isLegacyCommentAuthor(data);
+      }
+
+      function isPrivateCommentReader(data) {
+        return isGoogleUser()
+          && exists(/databases/$(database)/documents/communityProfiles/$(request.auth.uid))
+          && data.authorPublicId
+            == get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.publicId;
+      }
+
+      function hasValidCommentAuthor(data) {
+        return data.keys().hasAll(['uid', 'publicId', 'createdAt'])
+          && data.keys().hasOnly(['uid', 'publicId', 'createdAt'])
+          && data.uid is string
+          && data.publicId is string
+          && data.publicId.matches('^[A-Za-z0-9]{10}$')
+          && data.createdAt is timestamp;
+      }
+
+      match /commentAuthors/{commentId} {
+        // Ownership records contain the internal Firebase UID and are never
+        // readable by app clients. Comment rules may still consult them.
+        allow get, list, update, delete: if false;
+        allow create: if isGoogleUser()
+          && hasValidCommentAuthor(request.resource.data)
+          && existsAfter(commentPath(commentId))
+          && getAfter(commentPath(commentId)).data.authorPublicId == request.resource.data.publicId
+          && !getAfter(commentPath(commentId)).data.keys().hasAny(['authorUid'])
+          && (
+            (request.resource.data.uid == request.auth.uid
+              && exists(/databases/$(database)/documents/communityProfiles/$(request.auth.uid))
+              && request.resource.data.publicId
+                == get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.publicId
+              && request.resource.data.createdAt == request.time)
+            ||
+            (exists(commentPath(commentId))
+              && get(commentPath(commentId)).data.keys().hasAny(['authorUid'])
+              && get(commentPath(commentId)).data.authorUid == request.resource.data.uid
+              && get(commentPath(commentId)).data.authorPublicId == request.resource.data.publicId
+              && get(commentPath(commentId)).data.createdAt == request.resource.data.createdAt
+              && (request.auth.uid == request.resource.data.uid || isReplayCommentOwner()))
+          );
+      }
+
+      match /comments/{commentId} {
+        allow get: if (resource == null && isGoogleUser()) || (resource != null
+          && exists(/databases/$(database)/documents/replays/$(videoId))
+          && resource.data.status == 'published'
+          && (
+            (resource.data.visibility == 'public' && canReadPublicComments())
+            || (resource.data.visibility == 'private' && isPrivateCommentReader(resource.data))
+          ));
+        allow list: if exists(/databases/$(database)/documents/replays/$(videoId))
+          && resource.data.status == 'published'
+          && (
+            (resource.data.visibility == 'public' && canReadPublicComments())
+            || (resource.data.visibility == 'private' && isPrivateCommentReader(resource.data))
+          );
+        allow create: if isGoogleUser()
+          && canWriteCommunityComments()
+          && hasValidComment(request.resource.data, commentId)
+          && !request.resource.data.keys().hasAny(['authorUid'])
+          && exists(/databases/$(database)/documents/communityProfiles/$(request.auth.uid))
+          && request.resource.data.authorPublicId
+            == get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.publicId
+          && request.resource.data.authorName
+            == (get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.accountName is string
+              ? get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.accountName
+              : get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.publicId)
+          && existsAfter(commentAuthorPath(commentId))
+          && getAfter(commentAuthorPath(commentId)).data.uid == request.auth.uid
+          && getAfter(commentAuthorPath(commentId)).data.publicId == request.resource.data.authorPublicId
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time
+          && consumesCommentQuota(request.auth.uid, videoId, commentId);
+        allow update: if isGoogleUser() && (
+          (resource.data.status == 'published'
+            && isCommentAuthor(commentId, resource.data)
+            && hasValidComment(request.resource.data, commentId)
+            && request.resource.data.authorPublicId == resource.data.authorPublicId
+            && request.resource.data.authorName == resource.data.authorName
+            && request.resource.data.authorGroupIds == resource.data.authorGroupIds
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.updatedAt == request.time
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'text', 'videoTimeMs', 'rating', 'color', 'size', 'durationMs',
+              'mode', 'x', 'y', 'visibility', 'clientRequestId', 'updatedAt'
+            ]))
+          ||
+          (resource.data.status == 'published'
+            && (isReplayCommentOwner() || isCommentAuthor(commentId, resource.data))
+            && request.resource.data.status == 'deleted'
+            && request.resource.data.updatedAt == request.time
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']))
+          ||
+          (resource.data.status == 'published'
+            && resource.data.keys().hasAny(['authorUid'])
+            && (isReplayCommentOwner() || isLegacyCommentAuthor(resource.data))
+            && !request.resource.data.keys().hasAny(['authorUid'])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['authorUid'])
+            && existsAfter(commentAuthorPath(commentId))
+            && getAfter(commentAuthorPath(commentId)).data.uid == resource.data.authorUid
+            && getAfter(commentAuthorPath(commentId)).data.publicId == resource.data.authorPublicId)
+        );
+        allow delete: if false;
+      }
     }
 
   }

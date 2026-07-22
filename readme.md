@@ -28,6 +28,10 @@ or browse all versions: [GitHub Releases](https://github.com/arasan95/league_rec
 
 FFmpeg is distributed as a separate release asset and cached under the app data folder, so app updates do not reinstall it when the FFmpeg SHA256 has not changed.
 
+## YouTube OAuth (developers)
+
+The official installer includes the maintainer's Desktop OAuth credentials, so ordinary users do not need Google Cloud configuration. See [docs/youtube_oauth.md](docs/youtube_oauth.md) for source-build configuration, PKCE and token-storage details, and the official release procedure. A Desktop client secret cannot be kept confidential in a distributed executable, so PKCE protects user authorization independently of that packaged credential.
+
 ## FFmpeg Notes
 
 For regular use, the app-local FFmpeg runtime is selected automatically.

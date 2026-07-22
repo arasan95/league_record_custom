@@ -1,6 +1,7 @@
 const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const { prepareYouTubeClientId } = require("./youtube-client-id.cjs");
 
 const root = path.resolve(__dirname, "..");
 
@@ -70,6 +71,7 @@ const env = {
   CSC_IDENTITY_AUTO_DISCOVERY: "false",
 };
 
+prepareYouTubeClientId(root);
 ensureLibobsBundle();
 ensureTooltipRebuildTool();
 

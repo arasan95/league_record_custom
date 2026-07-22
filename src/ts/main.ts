@@ -7,7 +7,7 @@ import { convertFileSrc } from "./platform/core";
 import { join, sep } from "./platform/path";
 import { exists } from "./platform/fs";
 import { registerYouTubeTech } from "./platform/videojs_youtube_tech";
-import { YOUTUBE_AUTH_CONNECTED_EVENT } from "./platform/youtube";
+import { getYouTubeFirebaseIdToken, YOUTUBE_AUTH_CHANGED_EVENT } from "./platform/youtube";
 
 import { commands, type ClipAudioTrack, type GameEvent, type Recording } from "./bindings";
 import ListenerManager from "./listeners";
@@ -30,9 +30,11 @@ import { createKeyboardHandlers } from "./main_keyboard_usecase";
 import { refreshSidebar, retrySidebarUpdateLoop } from "./main_recordings_usecase";
 import { buildTimelineRows } from "./main_timeline_usecase";
 import { loadReplayShare, type LoadedReplayShare } from "./replay_share";
-import { cleanupDeletedReplayShares } from "./platform/firebase";
+import { cleanupDeletedReplayShares, connectReplayShareGoogle, listOwnedReplayShareIds } from "./platform/firebase";
 import { hasYouTubeUploadHistory, removeYouTubeUploadsByVideoIds } from "./youtube_upload_history";
 import { bindYouTubeReplaySidebar, updateYouTubeReplayStatus } from "./ui/youtube_replay_sidebar_usecase";
+import { ReviewCommentsController } from "./review_comments";
+import { uiText } from "./ui_locale";
 import {
     deleteVideoFlow,
     deleteVideoOnlyWithConfirm,
@@ -177,7 +179,7 @@ function initializeYouTubeUiComparison(): void {
             checkbox.checked = false;
             player.el().classList.remove("youtube-ui-comparison");
             console.error("[youtube-replay] YouTube UI toggle failed", error);
-            updateYouTubeReplayStatus("YouTube UI表示を切り替えられませんでした。", true);
+            updateYouTubeReplayStatus(uiText("YouTube UI表示を切り替えられませんでした。", "Could not toggle the YouTube UI."), true);
         }
     });
 
@@ -529,6 +531,7 @@ const player = videojs("video_player", VIDEO_JS_OPTIONS) as Player & {
     markers: (settings?: Settings) => MarkersPlugin;
 };
 ui.setPlayer(player); // Pass player instance to UI
+const reviewComments = new ReviewCommentsController(player);
 installSeekDiagnostics();
 
 // Video.js hides the vertical volume control as soon as the pointer leaves the
@@ -903,14 +906,14 @@ async function main() {
     player.on("error", () => {
         if (!remotePlaybackActive) return;
         const playerError = player.error();
-        const message = String(playerError?.message || "YouTube動画を再生できませんでした。");
+        const message = String(playerError?.message || uiText("YouTube動画を再生できませんでした。", "Could not play the YouTube video."));
         console.error("[youtube-replay] Video.js player error", { code: playerError?.code, message });
         if (/disabled|101|150/i.test(message)) {
-            updateYouTubeReplayStatus("この動画は所有者により埋め込み再生が許可されていません。", true);
+            updateYouTubeReplayStatus(uiText("この動画は所有者により埋め込み再生が許可されていません。", "The owner has disabled embedded playback for this video."), true);
         } else if (/private|find the video|100/i.test(message)) {
-            updateYouTubeReplayStatus("YouTube動画が非公開、削除済み、または見つかりません。", true);
+            updateYouTubeReplayStatus(uiText("YouTube動画が非公開、削除済み、または見つかりません。", "The YouTube video is private, deleted, or unavailable."), true);
         } else if (/153|referer|client identification/i.test(message)) {
-            updateYouTubeReplayStatus("YouTubeプレイヤーのクライアント識別に失敗しました（エラー153）。", true);
+            updateYouTubeReplayStatus(uiText("YouTubeプレイヤーのクライアント識別に失敗しました（エラー153）。", "YouTube player client identification failed (error 153)."), true);
         } else {
             updateYouTubeReplayStatus(message, true);
         }
@@ -1056,6 +1059,7 @@ async function main() {
             await setYouTubeReplay(loaded);
             return loaded;
         },
+        refreshOwnedReplays: refreshOwnedYouTubeReplays,
     });
     document.querySelector<HTMLButtonElement>("#youtube-replay-history-clear")?.addEventListener("click", () => {
         clearYouTubeReplayHistory();
@@ -1064,8 +1068,11 @@ async function main() {
     void restore.finally(() => {
         void runDeletedYouTubeReplayCleanup();
     });
-    window.addEventListener(YOUTUBE_AUTH_CONNECTED_EVENT, () => {
+    window.addEventListener(YOUTUBE_AUTH_CHANGED_EVENT, () => {
         void runDeletedYouTubeReplayCleanup();
+        if (document.querySelector<HTMLButtonElement>("#youtube-replay-owned-tab")?.getAttribute("aria-selected") === "true") {
+            void refreshOwnedYouTubeReplays();
+        }
     });
     initializeYouTubeUiComparison();
     // ui.setShowTimestampsOnClickHandler(showTimestamps);
@@ -1428,6 +1435,7 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
         preferredActiveVideoId = null;
         ui.setActiveVideoId(null);
         player.src("");
+        reviewComments.setActiveVideo(null);
         logPerf("setVideo(null)", startedAt);
     } else {
         const settings = await commands.getSettings();
@@ -1442,6 +1450,7 @@ async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
 
         // VideoId is now an absolute path (base path without extension), so we use it directly
         ui.setActiveVideoId(cleanVideoId);
+        reviewComments.setActiveVideo(cleanVideoId);
         clearMetadataRetry(cleanVideoId);
         const setMetadataStartedAt = perfNowMs();
         const completed = await setMetadata(cleanVideoId);
@@ -1480,6 +1489,7 @@ async function setYouTubeReplay(loaded: LoadedReplayShare): Promise<void> {
     preferredActiveVideoId = null;
     ui.setActiveVideoId(null);
     remotePlaybackActive = true;
+    reviewComments.setActiveVideo(`youtube:${loaded.youtubeVideoId}`);
     updateClipBtnState();
     clearMetadataRetry(loaded.youtubeVideoId);
 
@@ -1558,8 +1568,8 @@ function addYouTubeReplayHistoryCard(
     const removeButton = document.createElement("button");
     removeButton.type = "button";
     removeButton.className = "youtube-replay-remove";
-    removeButton.title = "この履歴を削除";
-    removeButton.setAttribute("aria-label", "この履歴を削除");
+    removeButton.title = uiText("この履歴を削除", "Remove from history");
+    removeButton.setAttribute("aria-label", uiText("この履歴を削除", "Remove from history"));
     removeButton.textContent = "✕";
     removeButton.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -1599,7 +1609,53 @@ async function restoreYouTubeReplayHistory(): Promise<void> {
         }
     }
     if (restoredCount > 0) {
-        updateYouTubeReplayStatus(`${restoredCount}件の読み込み履歴を復元しました。`);
+        updateYouTubeReplayStatus(uiText(
+            `${restoredCount}件の読み込み履歴を復元しました。`,
+            `Restored ${restoredCount} item${restoredCount === 1 ? "" : "s"} from load history.`,
+        ));
+    }
+}
+
+async function refreshOwnedYouTubeReplays(): Promise<void> {
+    const list = document.querySelector<HTMLUListElement>("#youtube-replay-owned");
+    const status = document.querySelector<HTMLElement>("#youtube-replay-owned-status");
+    if (!list || !status) return;
+    status.classList.remove("is-error");
+    status.textContent = uiText("自分の投稿を取得しています…", "Loading my uploads…");
+    try {
+        await connectReplayShareGoogle(await getYouTubeFirebaseIdToken());
+        const videoIds = await listOwnedReplayShareIds();
+        const results = await Promise.allSettled(videoIds.map((videoId) => loadReplayShare(videoId)));
+        list.replaceChildren();
+        for (const result of results) {
+            if (result.status !== "fulfilled") continue;
+            const loaded = result.value;
+            const sharedVideoId = `youtube:${loaded.youtubeVideoId}`;
+            const item = ui.createRecordingItem(
+                { videoId: sharedVideoId, metadata: loaded.metadataFile, videoExists: true },
+                () => void setYouTubeReplay(loaded),
+                async () => null,
+                () => {},
+                () => {},
+            );
+            item.querySelector(".sidebar-actions")?.remove();
+            item.querySelector<HTMLElement>(".sidebar-date")?.replaceChildren(`YouTube: ${loaded.youtubeVideoId}`);
+            item.dataset.sharedReplayId = loaded.youtubeVideoId;
+            list.append(item);
+        }
+        list.hidden = list.childElementCount === 0;
+        const failed = results.filter((result) => result.status === "rejected").length;
+        status.textContent = videoIds.length === 0
+            ? uiText("このGoogleアカウントで投稿した共有リプレイはありません。", "This Google account has no uploaded shared replays.")
+            : uiText(
+                `${list.childElementCount}件を表示${failed > 0 ? `（${failed}件は動画を確認できませんでした）` : ""}`,
+                `Showing ${list.childElementCount}${failed > 0 ? ` (${failed} video${failed === 1 ? "" : "s"} unavailable)` : ""}`,
+            );
+    } catch (error) {
+        list.replaceChildren();
+        list.hidden = true;
+        status.classList.add("is-error");
+        status.textContent = error instanceof Error ? error.message : String(error);
     }
 }
 
