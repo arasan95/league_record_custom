@@ -313,6 +313,187 @@ input[type="range"] {
   display: none !important;
 }
 
+.settings-account-wrapper {
+  width: min(620px, calc(100% - 40px));
+  margin: 24px auto;
+  color: #ddd;
+}
+
+.settings-account-wrapper h3 {
+  margin: 0 0 8px;
+  color: #f1f1f1;
+  font-size: 20px;
+}
+
+.settings-account-description {
+  margin: 0 0 22px;
+  color: #aaa;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.settings-account-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid #494949;
+  border-radius: 9px;
+  background: #252525;
+}
+
+.settings-account-avatar {
+  display: grid;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid #5a5a5a;
+  border-radius: 50%;
+  background: #3b3b3b center / cover no-repeat;
+  color: #eee;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.settings-account-avatar.has-image {
+  color: transparent;
+}
+
+.settings-account-identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-account-identity strong,
+.settings-account-identity span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-account-identity strong {
+  color: #f0f0f0;
+  font-size: 15px;
+}
+
+.settings-account-identity span {
+  color: #aaa;
+  font-size: 12px;
+}
+
+.settings-account-state {
+  color: #8fc79c !important;
+}
+
+.settings-account-public-id {
+  margin-top: 2px;
+  color: #d2d2d2;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.settings-account-profile-editor {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: #222;
+}
+
+.settings-account-profile-editor label {
+  display: block;
+  color: #e5e5e5;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-account-profile-editor p {
+  margin: 5px 0 11px;
+  color: #999;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.settings-account-name-row {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-account-name-row input {
+  box-sizing: border-box;
+  min-width: 0;
+  flex: 1 1 auto;
+  border: 1px solid #505050;
+  border-radius: 6px;
+  padding: 9px 10px;
+  outline: none;
+  background: #171717;
+  color: #eee;
+}
+
+.settings-account-name-row input:focus {
+  border-color: #777;
+}
+
+.settings-account-name-row button {
+  flex: 0 0 auto;
+  border: 1px solid #5b5b5b;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: #393939;
+  color: #eee;
+  cursor: pointer;
+}
+
+.settings-account-name-row button:hover:enabled {
+  background: #484848;
+}
+
+.settings-account-message {
+  min-height: 20px;
+  margin: 12px 2px 4px;
+  color: #aaa;
+  font-size: 12px;
+}
+
+.settings-account-message.is-error {
+  color: #ef9a9a;
+}
+
+.settings-account-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.settings-account-actions button {
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 9px 14px;
+  background: #363636;
+  color: #eee;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings-account-actions button:hover:enabled {
+  border-color: #777;
+  background: #444;
+}
+
+.settings-account-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.settings-account-disconnect {
+  border-color: #704848 !important;
+  color: #e7b1b1 !important;
+}
+
 /* Adjust grid within tab content */
 /* Legacy grid styles removed to prevent conflict */
 

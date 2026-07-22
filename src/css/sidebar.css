@@ -1,3 +1,7 @@
+:root {
+    --sidebar-surface: #1e1e1e;
+}
+
 #sidebar {
     display: grid;
     grid-template-columns: 1fr;
@@ -5,12 +9,12 @@
 
     /* border-right: 1px solid #333; */
     border-left: 1px solid #1e1e1e; /* 1px Invisible Safety Buffer for DWM */
-    background-color: #1e1e1e;
+    background-color: var(--sidebar-surface);
     isolation: isolate;
 }
 
 #sidebar #sidebar-info {
-    background: #1e1e1e;
+    background: var(--sidebar-surface);
     border-bottom: 1px solid #333;
     color: #ccc;
     font-size: 0.9em;
@@ -246,6 +250,96 @@
     min-height: 0;
     flex-direction: column;
     padding: 26px 20px 0;
+}
+
+.youtube-replay-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    margin: 10px 0 14px;
+    padding: 3px;
+    border: 1px solid #3b3b3b;
+    border-radius: 7px;
+    background: #181818;
+}
+
+.youtube-replay-tabs button {
+    border: 0;
+    border-radius: 5px;
+    padding: 7px 4px;
+    background: transparent;
+    color: #999;
+    font: 600 11px Inter, sans-serif;
+    cursor: pointer;
+}
+
+.youtube-replay-tabs button[aria-selected="true"] {
+    background: #3b3b3b;
+    color: #f2f2f2;
+}
+
+.youtube-replay-tab-panel:not([hidden]) {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+}
+
+.youtube-replay-owned-toolbar {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    color: #aaa;
+    font: 11px/1.4 Inter, sans-serif;
+}
+
+#youtube-replay-owned-status {
+    flex: 1 1 auto;
+}
+
+#youtube-replay-owned-status.is-error {
+    color: #ef9a9a;
+}
+
+#youtube-replay-owned-refresh {
+    border: 1px solid #4a4a4a;
+    border-radius: 5px;
+    padding: 5px 8px;
+    background: #292929;
+    color: #ddd;
+    cursor: pointer;
+}
+
+#youtube-replay-owned {
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0 -20px;
+    padding: 0 0 80px;
+    list-style: none;
+    overflow: auto;
+    background: #000;
+}
+
+#youtube-replay-owned[hidden] {
+    display: none;
+}
+
+#youtube-replay-owned li {
+    position: relative;
+    min-width: 0;
+    margin-bottom: 4px;
+    padding: 10px 10px 10px 15px;
+    overflow: hidden;
+    border-radius: 8px;
+    background: var(--sidebar-surface);
+    cursor: pointer;
+}
+
+#youtube-replay-owned li:hover {
+    background: #3f3f3f;
 }
 
 .youtube-replay-eyebrow {
@@ -1552,7 +1646,7 @@ img.tft-trait {
 
 #server-nav {
     grid-area: server-nav;
-    background-color: #1e1f22;
+    background-color: var(--sidebar-surface);
     display: flex;
     flex-direction: column;
     align-items: center;
