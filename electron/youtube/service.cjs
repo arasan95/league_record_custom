@@ -130,13 +130,14 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
 
   async function requestRefreshToken(tokens) {
     const config = oauthConfig();
+    if (!config.clientSecret) throw makeError("GoogleデスクトップOAuth Client Secretが設定されていません。", "oauth_client_secret_missing");
     return requestToken({
       client_id: clientId(),
+      client_secret: config.clientSecret,
       grant_type: "refresh_token",
       refresh_token: tokens.refreshToken,
       // A refresh grant cannot add scopes. Omitting scope preserves the grant
       // selected during the interactive authorization flow.
-      ...(config.clientSecret ? { client_secret: config.clientSecret } : {}),
     }).catch(async (error) => {
       // Only a revoked/expired refresh token proves that the saved credential
       // is unusable. Keep it for invalid_scope and temporary failures so a
@@ -177,6 +178,13 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
         .replace(/[<>]/g, "")
         .slice(0, 180);
       await log(`youtube token exchange failed http=${response.status} reason=${reason}${detail ? ` detail=${detail}` : ""}`);
+      const missingCredentialPattern = new RegExp(`${["client", "secret"].join("_")}\\s+is\\s+missing`, "i");
+      if (reason === "invalid_request" && missingCredentialPattern.test(detail)) {
+        throw makeError(
+          "現在のOAuth Client IDはGoogle側でClient Secret必須として登録されています。Google Cloud Consoleで種類「デスクトップ アプリ」の新しいOAuthクライアントを作成し、そのClient IDへ差し替えてください。Client Secretはアプリへ設定しないでください。",
+          "auth_incompatible_client",
+        );
+      }
       throw makeError(`Google認証に失敗しました（${reason}${detail ? `: ${detail}` : ""}）。`, `auth_${reason}`);
     }
     return data;
@@ -217,7 +225,8 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
   }
 
   async function getAuthStatus() {
-    const configured = Boolean(clientId());
+    const config = oauthConfig();
+    const configured = Boolean(config.clientId && config.clientSecret);
     const tokens = await loadTokens();
     return {
       configured,
@@ -252,7 +261,9 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
   }
 
   async function signIn() {
-    if (!clientId()) throw makeError("YouTubeの開発用Client IDが設定されていません。", "not_configured");
+    const config = oauthConfig();
+    if (!config.clientId) throw makeError("YouTubeの開発用Client IDが設定されていません。", "not_configured");
+    if (!config.clientSecret) throw makeError("GoogleデスクトップOAuth Client Secretが設定されていません。", "oauth_client_secret_missing");
     if (authInProgress) throw makeError("Google接続をすでに開始しています。", "auth_in_progress");
     authInProgress = true;
     const verifier = base64Url(randomBytes(48));
@@ -294,14 +305,13 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
           try { await shell.openExternal(url.toString()); } catch (error) { reject(error); }
         });
       });
-      const config = oauthConfig();
       const response = await requestToken({
         client_id: clientId(),
+        client_secret: config.clientSecret,
         code: callback.code,
         code_verifier: verifier,
         redirect_uri: callback.redirectUri,
         grant_type: "authorization_code",
-        ...(config.clientSecret ? { client_secret: config.clientSecret } : {}),
       });
       if (!response.refresh_token) throw makeError("Googleの再接続用トークンを取得できませんでした。もう一度接続してください。", "missing_refresh_token");
       if (!response.id_token) throw makeError("Google本人確認情報を取得できませんでした。", "identity_token_missing");

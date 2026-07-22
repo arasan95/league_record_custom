@@ -27,6 +27,7 @@ import { buildErrorModalContent, hideModalView, isModalOpen, showModalView } fro
 import { applyMarkerFlags, bindChangeHandler, readMarkerFlags, setBigPlayButtonVisibility, setToggleChecked } from "./ui/ui_controls_usecase";
 import { bindSidebarResizeHandle, loadInitialUiSettings } from "./ui/ui_bootstrap_usecase";
 import { applyDisplayPreferences } from "./ui/display_preferences";
+import { setUiLanguage } from "./ui_locale";
 import { prepareScoreboardView, renderScoreboardMainRows } from "./ui/scoreboard_render_flow_usecase";
 import { applyScoreboardTickFlow } from "./ui/scoreboard_tick_flow_usecase";
 import { clearVideoMetadataView } from "./ui/video_metadata_view_usecase";
@@ -402,6 +403,7 @@ export default class UI {
             },
             setCurrentLanguage: (language) => {
                 this.currentLanguage = language;
+                setUiLanguage(language);
             },
             applyDisplayPreferences,
         });
@@ -1010,6 +1012,7 @@ export default class UI {
 
     public setCurrentLanguage = (language: string) => {
         this.currentLanguage = language;
+        setUiLanguage(language);
     };
 
     public showSettingsModal = (

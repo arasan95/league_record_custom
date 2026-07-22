@@ -9,6 +9,7 @@ import { createSettingsDisplayTabContent } from "./settings_display";
 import { createSettingsOptionsSections } from "./settings_options";
 import { createSettingsGeneralControls } from "./settings_general_controls";
 import { buildSettingsPayload } from "./settings_save_payload";
+import { createSettingsAccountTabContent } from "./settings_account";
 
 export function showSettingsModalView(input: {
     settings: Settings;
@@ -45,13 +46,15 @@ export function showSettingsModalView(input: {
         applyDisplayPreferences,
     } = input;
 
-    const lang = ((settings as any).language || "en") as Language;
+    const selectedLanguage = ((settings as any).language || "en") as Language;
+    const lang = (selectedLanguage === "ja" ? "ja" : "en") as Language;
+    const localizedGetText = (_language: any, key: any): string => getText(lang, key);
     const closeSettingsModal = () => hideModal();
     const generalControls = createSettingsGeneralControls({
         createEl,
         settings,
-        lang,
-        getText,
+        lang: selectedLanguage,
+        getText: localizedGetText,
         onLanguageChanged: (newLang) => {
             (settings as any).language = newLang;
             modalContent.innerHTML = "";
@@ -79,7 +82,7 @@ export function showSettingsModalView(input: {
         lang,
         settings,
         currentBinds,
-        getText,
+        getText: localizedGetText,
         onScrollModifierChange,
     });
 
@@ -87,23 +90,24 @@ export function showSettingsModalView(input: {
         createEl,
         settings,
         lang,
-        getText,
+        getText: localizedGetText,
     });
 
     const settingsOptions = createSettingsOptionsSections(
         createEl,
         settings,
         lang,
-        getText,
+        localizedGetText,
     );
 
     const aboutTabContent = createSettingsAboutTabContent({
         createEl,
         lang,
         settings,
-        getText,
+        getText: localizedGetText,
         onShowUpdateModal,
     });
+    const accountTabContent = createSettingsAccountTabContent({ createEl, lang });
 
     generalGrid.append(
         generalControls.groups.languageGroup,
@@ -131,44 +135,58 @@ export function showSettingsModalView(input: {
     );
 
     const btnGeneral = createSettingsTabButton(createEl, getText(lang, "tabGeneral"), true, () => {
-        switchSettingsTab("general", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, about: btnAbout }, {
+        switchSettingsTab("general", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, account: btnAccount, about: btnAbout }, {
             general: generalTabContent,
             display: displayTabContent,
             hotkeys: hotkeysTabContent,
+            account: accountTabContent,
             about: aboutTabContent,
         });
     });
     const btnDisplay = createSettingsTabButton(createEl, getText(lang, "tabDisplay"), false, () => {
-        switchSettingsTab("display", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, about: btnAbout }, {
+        switchSettingsTab("display", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, account: btnAccount, about: btnAbout }, {
             general: generalTabContent,
             display: displayTabContent,
             hotkeys: hotkeysTabContent,
+            account: accountTabContent,
             about: aboutTabContent,
         });
     });
     const btnHotkeys = createSettingsTabButton(createEl, getText(lang, "tabHotkeys"), false, () => {
-        switchSettingsTab("hotkeys", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, about: btnAbout }, {
+        switchSettingsTab("hotkeys", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, account: btnAccount, about: btnAbout }, {
             general: generalTabContent,
             display: displayTabContent,
             hotkeys: hotkeysTabContent,
+            account: accountTabContent,
+            about: aboutTabContent,
+        });
+    });
+    const btnAccount = createSettingsTabButton(createEl, lang === "ja" ? "アカウント" : "Account", false, () => {
+        switchSettingsTab("account", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, account: btnAccount, about: btnAbout }, {
+            general: generalTabContent,
+            display: displayTabContent,
+            hotkeys: hotkeysTabContent,
+            account: accountTabContent,
             about: aboutTabContent,
         });
     });
     const btnAbout = createSettingsTabButton(createEl, getText(lang, "tabAbout" as any) || "About", false, () => {
-        switchSettingsTab("about", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, about: btnAbout }, {
+        switchSettingsTab("about", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, account: btnAccount, about: btnAbout }, {
             general: generalTabContent,
             display: displayTabContent,
             hotkeys: hotkeysTabContent,
+            account: accountTabContent,
             about: aboutTabContent,
         });
     });
 
-    const tabsContainer = createEl("div", {}, { class: "settings-tabs" }, [btnGeneral, btnDisplay, btnHotkeys, btnAbout]);
+    const tabsContainer = createEl("div", {}, { class: "settings-tabs" }, [btnGeneral, btnDisplay, btnHotkeys, btnAccount, btnAbout]);
     const modalBody = createEl("div", {}, { style: "display: flex; flex-direction: column; overflow: hidden; flex: 1;" }, [
         tabsContainer,
         generalTabContent,
         displayTabContent,
         hotkeysTabContent,
+        accountTabContent,
         aboutTabContent,
     ]);
 

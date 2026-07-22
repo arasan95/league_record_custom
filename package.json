@@ -30,6 +30,7 @@
     "test:security:rules": "firebase emulators:exec --only firestore --project demo-leaguerecord \"bun test tests/firestore.rules.test.ts\"",
     "test:security": "bun run test:security:metadata && bun run test:security:rules",
     "test:youtube-defaults": "bun test tests/youtube_upload_defaults.test.ts",
+    "test:youtube-oauth": "bun test tests/youtube_oauth_desktop_client.test.ts",
     "backend:replay:dev": "firebase emulators:exec --only firestore --project leaguerecord \"bun backend/replay-share-server.ts\"",
     "diag:tooltip": "python tools/tooltip-diagnostics/run_tooltip_diagnostics.py",
     "diag:tooltip:ja": "python tools/tooltip-diagnostics/run_tooltip_diagnostics.py --locales ja_JP"
@@ -74,6 +75,9 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "!electron/youtube/local-config.cjs",
+      "!electron/youtube/local-client-id.txt",
+      "!electron/youtube/local-client-secret.txt",
       "package.json",
       "app-icon.png",
       "node_modules/sql.js/**/*"
@@ -92,8 +96,12 @@
         "to": "tooltip_data.db"
       },
       {
-        "from": "electron/youtube/local-config.cjs",
-        "to": "youtube/local-config.cjs"
+        "from": ".build-input/youtube-client-id.txt",
+        "to": "youtube/client-id.txt"
+      },
+      {
+        "from": ".build-input/youtube-client-secret.txt",
+        "to": "youtube/client-secret.txt"
       }
     ],
     "win": {

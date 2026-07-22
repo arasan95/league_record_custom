@@ -16,6 +16,9 @@ dist-ssr
 release-electron/
 *.local
 electron/youtube/local-config.cjs
+electron/youtube/local-client-id.txt
+electron/youtube/local-client-secret.txt
+.build-input/
 
 # Editor directories and files
 .vscode/*
