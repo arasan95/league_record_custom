@@ -1,56 +1,59 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>プライバシーポリシー | LeagueRecord</title>
-  <style>
-    :root { color-scheme: dark; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
-    body { max-width: 860px; margin: 0 auto; padding: 48px 20px; line-height: 1.75; background: #0b1020; color: #e6edf8; }
-    h1,h2 { line-height: 1.25; margin-top: 1.8em; } a { color: #8cc7ff; } li { margin: .35em 0; }
-    .notice { padding: 16px; border-left: 4px solid #77bdfb; background: #111a30; }
-  </style>
+  <title>Privacy Policy | LeagueRecord Custom</title>
+  <meta name="description" content="How LeagueRecord Custom handles Google, YouTube, local recording, and shared match data.">
+  <link rel="canonical" href="https://www.leaguerecord.f5.si/privacy.html">
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <p><a href="index.html">← LeagueRecord</a></p>
-  <h1>プライバシーポリシー</h1>
-  <p>最終更新日: 2026-07-18</p>
-  <p>このプライバシーポリシーは、LeagueRecord（以下「本アプリ」）の任意のYouTubeアップロード機能に適用されます。</p>
+  <header>
+    <a class="brand" href="/"><img src="/icon.png" alt=""><span>LeagueRecord Custom</span></a>
+    <a class="language" href="/ja/privacy.html" lang="ja">日本語</a>
+  </header>
+  <main>
+    <p class="eyebrow">Last updated: July 27, 2026</p>
+    <h1>Privacy Policy</h1>
+    <p class="lead">This policy applies to Google authentication, the optional YouTube upload feature, and optional match-data sharing in LeagueRecord Custom (“the App”).</p>
 
-  <h2>1. 本機能の目的</h2>
-  <p>本アプリは、利用者がPCに保存した完成済みの録画またはクリップを、利用者が明示的に選択して利用者自身のYouTubeチャンネルへアップロードできるようにします。本アプリは、利用者の明示的な操作なしに動画をアップロードしません。</p>
-  <p>利用者は、YouTubeアップロード機能を利用する前に、本プライバシーポリシーおよび<a href="terms.html">利用規約</a>へ同意します。</p>
+    <h2>1. Purpose of the feature</h2>
+    <p>The App lets a user explicitly select a completed local recording or clip and upload it to the user's own authorized YouTube channel. The App never uploads a video without an explicit user action.</p>
 
-  <h2>2. Google・YouTubeから扱う情報</h2>
-  <p>本機能は、動画アップロードのためにGoogle OAuth 2.0を使用し、YouTube Data APIの <code>youtube.upload</code> 権限のみを要求します。本アプリは、認可された利用者の代わりに選択された動画をYouTubeへ投稿するために、access tokenおよびrefresh tokenを扱います。</p>
-  <ul>
-    <li>認証トークンは利用者のPC上でOSの暗号化機能を用いて保存します。</li>
-    <li>認証トークン、Googleアカウントのパスワード、YouTubeのログイン情報を開発者のサーバーへ送信・保存しません。</li>
-    <li>本アプリは、動画アップロード以外の目的でYouTubeデータを販売、共有、広告利用しません。</li>
-  </ul>
+    <h2>2. Google and YouTube information</h2>
+    <p>The App uses Google OAuth 2.0 and YouTube API Services. It requests <code>openid</code> and <code>email</code> to establish the user's identity, <code>youtube.upload</code> to upload user-selected videos and thumbnails, and <code>youtube.readonly</code> to identify the connected channel, check upload processing, and determine whether videos previously shared through the App are still available. The read scope is not used to collect or analyze the user's general YouTube activity.</p>
+    <ul>
+      <li>The email address is used by Firebase Authentication to identify the user and manage ownership of match data. It is not included in public match JSON.</li>
+      <li>Google access and refresh tokens stay on the user's computer and are encrypted at rest using operating-system-backed encryption.</li>
+      <li>An ID token is used briefly to establish a Firebase session. It is not stored in match JSON or the developer's database.</li>
+      <li>The App does not send or store Google passwords, YouTube login credentials, access tokens, or refresh tokens on the developer's servers.</li>
+      <li>Google and YouTube data is not sold, used for advertising, or shared for unrelated purposes.</li>
+    </ul>
 
-  <h2>3. YouTubeへ送信する情報</h2>
-  <p>利用者が投稿を開始した場合に限り、本アプリは次の情報をYouTubeへ送信します。</p>
-  <ul>
-    <li>利用者が選択した動画ファイル</li>
-    <li>利用者が入力したタイトルおよび説明</li>
-    <li>公開範囲、子ども向け設定、カテゴリなどの投稿設定</li>
-  </ul>
-  <p>投稿内容および公開範囲は利用者が確認して決定します。YouTubeに投稿された動画およびそのデータには、YouTubeの利用規約とプライバシーポリシーが適用されます。</p>
+    <h2>3. Information sent to YouTube</h2>
+    <p>Only after the user starts an upload, the App sends the selected video file and the user-confirmed title, description, visibility, audience setting, category, and thumbnail to YouTube. The App displays the connected channel and visibility before the upload begins.</p>
 
-  <h2>4. 保存期間と削除</h2>
-  <p>認証トークンは、利用者が本アプリ内でGoogle接続を解除するまで、またはGoogle側で認可を取り消すまで、利用者のPCに保存される場合があります。利用者が「Google接続を解除」を実行すると、本アプリはローカルの認証情報を削除し、Googleの認可取消エンドポイントへ取消要求を送信します。</p>
-  <p>本アプリは、利用者がYouTubeへ投稿した動画そのものを開発者のサーバーへ複製・保存しません。</p>
+    <h2>4. Match data stored in Firestore</h2>
+    <p>If the user separately chooses to publish match data, the App stores the YouTube video ID and the match JSON needed to display the timeline and scoreboard in Google Cloud Firestore. Google tokens, email addresses, and local file paths are excluded from public match JSON.</p>
+    <p>Shared match data is not available through a browseable public index, but a person who knows the corresponding YouTube video ID can retrieve it. An anonymization option can remove player-identifying fields before publication. Private rate-limit information may be stored to prevent abuse.</p>
 
-  <h2>5. 第三者サービス</h2>
-  <p>本機能はGoogleおよびYouTubeのサービスを利用します。Googleによる情報の取扱いについては、<a href="https://policies.google.com/privacy">Googleプライバシーポリシー</a>を確認してください。Googleアカウントに許可したアプリの管理・認可取消は、<a href="https://security.google.com/settings/security/permissions">Google セキュリティ設定</a>からも行えます。</p>
-  <p>YouTubeへの投稿には<a href="https://www.youtube.com/t/terms">YouTube 利用規約</a>が適用されます。</p>
+    <h2>5. Retention, deletion, and revocation</h2>
+    <p>Local Google tokens may remain until the user disconnects Google in the App or revokes access through Google. Disconnecting requests token revocation from Google and deletes the encrypted local token file. The App does not copy or retain uploaded video files on the developer's servers.</p>
+    <p>To request deletion of match data published to Firestore, contact support with the relevant YouTube video URL. Do not send a password or token. Users can also review or revoke access from <a href="https://security.google.com/settings/security/permissions">Google Account permissions</a>. Data subject to a valid deletion or revocation request will be removed as required by the applicable YouTube API Services policies.</p>
 
-  <h2>6. 問い合わせ</h2>
-  <p>本ポリシーまたは本機能に関する問い合わせは、<a href="https://github.com/arasan95/league_record_custom/issues">GitHub Issues</a>から受け付けます。個人情報、パスワード、access token、refresh tokenは送信しないでください。</p>
+    <h2>6. Third-party services and Limited Use</h2>
+    <p>Use of YouTube features is subject to the <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>. Google's handling of information is described in the <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.</p>
+    <p>The App's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
 
-  <h2>7. 改定</h2>
-  <p>本ポリシーを改定する場合は、このページの最終更新日を変更して公開します。</p>
-  <p class="notice">本ページはYouTubeアップロード機能について説明するものです。YouTubeに投稿されたコンテンツにはYouTubeの規約およびポリシーが適用されます。</p>
+    <h2>7. Security</h2>
+    <p>Access and refresh tokens remain in the Electron main process and are not exposed to the renderer UI. The App refuses to persist a Google connection if secure OS-backed storage is unavailable. More detail is available on the <a href="/security.html">Security and Shared Data</a> page.</p>
+
+    <h2>8. Contact and changes</h2>
+    <p>Privacy and deletion requests are accepted through <a href="https://github.com/arasan95/league_record_custom/issues">LeagueRecord Custom support</a>. Do not include credentials or sensitive personal information. If this policy changes, this page's last-updated date will be revised.</p>
+    <p class="notice">Never send a password, access token, or refresh token in a support request.</p>
+  </main>
+  <footer><nav><a href="/">Home</a><a href="/terms.html">Terms</a><a href="/ja/privacy.html" lang="ja">日本語</a></nav></footer>
 </body>
 </html>

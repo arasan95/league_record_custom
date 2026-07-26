@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>プライバシーポリシー | LeagueRecord Custom</title>
+  <meta name="description" content="LeagueRecord CustomにおけるGoogle、YouTube、ローカル録画、共有試合データの取扱い。">
+  <link rel="alternate" hreflang="en" href="https://www.leaguerecord.f5.si/privacy.html">
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="/ja/"><img src="/icon.png" alt=""><span>LeagueRecord Custom</span></a>
+    <a class="language" href="/privacy.html" lang="en">English</a>
+  </header>
+  <main>
+    <p class="eyebrow">最終更新日: 2026-07-27</p>
+    <h1>プライバシーポリシー</h1>
+    <p class="lead">本ポリシーは、LeagueRecord Custom（以下「本アプリ」）のGoogle認証、任意のYouTube投稿機能、および任意の試合データ共有機能に適用されます。</p>
+
+    <h2>1. 機能の目的</h2>
+    <p>本アプリは、利用者がPCに保存した完成済み録画またはクリップを明示的に選び、認可した自身のYouTubeチャンネルへ投稿できるようにします。利用者の明示操作なしに動画を投稿しません。</p>
+
+    <h2>2. Google・YouTube情報</h2>
+    <p>本アプリはGoogle OAuth 2.0とYouTube API Servicesを使用します。本人確認のための <code>openid</code>・<code>email</code>、利用者が選んだ動画とサムネイルを投稿するための <code>youtube.upload</code>、接続中チャンネルの識別、投稿処理の確認、および本アプリで共有した動画の存在確認のための <code>youtube.readonly</code> を要求します。一般的なYouTube利用状況の収集・分析には使用しません。</p>
+    <ul>
+      <li>メールアドレスはFirebase Authenticationで利用者を識別し、試合データの所有者を管理するために使用します。公開試合JSONには含めません。</li>
+      <li>Googleのaccess tokenとrefresh tokenは利用者のPC上に留まり、OSの暗号化機能で保護されます。</li>
+      <li>ID tokenはFirebaseセッションの確立に短時間だけ使用し、試合JSONや開発者のデータベースへ保存しません。</li>
+      <li>Googleのパスワード、YouTubeログイン情報、access token、refresh tokenを開発者のサーバーへ送信・保存しません。</li>
+      <li>Google・YouTubeデータを販売、広告利用、または無関係な目的で共有しません。</li>
+    </ul>
+
+    <h2>3. YouTubeへ送信する情報</h2>
+    <p>利用者が投稿を開始した場合に限り、選択した動画ファイルと、利用者が確認したタイトル、説明、公開範囲、子ども向け設定、カテゴリ、サムネイルをYouTubeへ送信します。投稿前に接続先チャンネルと公開範囲を表示します。</p>
+
+    <h2>4. Firestoreへ保存する試合データ</h2>
+    <p>利用者が別途試合データの公開を選択した場合、YouTube動画IDとタイムライン・スコアボード表示に必要な試合JSONをGoogle Cloud Firestoreへ保存します。Googleトークン、メールアドレス、PCのファイルパスは公開試合JSONへ含めません。</p>
+    <p>共有データの公開一覧はありませんが、対応するYouTube動画IDを知る利用者は取得できます。公開前にプレイヤー識別情報を除く匿名化を選択できます。不正利用防止のため、非公開の利用制限情報を保存する場合があります。</p>
+
+    <h2>5. 保存、削除、認可取消</h2>
+    <p>Googleトークンは、利用者が本アプリでGoogle接続を解除するか、Google側で認可を取り消すまでPC上に保存される場合があります。接続解除時にはGoogleへ取消要求を送り、暗号化されたローカルトークンを削除します。投稿動画を開発者のサーバーへ複製・保存しません。</p>
+    <p>Firestoreへ公開した試合データの削除は、対象YouTube動画URLを添えて問い合わせてください。パスワードやトークンは送らないでください。<a href="https://security.google.com/settings/security/permissions">Googleアカウントの接続管理</a>から認可を確認・取消できます。有効な削除・取消要求の対象データは、適用されるYouTube API Servicesポリシーに従い削除します。</p>
+
+    <h2>6. 第三者サービスとLimited Use</h2>
+    <p>YouTube機能の利用には<a href="https://www.youtube.com/t/terms">YouTube利用規約</a>が適用されます。Googleによる情報の取扱いは<a href="https://policies.google.com/privacy">Googleプライバシーポリシー</a>を確認してください。</p>
+    <p>本アプリによるGoogle APIから受け取った情報の利用および他アプリへの転送は、Limited Use要件を含む<a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>に準拠します。</p>
+
+    <h2>7. 安全性</h2>
+    <p>access tokenとrefresh tokenはElectronのmain process内に留まり、画面を構成するrenderer processへ公開しません。OSの安全なストレージが利用できない場合、Google接続を保存しません。詳しくは<a href="/ja/security.html">安全性と共有データ</a>を確認してください。</p>
+
+    <h2>8. 問い合わせと改定</h2>
+    <p>プライバシーおよび削除の問い合わせは<a href="https://github.com/arasan95/league_record_custom/issues">LeagueRecord Customサポート</a>で受け付けます。認証情報や機微な個人情報を含めないでください。本ポリシーを改定した場合は最終更新日を変更します。</p>
+    <p class="notice">問い合わせ時にパスワード、access token、refresh tokenを送らないでください。</p>
+  </main>
+  <footer><nav><a href="/ja/">ホーム</a><a href="/ja/terms.html">利用規約</a><a href="/privacy.html" lang="en">English</a></nav></footer>
+</body>
+</html>

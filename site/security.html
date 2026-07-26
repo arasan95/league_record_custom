@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Security and Shared Data | LeagueRecord Custom</title>
+  <meta name="description" content="Security controls used by LeagueRecord Custom for Google tokens and shared replay data.">
+  <link rel="canonical" href="https://www.leaguerecord.f5.si/security.html">
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="/"><img src="/icon.png" alt=""><span>LeagueRecord Custom</span></a>
+    <a class="language" href="/ja/security.html" lang="ja">日本語</a>
+  </header>
+  <main>
+    <p class="eyebrow">Last updated: July 27, 2026</p>
+    <h1>Security and Shared Data</h1>
+    <p class="lead">LeagueRecord Custom treats shared match JSON as untrusted data and keeps Google user tokens inside the protected desktop process.</p>
+
+    <div class="grid">
+      <section class="card"><strong>Google tokens</strong><p>Access and refresh tokens stay in the Electron main process, are encrypted with OS-backed storage, are never placed in match JSON, and are removed when Google is disconnected.</p></section>
+      <section class="card"><strong>Shared replay data</strong><p>The App validates size, structure, fields, strings, numbers, and URLs before shared data reaches the player or scoreboard. Invalid data is rejected.</p></section>
+    </div>
+
+    <h2>Data handling safeguards</h2>
+    <ul>
+      <li>Shared JSON is never evaluated or executed as code.</li>
+      <li>Unexpected fields, unsafe URLs, scripts, HTML, and invalid structures are rejected.</li>
+      <li>Database rules validate ownership, permitted fields, structure, and rate limits.</li>
+      <li>Google tokens, email addresses, local paths, and video files are excluded from public match data.</li>
+      <li>Users can anonymize player-identifying fields before publishing match data.</li>
+    </ul>
+
+    <h2>Current limitation</h2>
+    <p>Because the current desktop client writes match data directly to Firestore, a modified client may attempt to submit invalid data. The official App therefore validates retrieved data again and refuses to use content that does not match its expected safe format.</p>
+
+    <h2>Reporting a problem</h2>
+    <p>Use <a href="https://github.com/arasan95/league_record_custom/issues">LeagueRecord Custom support</a>. Do not include passwords, access tokens, refresh tokens, or private personal information.</p>
+  </main>
+  <footer><nav><a href="/">Home</a><a href="/privacy.html">Privacy</a><a href="/ja/security.html" lang="ja">日本語</a></nav></footer>
+</body>
+</html>
