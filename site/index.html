@@ -1,267 +1,62 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="LeagueRecordは、League of Legendsの試合を録画し、再生・確認・クリップ作成を行うWindowsデスクトップアプリです。">
-  <meta name="application-name" content="LeagueRecord">
-  <meta name="theme-color" content="#0d1117">
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="LeagueRecord">
-  <meta property="og:title" content="LeagueRecord">
-  <meta property="og:description" content="League of Legendsの試合録画を管理・再生・クリップ作成するWindowsデスクトップアプリ。">
-  <meta property="og:url" content="https://www.leaguerecord.f5.si/">
-  <meta property="og:image" content="https://www.leaguerecord.f5.si/assets/screenshot.png">
+  <title>LeagueRecord Custom</title>
+  <meta name="description" content="LeagueRecord Custom is an open-source Windows desktop app for locally recording League of Legends gameplay and uploading user-selected videos to the user's own YouTube channel.">
   <link rel="canonical" href="https://www.leaguerecord.f5.si/">
-  <link rel="icon" type="image/png" href="assets/app-icon.png">
-  <title>LeagueRecord</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --background: #0d1117;
-      --surface: #161b22;
-      --border: #30363d;
-      --text: #f0f3f6;
-      --muted: #a7b0bb;
-      --link: #58a6ff;
-      --button: #f0f3f6;
-      --button-text: #0d1117;
-    }
-
-    * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
-    body {
-      margin: 0;
-      background: var(--background);
-      color: var(--text);
-      line-height: 1.7;
-    }
-    img { display: block; max-width: 100%; }
-    a { color: var(--link); }
-    :focus-visible { outline: 3px solid var(--link); outline-offset: 3px; }
-    .container { width: min(1080px, calc(100% - 40px)); margin-inline: auto; }
-    .skip-link {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      z-index: 100;
-      padding: 8px 12px;
-      background: white;
-      color: black;
-      transform: translateY(-150%);
-    }
-    .skip-link:focus { transform: none; }
-
-    header { border-bottom: 1px solid var(--border); }
-    .header-inner {
-      min-height: 68px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 24px;
-    }
-    .brand {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      color: var(--text);
-      font-weight: 700;
-      text-decoration: none;
-    }
-    .brand img { width: 32px; height: 32px; border-radius: 7px; }
-    nav { display: flex; align-items: center; gap: 22px; }
-    nav a { color: var(--muted); font-size: .9rem; text-decoration: none; }
-    nav a:hover { color: var(--text); }
-
-    main { padding-bottom: 80px; }
-    .hero { padding: 84px 0 56px; text-align: center; }
-    .hero h1 {
-      margin: 0;
-      font-size: clamp(3rem, 8vw, 5.5rem);
-      line-height: 1;
-      letter-spacing: -.055em;
-    }
-    .lead {
-      max-width: 700px;
-      margin: 26px auto 0;
-      color: var(--muted);
-      font-size: 1.08rem;
-    }
-    .actions {
-      display: flex;
-      justify-content: center;
-      gap: 12px;
-      margin-top: 30px;
-      flex-wrap: wrap;
-    }
-    .button {
-      display: inline-flex;
-      min-height: 44px;
-      align-items: center;
-      justify-content: center;
-      padding: 0 18px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-weight: 650;
-      text-decoration: none;
-    }
-    .button-primary { border-color: var(--button); background: var(--button); color: var(--button-text); }
-    .screenshot { margin: 54px 0 0; }
-    .screenshot img {
-      width: 100%;
-      height: auto;
-      aspect-ratio: 2551 / 1381;
-      object-fit: contain;
-    }
-
-    .section { padding: 68px 0; border-top: 1px solid var(--border); }
-    .section h2 { margin: 0 0 18px; font-size: 1.75rem; letter-spacing: -.025em; }
-    .section > .container > p { max-width: 760px; margin: 0; color: var(--muted); }
-    .features {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      margin-top: 32px;
-    }
-    .feature {
-      padding: 22px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--surface);
-    }
-    .feature h3 { margin: 0 0 8px; font-size: 1.05rem; }
-    .feature p { margin: 0; color: var(--muted); font-size: .9rem; }
-    .youtube-note {
-      max-width: 840px;
-      padding: 24px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--surface);
-    }
-    .youtube-note p { margin: 0; color: var(--muted); }
-    .youtube-note p + p { margin-top: 14px; }
-    .youtube-note code { color: var(--text); }
-    .policy-links { display: flex; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
-
-    footer { border-top: 1px solid var(--border); }
-    .footer-inner {
-      display: flex;
-      min-height: 94px;
-      align-items: center;
-      justify-content: space-between;
-      gap: 30px;
-    }
-    .footer-inner p { margin: 0; color: var(--muted); font-size: .82rem; }
-    .footer-links { display: flex; gap: 18px; flex-wrap: wrap; }
-    .footer-links a { color: var(--muted); font-size: .82rem; }
-    .disclaimer { padding: 20px 0 28px; border-top: 1px solid var(--border); color: #7d8590; font-size: .75rem; }
-
-    @media (max-width: 720px) {
-      .container { width: min(100% - 26px, 1080px); }
-      .header-inner { min-height: 62px; }
-      header nav a:not(:last-child) { display: none; }
-      .hero { padding-top: 64px; }
-      .features { grid-template-columns: 1fr; }
-      .footer-inner { padding: 26px 0; align-items: flex-start; flex-direction: column; }
-    }
-    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-  </style>
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "LeagueRecord",
-    "url": "https://www.leaguerecord.f5.si/",
-    "image": "https://www.leaguerecord.f5.si/assets/screenshot.png",
-    "applicationCategory": "MultimediaApplication",
-    "operatingSystem": "Windows",
-    "description": "LeagueRecord is a Windows desktop application for recording, reviewing, and creating clips from League of Legends matches.",
-    "downloadUrl": "https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_x64-setup.exe",
-    "isAccessibleForFree": true
-  }
-  </script>
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="stylesheet" href="/styles.css">
+  <meta property="og:title" content="LeagueRecord Custom">
+  <meta property="og:description" content="Record locally. Upload to your YouTube channel.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://www.leaguerecord.f5.si/">
+  <meta property="og:image" content="https://www.leaguerecord.f5.si/og.png">
+  <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
-  <a class="skip-link" href="#main">本文へ移動</a>
-
   <header>
-    <div class="container header-inner">
-      <a class="brand" href="/" aria-label="LeagueRecord ホーム">
-        <img src="assets/app-icon.png" width="32" height="32" alt="">
-        <span>LeagueRecord</span>
-      </a>
-      <nav aria-label="メインナビゲーション">
-        <a href="#about">概要</a>
-        <a href="privacy.html">プライバシー</a>
-        <a href="https://github.com/arasan95/league_record_custom">GitHub</a>
-      </nav>
-    </div>
+    <a class="brand" href="/"><img src="/icon.png" alt=""><span>LeagueRecord Custom</span></a>
+    <a class="language" href="/ja/" lang="ja">日本語</a>
   </header>
-
-  <main id="main">
+  <main>
     <section class="hero">
-      <div class="container">
-        <h1>LeagueRecord</h1>
-        <p class="lead">League of Legendsの試合録画を管理・再生し、必要な場面をクリップとして書き出すWindowsデスクトップアプリです。</p>
-        <div class="actions">
-          <a class="button button-primary" href="https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_x64-setup.exe">Windows版をダウンロード</a>
-          <a class="button" href="https://github.com/arasan95/league_record_custom">ソースコード</a>
-        </div>
-        <figure class="screenshot">
-          <img src="assets/screenshot.png" width="2551" height="1381" alt="LeagueRecordの録画一覧、試合映像、イベントタイムライン、クリップ操作画面" fetchpriority="high">
-        </figure>
+      <p class="eyebrow">Open-source Windows desktop app</p>
+      <h1>Record locally. Upload only when you choose.</h1>
+      <p class="lead">LeagueRecord Custom records League of Legends gameplay on your Windows PC. Its optional YouTube feature lets you upload a finished recording or clip that you select to your own authorized YouTube channel.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/arasan95/league_record_custom">View source on GitHub</a>
+        <a class="button" href="/privacy.html">How Google data is used</a>
       </div>
     </section>
 
-    <section class="section" id="about">
-      <div class="container">
-        <h2>LeagueRecordについて</h2>
-        <p>LeagueRecordの目的は、利用者がLeague of Legendsの試合を自分のPCへ録画し、試合内容を確認して必要な場面を保存できるようにすることです。録画ファイルは利用者が指定したPC内のフォルダーに保存されます。</p>
-        <div class="features">
-          <article class="feature">
-            <h3>録画の管理</h3>
-            <p>保存した試合を一覧表示し、ゲームモードや試合情報から確認できます。</p>
-          </article>
-          <article class="feature">
-            <h3>試合の確認</h3>
-            <p>イベントタイムラインからキル、デス、オブジェクトなどの場面へ移動できます。</p>
-          </article>
-          <article class="feature">
-            <h3>クリップ作成</h3>
-            <p>指定した開始点と終了点の範囲を動画ファイルとして書き出せます。</p>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="youtube">
-      <div class="container">
-        <h2>YouTubeへのアップロード</h2>
-        <div class="youtube-note">
-          <p>この機能は任意です。LeagueRecordは、利用者が選択した録画またはクリップを利用者自身のYouTubeチャンネルへアップロードするために、YouTube Data APIの<code>youtube.upload</code>権限を使用します。</p>
-          <p>Googleアカウントへの接続、動画の選択、公開設定、最終確認は利用者が行います。利用者の操作なしに動画をアップロードすることはありません。Googleアカウントのパスワード、OAuth認証トークン、録画ファイルを開発者のサーバーへ保存しません。</p>
-          <div class="policy-links">
-            <a href="privacy.html">プライバシーポリシー</a>
-            <a href="terms.html">利用規約</a>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <div class="container footer-inner">
-      <p>LeagueRecord</p>
-      <div class="footer-links">
-        <a href="https://github.com/arasan95/league_record_custom">GitHub</a>
-        <a href="https://github.com/arasan95/league_record_custom/issues">お問い合わせ</a>
-        <a href="privacy.html">プライバシーポリシー</a>
-        <a href="terms.html">利用規約</a>
-      </div>
+    <div class="grid">
+      <section class="card">
+        <strong>Local by default</strong>
+        <p>Recording and video management happen on your computer. LeagueRecord Custom does not upload a video unless you select it and explicitly start the upload.</p>
+      </section>
+      <section class="card">
+        <strong>Your channel, your settings</strong>
+        <p>You connect a Google account in the system browser and confirm the title, description, visibility, audience setting, and thumbnail before uploading.</p>
+      </section>
     </div>
-    <div class="container disclaimer">LeagueRecordはRiot Gamesによって承認されたものではありません。League of LegendsおよびRiot GamesはRiot Games, Inc.の商標または登録商標です。</div>
+
+    <section class="card">
+      <strong>YouTube API use</strong>
+      <p>LeagueRecord Custom uses YouTube API Services for user-authorized video uploads, custom thumbnails, upload-processing checks, and availability checks for videos shared through the app. It does not collect or analyze a user's general YouTube activity.</p>
+    </section>
+
+    <nav aria-label="Legal and support">
+      <a href="/privacy.html">Privacy Policy</a>
+      <a href="/terms.html">Terms of Service</a>
+      <a href="/security.html">Security and Shared Data</a>
+      <a href="https://github.com/arasan95/league_record_custom/issues">Support</a>
+    </nav>
+  </main>
+  <footer>
+    <nav><a href="/">Home</a><a href="/ja/" lang="ja">日本語</a></nav>
+    <span>Last updated: July 27, 2026</span>
   </footer>
 </body>
 </html>

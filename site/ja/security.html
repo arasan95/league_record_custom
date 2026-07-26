@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>安全性と共有データ | LeagueRecord Custom</title>
+  <meta name="description" content="LeagueRecord CustomのGoogleトークンと共有リプレイデータに関する安全対策。">
+  <link rel="alternate" hreflang="en" href="https://www.leaguerecord.f5.si/security.html">
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="/ja/"><img src="/icon.png" alt=""><span>LeagueRecord Custom</span></a>
+    <a class="language" href="/security.html" lang="en">English</a>
+  </header>
+  <main>
+    <p class="eyebrow">最終更新日: 2026-07-27</p>
+    <h1>安全性と共有データ</h1>
+    <p class="lead">LeagueRecord Customは共有試合JSONを信頼できないデータとして扱い、Google利用者トークンを保護されたデスクトッププロセス内に留めます。</p>
+    <div class="grid">
+      <section class="card"><strong>Googleトークン</strong><p>access tokenとrefresh tokenはElectronのmain process内に留まり、OSの安全なストレージで暗号化されます。試合JSONへ含めず、Google接続解除時に削除します。</p></section>
+      <section class="card"><strong>共有リプレイデータ</strong><p>大きさ、構造、項目、文字列、数値、URLを検査してからプレイヤーやスコアボードへ渡します。不正なデータは拒否します。</p></section>
+    </div>
+    <h2>データ取扱いの対策</h2>
+    <ul>
+      <li>共有JSONをプログラムとして評価・実行しません。</li>
+      <li>想定外の項目、危険なURL、スクリプト、HTML、不正な構造を拒否します。</li>
+      <li>データベース規則で所有者、許可項目、構造、利用回数を検査します。</li>
+      <li>Googleトークン、メールアドレス、ローカルパス、動画ファイルを公開試合データへ含めません。</li>
+      <li>公開前にプレイヤー識別情報の匿名化を選択できます。</li>
+    </ul>
+    <h2>現在の制限</h2>
+    <p>現在はデスクトップクライアントからFirestoreへ直接試合データを書き込むため、改造クライアントが不正データの送信を試みる可能性があります。正規アプリは取得時にも再検査し、安全な形式でない内容を使用しません。</p>
+    <h2>問題の報告</h2>
+    <p><a href="https://github.com/arasan95/league_record_custom/issues">LeagueRecord Customサポート</a>を利用してください。パスワード、access token、refresh token、機微な個人情報を含めないでください。</p>
+  </main>
+  <footer><nav><a href="/ja/">ホーム</a><a href="/ja/privacy.html">プライバシー</a><a href="/security.html" lang="en">English</a></nav></footer>
+</body>
+</html>
