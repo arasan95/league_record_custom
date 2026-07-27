@@ -99,6 +99,19 @@ export function showSettingsModalView(input: {
         lang,
         localizedGetText,
     );
+    displayTabContent.querySelector<HTMLElement>(".settings-content-wrapper")?.prepend(
+        settingsOptions.markerFlagsTitle,
+        settingsOptions.markerFlagsContent,
+    );
+    const scoreboardLinksTabContent = createEl("div", {}, { class: "settings-tab-content settings-scroll-container hidden" });
+    const scoreboardLinksWrapper = createEl("div", {}, { class: "settings-content-wrapper" });
+    const scoreboardLinksGrid = createEl("div", {}, { class: "settings-grid" });
+    scoreboardLinksGrid.append(
+        settingsOptions.scoreboardLinksTitle,
+        settingsOptions.scoreboardLinksContent,
+    );
+    scoreboardLinksWrapper.append(scoreboardLinksGrid);
+    scoreboardLinksTabContent.append(scoreboardLinksWrapper);
 
     const aboutTabContent = createSettingsAboutTabContent({
         createEl,
@@ -123,71 +136,52 @@ export function showSettingsModalView(input: {
         generalControls.groups.maxSizeGroup,
     );
     generalGrid.append(
-        settingsOptions.markerFlagsTitle,
-        settingsOptions.markerFlagsContent,
         settingsOptions.gameModesTitle,
         settingsOptions.gameModesContent,
         settingsOptions.switchesTitle,
         settingsOptions.switchesContent,
-        settingsOptions.scoreboardLinksTitle,
-        settingsOptions.scoreboardLinksContent,
         generalControls.groups.troubleshootingGroup,
     );
 
-    const btnGeneral = createSettingsTabButton(createEl, getText(lang, "tabGeneral"), true, () => {
-        switchSettingsTab("general", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, account: btnAccount, about: btnAbout }, {
-            general: generalTabContent,
-            display: displayTabContent,
-            hotkeys: hotkeysTabContent,
-            account: accountTabContent,
-            about: aboutTabContent,
-        });
-    });
-    const btnDisplay = createSettingsTabButton(createEl, getText(lang, "tabDisplay"), false, () => {
-        switchSettingsTab("display", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, account: btnAccount, about: btnAbout }, {
-            general: generalTabContent,
-            display: displayTabContent,
-            hotkeys: hotkeysTabContent,
-            account: accountTabContent,
-            about: aboutTabContent,
-        });
-    });
-    const btnHotkeys = createSettingsTabButton(createEl, getText(lang, "tabHotkeys"), false, () => {
-        switchSettingsTab("hotkeys", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, account: btnAccount, about: btnAbout }, {
-            general: generalTabContent,
-            display: displayTabContent,
-            hotkeys: hotkeysTabContent,
-            account: accountTabContent,
-            about: aboutTabContent,
-        });
-    });
-    const btnAccount = createSettingsTabButton(createEl, lang === "ja" ? "アカウント" : "Account", false, () => {
-        switchSettingsTab("account", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, account: btnAccount, about: btnAbout }, {
-            general: generalTabContent,
-            display: displayTabContent,
-            hotkeys: hotkeysTabContent,
-            account: accountTabContent,
-            about: aboutTabContent,
-        });
-    });
-    const btnAbout = createSettingsTabButton(createEl, getText(lang, "tabAbout" as any) || "About", false, () => {
-        switchSettingsTab("about", { general: btnGeneral, display: btnDisplay, hotkeys: btnHotkeys, account: btnAccount, about: btnAbout }, {
-            general: generalTabContent,
-            display: displayTabContent,
-            hotkeys: hotkeysTabContent,
-            account: accountTabContent,
-            about: aboutTabContent,
-        });
-    });
+    const tabContents = {
+        general: generalTabContent,
+        display: displayTabContent,
+        scoreboardLinks: scoreboardLinksTabContent,
+        hotkeys: hotkeysTabContent,
+        account: accountTabContent,
+        about: aboutTabContent,
+    };
+    let tabButtons: Parameters<typeof switchSettingsTab>[1];
+    const activateTab = (tabName: Parameters<typeof switchSettingsTab>[0]) => {
+        switchSettingsTab(tabName, tabButtons, tabContents);
+    };
+    const btnGeneral = createSettingsTabButton(createEl, getText(lang, "tabGeneral"), true, () => activateTab("general"));
+    const btnDisplay = createSettingsTabButton(createEl, getText(lang, "tabDisplay"), false, () => activateTab("display"));
+    const btnScoreboardLinks = createSettingsTabButton(createEl, getText(lang, "scoreboardLinks"), false, () => activateTab("scoreboardLinks"));
+    const btnHotkeys = createSettingsTabButton(createEl, getText(lang, "tabHotkeys"), false, () => activateTab("hotkeys"));
+    const btnAccount = createSettingsTabButton(createEl, lang === "ja" ? "アカウント" : "Account", false, () => activateTab("account"));
+    const btnAbout = createSettingsTabButton(createEl, getText(lang, "tabAbout" as any) || "About", false, () => activateTab("about"));
+    tabButtons = {
+        general: btnGeneral,
+        display: btnDisplay,
+        scoreboardLinks: btnScoreboardLinks,
+        hotkeys: btnHotkeys,
+        account: btnAccount,
+        about: btnAbout,
+    };
 
-    const tabsContainer = createEl("div", {}, { class: "settings-tabs" }, [btnGeneral, btnDisplay, btnHotkeys, btnAccount, btnAbout]);
-    const modalBody = createEl("div", {}, { style: "display: flex; flex-direction: column; overflow: hidden; flex: 1;" }, [
-        tabsContainer,
+    const tabsHeading = createEl("div", {}, { class: "settings-tabs-heading" }, getText(lang, "settingsTitle"));
+    const tabsContainer = createEl("div", {}, { class: "settings-tabs" }, [tabsHeading, btnGeneral, btnDisplay, btnScoreboardLinks, btnHotkeys, btnAccount, btnAbout]);
+    const panelsContainer = createEl("div", {}, { class: "settings-panels" }, [
         generalTabContent,
         displayTabContent,
+        scoreboardLinksTabContent,
         hotkeysTabContent,
         accountTabContent,
         aboutTabContent,
+    ]);
+    const modalBody = createEl("div", {}, { class: "settings-modal-body" }, [
+        panelsContainer,
     ]);
 
     const saveBtn = createEl("button", {
@@ -277,13 +271,20 @@ export function showSettingsModalView(input: {
 
     const cancelBtn = createEl("button", { onclick: closeSettingsModal }, { class: "btn-cancel" }, getText(lang, "cancel"));
     const actions = createEl("div", {}, { class: "settings-actions" }, [cancelBtn, saveBtn]);
-    const content = createEl("div", {}, { id: "settings-modal-content" }, [
+    const header = createEl("div", {}, { class: "settings-header" }, [
         createEl("h2", {}, { style: "text-align: center; margin-top: 5px; margin-bottom: 0px; font-size: 1.2em;" }, getText(lang, "settingsTitle")),
         createEl("div", {}, { style: "text-align: center; margin-bottom: 10px; color: #888; font-size: 0.8em;" }, `Patch ${currentPatchVersion}`),
+    ]);
+    const content = createEl("div", {}, { id: "settings-modal-content" }, [
+        header,
         modalBody,
         actions,
     ]);
+    const layout = createEl("div", {}, { class: "settings-modal-layout" }, [
+        tabsContainer,
+        content,
+    ]);
 
     modalContent.classList.add("settings-mode");
-    showModal(content);
+    showModal(layout);
 }

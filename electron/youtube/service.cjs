@@ -15,12 +15,94 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const RESUMABLE_URL = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status";
 const VIDEOS_LIST_URL = "https://www.googleapis.com/youtube/v3/videos";
+const CHANNELS_LIST_URL = "https://www.googleapis.com/youtube/v3/channels";
 const MAX_FILE_BYTES = 256 * 1024 * 1024 * 1024;
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 
 function base64Url(value) {
   return Buffer.from(value).toString("base64url");
+}
+
+function callbackLanguage(acceptLanguage) {
+  const preferred = String(acceptLanguage || "")
+    .split(",")
+    .map((entry, index) => {
+      const [tag, ...parameters] = entry.trim().split(";");
+      const quality = parameters
+        .map((parameter) => parameter.trim().match(/^q=([01](?:\.\d+)?)$/i))
+        .find(Boolean);
+      return { tag: tag.toLowerCase(), quality: quality ? Number(quality[1]) : 1, index };
+    })
+    .filter((entry) => entry.tag && entry.quality > 0)
+    .sort((a, b) => b.quality - a.quality || a.index - b.index)[0]?.tag;
+  return preferred === "ja" || preferred?.startsWith("ja-") ? "ja" : "en";
+}
+
+function oauthCallbackHtml({ success, acceptLanguage }) {
+  const language = callbackLanguage(acceptLanguage);
+  const copy = language === "ja"
+    ? success
+      ? {
+        title: "Googleアカウントを接続しました",
+        detail: "LeagueRecord Customへ戻ります。",
+        close: "このタブを閉じる（ブラウザが許可する場合）",
+        closeHelp: "ブラウザの制限により、このタブは自動で閉じられません。LeagueRecord Customへ戻ってから、このタブを閉じてください。",
+      }
+      : {
+        title: "Googleアカウントを接続できませんでした",
+        detail: "LeagueRecord Customへ戻り、もう一度お試しください。",
+        close: "このタブを閉じる（ブラウザが許可する場合）",
+        closeHelp: "ブラウザの制限により、このタブは自動で閉じられません。LeagueRecord Customへ戻ってから、このタブを閉じてください。",
+      }
+    : success
+      ? {
+        title: "Google Account Connected",
+        detail: "Returning to LeagueRecord Custom.",
+        close: "Close This Tab (if allowed)",
+        closeHelp: "Your browser prevented this tab from closing automatically. Return to LeagueRecord Custom, then close this tab.",
+      }
+      : {
+        title: "Google Account Connection Failed",
+        detail: "Return to LeagueRecord Custom and try again.",
+        close: "Close This Tab (if allowed)",
+        closeHelp: "Your browser prevented this tab from closing automatically. Return to LeagueRecord Custom, then close this tab.",
+      };
+  return `<!doctype html>
+<html lang="${language}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>${copy.title}</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #0b1220; color: #f8fafc; }
+    main { max-width: 34rem; padding: 2rem; text-align: center; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.75rem; }
+    p { color: #cbd5e1; line-height: 1.6; }
+    button { margin-top: 1rem; padding: 0.7rem 1rem; border: 0; border-radius: 0.5rem; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${copy.title}</h1>
+    <p>${copy.detail}</p>
+    <button type="button" onclick="closeTab()">${copy.close}</button>
+    <p id="close-help" hidden>${copy.closeHelp}</p>
+  </main>
+  <script>
+    function showCloseHelp() {
+      document.getElementById("close-help").hidden = false;
+    }
+    function closeTab() {
+      window.close();
+      setTimeout(showCloseHelp, 250);
+    }
+    setTimeout(closeTab, 1200);
+  </script>
+</body>
+</html>`;
 }
 
 function makeError(message, code = "youtube_error") {
@@ -103,6 +185,8 @@ function missingYouTubeReadScopeError() {
 function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings, getImageCacheRoots, isRecording, emit, log }) {
   let activeJob = null;
   let authInProgress = false;
+  let activeAuthorizationUrl = null;
+  let activeSignInPromise = null;
 
   const tokenPath = () => path.join(app.getPath("userData"), "youtube", "token.bin");
   const oauthConfig = () => getYouTubeOAuthConfig();
@@ -216,6 +300,8 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
       identityEnabled: tokens.identityEnabled === true,
       uploadScopeGranted: uploadScopeGranted ?? tokens.uploadScopeGranted === true,
       readScopeGranted: readScopeGranted ?? tokens.readScopeGranted === true,
+      customThumbnailCapability: tokens.customThumbnailCapability,
+      customThumbnailCapabilityCheckedAt: tokens.customThumbnailCapabilityCheckedAt,
     };
     await saveTokens(next);
     if (requiredScope === YOUTUBE_READ_SCOPE && next.readScopeGranted !== true) {
@@ -250,6 +336,8 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
       identityEnabled: true,
       uploadScopeGranted: responseHasScope(refreshed, YOUTUBE_UPLOAD_SCOPE) ?? tokens.uploadScopeGranted === true,
       readScopeGranted: responseHasScope(refreshed, YOUTUBE_READ_SCOPE) ?? tokens.readScopeGranted === true,
+      customThumbnailCapability: tokens.customThumbnailCapability,
+      customThumbnailCapabilityCheckedAt: tokens.customThumbnailCapabilityCheckedAt,
     };
     await saveTokens(next);
     if (!refreshed.id_token) {
@@ -260,11 +348,10 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
     return String(refreshed.id_token);
   }
 
-  async function signIn() {
+  async function performSignIn() {
     const config = oauthConfig();
     if (!config.clientId) throw makeError("YouTubeの開発用Client IDが設定されていません。", "not_configured");
     if (!config.clientSecret) throw makeError("GoogleデスクトップOAuth Client Secretが設定されていません。", "oauth_client_secret_missing");
-    if (authInProgress) throw makeError("Google接続をすでに開始しています。", "auth_in_progress");
     authInProgress = true;
     const verifier = base64Url(randomBytes(48));
     const challenge = createHash("sha256").update(verifier).digest("base64url");
@@ -278,13 +365,27 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
           const returnedState = url.searchParams.get("state");
           const oauthError = url.searchParams.get("error");
           if (!code || returnedState !== state || oauthError) {
-            res.writeHead(400, { "content-type": "text/html; charset=utf-8" });
-            res.end("<p>Google接続に失敗しました。この画面を閉じてアプリへ戻ってください。</p>");
+            res.writeHead(400, {
+              "content-type": "text/html; charset=utf-8",
+              "cache-control": "no-store",
+              "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'",
+            });
+            res.end(oauthCallbackHtml({
+              success: false,
+              acceptLanguage: req.headers["accept-language"],
+            }));
             reject(makeError("Google接続がキャンセルされたか、確認に失敗しました。", "auth_cancelled"));
             return;
           }
-          res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-          res.end("<p>Googleアカウントを接続しました。この画面を閉じてLeagueRecordへ戻ってください。</p>");
+          res.writeHead(200, {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-store",
+            "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'",
+          });
+          res.end(oauthCallbackHtml({
+            success: true,
+            acceptLanguage: req.headers["accept-language"],
+          }));
           resolve({ code, redirectUri: `http://127.0.0.1:${server.address().port}` });
         });
         server.once("error", reject);
@@ -302,7 +403,9 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
           url.searchParams.set("prompt", "consent");
           url.searchParams.set("include_granted_scopes", "true");
           url.searchParams.set("enable_granular_consent", "true");
-          try { await shell.openExternal(url.toString()); } catch (error) { reject(error); }
+          url.searchParams.set("hl", "en");
+          activeAuthorizationUrl = url.toString();
+          try { await shell.openExternal(activeAuthorizationUrl); } catch (error) { reject(error); }
         });
       });
       const response = await requestToken({
@@ -338,8 +441,37 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
       return { ...(await getAuthStatus()), firebaseIdToken: String(response.id_token) };
     } finally {
       authInProgress = false;
+      activeAuthorizationUrl = null;
       if (server) server.close();
     }
+  }
+
+  function signIn() {
+    if (activeSignInPromise) {
+      if (activeAuthorizationUrl) {
+        void shell.openExternal(activeAuthorizationUrl).catch(() => {});
+      }
+      return activeSignInPromise;
+    }
+    const promise = performSignIn();
+    activeSignInPromise = promise;
+    void promise.then(
+      () => {
+        if (activeSignInPromise === promise) activeSignInPromise = null;
+      },
+      () => {
+        if (activeSignInPromise === promise) activeSignInPromise = null;
+      },
+    );
+    return promise;
+  }
+
+  async function reopenSignIn() {
+    if (!authInProgress || !activeAuthorizationUrl) {
+      throw makeError("進行中のGoogle接続がありません。接続をもう一度開始してください。", "auth_not_in_progress");
+    }
+    await shell.openExternal(activeAuthorizationUrl);
+    return { opened: true };
   }
 
   async function resolveVideo(videoId) {
@@ -359,6 +491,48 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
     if (!stat.isFile() || stat.size <= 0) throw makeError("空または通常ファイルではない録画はアップロードできません。", "validation");
     if (stat.size > MAX_FILE_BYTES) throw makeError("YouTubeの256GB上限を超えています。", "validation");
     return { filePath, stat };
+  }
+
+  async function getChannelCapabilities() {
+    const accessToken = await getAccessToken(YOUTUBE_READ_SCOPE);
+    const url = new URL(CHANNELS_LIST_URL);
+    url.searchParams.set("part", "snippet,status");
+    url.searchParams.set("mine", "true");
+    url.searchParams.set("maxResults", "1");
+    const response = await fetch(url, { headers: { authorization: `Bearer ${accessToken}` } });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const info = youtubeApiErrorInfo(response, result);
+      await log(`youtube channel capability check failed http=${info.httpStatus} reason=${info.reason}`);
+      throw makeError(youtubeApiUserMessage("checking", info), `youtube_channel_${info.reason}`);
+    }
+    const channel = result?.items?.[0];
+    const tokens = await loadTokens();
+    const savedThumbnailCapability = new Set(["available", "unavailable"]).has(tokens?.customThumbnailCapability)
+      ? tokens.customThumbnailCapability
+      : "unknown";
+    const longUploadsStatus = new Set(["allowed", "eligible", "disallowed"]).has(channel?.status?.longUploadsStatus)
+      ? channel.status.longUploadsStatus
+      : "unknown";
+    return {
+      channelFound: Boolean(channel),
+      channelId: channel?.id || null,
+      channelTitle: channel?.snippet?.title || null,
+      standardFeatures: channel ? "available" : "unavailable",
+      longUploadsStatus,
+      customThumbnails: savedThumbnailCapability,
+      customThumbnailsCheckedAt: Number(tokens?.customThumbnailCapabilityCheckedAt) || null,
+    };
+  }
+
+  async function rememberCustomThumbnailCapability(value) {
+    const tokens = await loadTokens();
+    if (!tokens?.refreshToken) return;
+    await saveTokens({
+      ...tokens,
+      customThumbnailCapability: value,
+      customThumbnailCapabilityCheckedAt: Date.now(),
+    });
   }
 
   function validateMetadata(metadata, filePath) {
@@ -390,7 +564,7 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
     const { filePath, stat } = await resolveVideo(videoId);
     const data = validateMetadata(metadata, filePath);
     const controller = new AbortController();
-    activeJob = { state: "thumbnail_preparing", sourceVideoId: videoId, fileName: path.basename(filePath), totalBytes: stat.size, sentBytes: 0, youtubeVideoId: null, youtubeUrl: null, error: null, controller };
+    activeJob = { state: "thumbnail_preparing", sourceVideoId: videoId, fileName: path.basename(filePath), totalBytes: stat.size, sentBytes: 0, youtubeVideoId: null, youtubeUrl: null, error: null, thumbnailStatus: "pending", thumbnailError: null, controller };
     publish();
     try {
       const preparedThumbnail = await createThumbnail(thumbnail?.metadata, {
@@ -442,7 +616,15 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
       activeJob.youtubeUrl = `https://youtu.be/${result.id}`;
       activeJob.state = "thumbnail_uploading";
       publish();
-      await uploadThumbnailData(result.id, preparedThumbnail, accessToken, controller.signal);
+      try {
+        await uploadThumbnailData(result.id, preparedThumbnail, accessToken, controller.signal);
+        activeJob.thumbnailStatus = "succeeded";
+      } catch (error) {
+        if (error?.name === "AbortError") throw error;
+        activeJob.thumbnailStatus = "failed";
+        activeJob.thumbnailError = error?.message || "サムネイルを設定できませんでした。";
+        await log(`youtube thumbnail warning video=${result.id} code=${error?.code || "unknown"}`);
+      }
       activeJob.state = "processing";
       activeJob.processingStatus = "pending";
       publish();
@@ -492,6 +674,27 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
     return ids.filter((id) => !existing.has(id));
   }
 
+  async function getVideoPublishedDates(videoIds) {
+    const ids = [...new Set(Array.isArray(videoIds) ? videoIds.map(String) : [])];
+    if (ids.length < 1 || ids.length > 50 || ids.some((id) => !YOUTUBE_VIDEO_ID.test(id))) {
+      throw makeError("確認するYouTube動画IDが不正です。", "validation");
+    }
+    const accessToken = await getAccessToken(YOUTUBE_READ_SCOPE);
+    const url = new URL(VIDEOS_LIST_URL);
+    url.searchParams.set("part", "snippet");
+    url.searchParams.set("id", ids.join(","));
+    const response = await fetch(url, { headers: { authorization: `Bearer ${accessToken}` } });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !Array.isArray(result.items)) {
+      throw await makeYouTubeApiError(response, result, "checking");
+    }
+    return Object.fromEntries(result.items.flatMap((item) => {
+      const id = String(item?.id || "");
+      const publishedAtMs = Date.parse(String(item?.snippet?.publishedAt || ""));
+      return YOUTUBE_VIDEO_ID.test(id) && Number.isFinite(publishedAtMs) ? [[id, publishedAtMs]] : [];
+    }));
+  }
+
   async function isPublicVideoAvailable(videoId) {
     const id = String(videoId || "");
     if (!YOUTUBE_VIDEO_ID.test(id)) throw makeError("確認するYouTube動画IDが不正です。", "validation");
@@ -536,6 +739,9 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
       const info = youtubeApiErrorInfo(response, result);
       await log(`youtube thumbnail set failed video=${videoId} http=${info.httpStatus} reason=${info.reason}`);
       const reason = info.reason.toLowerCase();
+      if (info.httpStatus === 403 && reason.includes("forbidden")) {
+        await rememberCustomThumbnailCapability("unavailable");
+      }
       const message = info.httpStatus === 403
         ? "サムネイルを設定できませんでした。YouTubeチャンネルでカスタムサムネイルが有効か確認してください。"
         : info.httpStatus === 429
@@ -543,6 +749,7 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
           : `サムネイルの設定に失敗しました（${info.reason}${info.detail ? `: ${info.detail}` : ""}）。`;
       throw makeError(message, `youtube_thumbnail_${reason}`);
     }
+    await rememberCustomThumbnailCapability("available");
     await log(`youtube thumbnail set success video=${videoId}`);
     return result;
   }
@@ -641,7 +848,7 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
     return { dataUrl: `data:${mimeType};base64,${buffer.toString("base64")}`, mimeType, bytes: buffer.length };
   }
 
-  return { getAuthStatus, getFirebaseIdToken, signIn, signOut, startUpload, setThumbnail, previewThumbnail, getUploadJob, cancelUpload, findMissingVideos, isPublicVideoAvailable };
+  return { getAuthStatus, getChannelCapabilities, getFirebaseIdToken, signIn, reopenSignIn, signOut, startUpload, setThumbnail, previewThumbnail, getUploadJob, cancelUpload, findMissingVideos, getVideoPublishedDates, isPublicVideoAvailable };
 }
 
-module.exports = { createYouTubeService };
+module.exports = { callbackLanguage, createYouTubeService, oauthCallbackHtml };

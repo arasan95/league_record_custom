@@ -1,6 +1,6 @@
 {
   "name": "league_record_custom",
-  "version": "1.2.1",
+  "version": "1.2.7",
   "description": "LeagueRecord Electron build",
   "author": "arasan95",
   "copyright": "Copyright (c) arasan95",
@@ -16,6 +16,7 @@
   "scripts": {
     "dev": "bun run --watch --port 1420 src/index.html",
     "electron:dev": "node scripts/dev-electron.cjs",
+    "electron:dev:watch": "node scripts/dev-electron.cjs --watch-main",
     "electron:start": "node scripts/start-electron.cjs",
     "electron:build": "bun run build && node scripts/build-electron.cjs nsis",
     "electron:build:portable": "bun run build && node scripts/build-electron.cjs portable",
@@ -27,7 +28,7 @@
     "preview": "bun dist/index.html",
     "check:responsibility": "node ci/check-responsibility-coverage.mjs",
     "test:security:metadata": "bun test tests/replay_share_security.test.ts",
-    "test:security:rules": "firebase emulators:exec --only firestore --project demo-leaguerecord \"bun test tests/firestore.rules.test.ts\"",
+    "test:security:rules": "firebase emulators:exec --only firestore --project demo-leaguerecord \"bun test --timeout 30000 tests/firestore.rules.test.ts\"",
     "test:security": "bun run test:security:metadata && bun run test:security:rules",
     "test:youtube-defaults": "bun test tests/youtube_upload_defaults.test.ts",
     "test:youtube-oauth": "bun test tests/youtube_oauth_desktop_client.test.ts",
@@ -47,27 +48,43 @@
     "@tauri-apps/plugin-shell": "^2.3.4",
     "@tauri-apps/plugin-updater": "^2.10.0",
     "@xmldom/xmldom": "^0.8.13",
+    "electron-updater": "^6.8.9",
     "firebase": "^12.16.0",
     "firebase-admin": "^14.2.0",
     "sql.js": "^1.14.1",
     "video.js": "^8.23.4",
-    "videojs-youtube": "^3.0.1"
+    "videojs-youtube": "^3.0.1",
+    "ws": "8.21.1"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.1",
     "@tauri-apps/cli": "^2.10.0",
     "@types/bun": "^1.3.10",
-    "electron": "^37.0.0",
-    "electron-builder": "^26.8.1",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
     "firebase-tools": "^15.24.0",
     "oxlint": "^1.38.0"
   },
   "build": {
     "appId": "com.leaguerecord.custom.electron",
     "productName": "LeagueRecord Electron",
+    "protocols": [
+      {
+        "name": "LeagueRecord Replay Link",
+        "schemes": ["leaguerecord"]
+      }
+    ],
     "executableName": "LeagueRecordElectron",
-    "artifactName": "LeagueRecordElectron Setup ${version}.${ext}",
-    "asar": false,
+    "artifactName": "LeagueRecordElectron-Setup-${version}.${ext}",
+    "asar": true,
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    },
     "afterPack": "scripts/after-pack-electron.cjs",
     "directories": {
       "output": "release-electron"
@@ -80,33 +97,20 @@
       "!electron/youtube/local-client-secret.txt",
       "package.json",
       "app-icon.png",
-      "node_modules/sql.js/**/*"
+      "src/assets/ranked-emblem/**/*",
+      "src/assets/icon/LoL.png",
+      "src/css/BeaufortW01-Bold.ttf",
+      "node_modules/sql.js/**/*",
+      "node_modules/ws/**/*"
     ],
     "extraResources": [
       {
-        "from": "src-tauri/target/libobs",
-        "to": "libobs"
-      },
-      {
         "from": "src-tauri/devtools/target/release/rebuild_tooltip_cache.exe",
         "to": "devtools/rebuild_tooltip_cache.exe"
-      },
-      {
-        "from": "src-tauri/resources/tooltip_data.db",
-        "to": "tooltip_data.db"
-      },
-      {
-        "from": ".build-input/youtube-client-id.txt",
-        "to": "youtube/client-id.txt"
-      },
-      {
-        "from": ".build-input/youtube-client-secret.txt",
-        "to": "youtube/client-secret.txt"
       }
     ],
     "win": {
       "icon": "app-icon.ico",
-      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",
@@ -116,10 +120,28 @@
         }
       ]
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "arasan95",
+        "repo": "League_Record_custom",
+        "releaseType": "release"
+      }
+    ],
     "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
+      "include": "build/installer.nsh",
+        "oneClick": false,
+        "perMachine": false,
+        "installerLanguages": [
+          "en_US",
+          "ja_JP"
+        ],
+        "displayLanguageSelector": false,
+        "allowToChangeInstallationDirectory": false,
+      "differentialPackage": true,
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }

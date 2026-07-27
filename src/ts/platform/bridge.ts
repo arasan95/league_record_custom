@@ -43,11 +43,21 @@ export type LeagueRecordBridge = {
     clipboard: {
         writeText: (text: string) => Promise<void>;
     };
+    deepLink: {
+        rendererReady: () => Promise<string[]>;
+    };
     app: {
         getVersion: () => Promise<string>;
     };
     updater: {
         check: () => Promise<any>;
+        onProgress: (cb: (progress: {
+            percent: number;
+            transferred: number;
+            total: number;
+            bytesPerSecond: number;
+        }) => void) => Promise<() => void>;
+        onStatus: (cb: (status: { phase: string; version?: string; message?: string }) => void) => Promise<() => void>;
     };
     process: {
         relaunch: () => Promise<void>;

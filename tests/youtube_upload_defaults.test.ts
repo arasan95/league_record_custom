@@ -29,19 +29,27 @@ function metadata(): GameMetadata {
 }
 
 describe("YouTube upload defaults", () => {
-    test("builds title, teams, hashtags and self-event chapters without links", async () => {
+    test("builds title, teams, homepage, hashtags and self-event chapters", async () => {
         const names: Record<number, string> = { 51: "Caitlyn", 26: "Zilean", 18: "Tristana", 63: "Brand" };
         const result = await buildYouTubeUploadDefaults(metadata(), async (id) => names[id] ?? null);
         expect(result.title).toBe("Caitlyn vs Tristana [BOT] SILVER I Patch 16.13");
         expect(result.description).toContain("Side: Blue Side");
         expect(result.description).toContain("Blue Team: Caitlyn / Zilean");
         expect(result.description).toContain("Red Team: Tristana / Brand");
-        expect(result.description).not.toMatch(/https?:\/\//);
+        expect(result.description).toContain("https://leaguerecord.web.app/");
         expect(result.description).toContain("#LeagueOfLegends #LoL #LeagueRecord");
         expect(result.description).toContain("0:00 Start");
         expect(result.description).toContain("3:45 Kill");
         expect(result.description).not.toContain("3:50 Assist");
         expect(result.description).toContain("4:15 Death");
+    });
+
+    test("omits chapters and timestamps for clips", async () => {
+        const result = await buildYouTubeUploadDefaults(metadata(), async (id) => `Champion${id}`, { isClip: true });
+        expect(result.description).toContain("https://leaguerecord.web.app/");
+        expect(result.description).not.toContain("Chapters");
+        expect(result.description).not.toContain("0:00 Start");
+        expect(result.description).not.toContain("3:45 Kill");
     });
 
     test("falls back to team order when old metadata marks every lane NONE/SUPPORT", async () => {

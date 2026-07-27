@@ -5,6 +5,24 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#000000" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        base-uri 'none';
+        object-src 'none';
+        frame-ancestors 'none';
+        form-action 'none';
+        script-src 'self' blob: 'unsafe-inline';
+        style-src 'self' 'unsafe-inline';
+        font-src 'self' data: lr-file:;
+        img-src 'self' data: blob: lr-file: https://ddragon.leagueoflegends.com https://raw.communitydragon.org https://i.ytimg.com https://img.youtube.com;
+        media-src 'self' file: blob: lr-file: https://www.youtube.com https://www.youtube-nocookie.com;
+        frame-src https://www.youtube.com https://www.youtube-nocookie.com;
+        connect-src 'self' https://api.github.com https://ddragon.leagueoflegends.com https://raw.communitydragon.org https://*.googleapis.com wss://*.googleapis.com http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*;
+        worker-src 'self' blob:;
+      "
+    />
     <link rel="icon" type="image/ico" href="favicon.ico" />
     <link rel="stylesheet" href="video.js/dist/video-js.min.css" />
     <link rel="stylesheet" href="css/base.css" />
@@ -18,17 +36,7 @@
     <link rel="stylesheet" href="css/tooltip.css" />
     <link rel="stylesheet" href="css/titlebar.css" />
     <link rel="stylesheet" href="css/review-comments.css" />
-    <script>
-      window.addEventListener("error", (event) => {
-        const details = event.error && event.error.stack ? event.error.stack : event.message;
-        console.error(`[startup-error-stack] ${details}`);
-      });
-      window.addEventListener("unhandledrejection", (event) => {
-        const reason = event.reason;
-        const details = reason && reason.stack ? reason.stack : String(reason);
-        console.error(`[startup-rejection-stack] ${details}`);
-      });
-    </script>
+    <script type="module" src="ts/startup_error_logging.ts"></script>
     <script type="module" src="ts/main.ts"></script>
   </head>
 
@@ -310,8 +318,34 @@
             <span class="review-comments-eyebrow">VIDEO REVIEW</span>
             <h2 data-ui-text="reviewComments">コメント</h2>
           </div>
-          <span id="review-comment-count" class="review-comment-count">0</span>
+          <div class="review-comments-header-actions">
+            <span id="review-comment-count" class="review-comment-count">0</span>
+            <button id="community-report-toggle" class="community-report-toggle" type="button" title="通報・ブロック" aria-label="通報・ブロック" aria-expanded="false" aria-controls="community-moderation-panel" disabled>
+              <span aria-hidden="true">!</span>
+              <span id="community-report-badge" class="community-report-badge" hidden>0</span>
+            </button>
+          </div>
         </header>
+
+        <section id="community-moderation-panel" class="community-moderation-panel" hidden>
+          <div class="community-moderation-heading">
+            <strong id="community-moderation-title">通報・ブロック</strong>
+            <button id="community-moderation-close" type="button" aria-label="閉じる">×</button>
+          </div>
+          <p id="community-moderation-help">共有コメント横の ! から通報できます。ブロックしたユーザーのコメントは自分にだけ表示されなくなります。</p>
+          <div id="community-admin-reports" hidden>
+            <strong>管理者専用・未処理の通報</strong>
+            <div id="community-admin-report-list" class="community-admin-report-list"></div>
+          </div>
+          <div id="community-admin-moderations" hidden>
+            <strong>管理者専用・適用中の制限</strong>
+            <div id="community-admin-moderation-list" class="community-admin-report-list"></div>
+          </div>
+          <div id="community-blocked-users" hidden>
+            <strong>ブロック中のユーザー</strong>
+            <div id="community-blocked-user-list" class="community-blocked-user-list"></div>
+          </div>
+        </section>
 
         <div class="review-comment-filters" role="group" aria-label="コメント評価で絞り込み" data-ui-aria-label="filterComments">
           <button type="button" data-comment-filter="all" class="active" data-ui-text="all">すべて</button>
@@ -329,38 +363,63 @@
         </div>
 
         <section id="community-comments-panel" class="community-comments-panel" hidden>
-          <div class="community-comments-title-row">
-            <strong data-ui-text="sharedComments">共有コメント</strong>
-            <span id="community-comments-status" data-ui-text="checking">確認中…</span>
-          </div>
-          <button id="community-comments-signin" type="button" hidden data-ui-text="connectGoogle">Googleアカウントを接続</button>
-          <div id="community-comments-owner-controls" hidden>
-            <label><span data-ui-text="posting">投稿</span>
-              <select id="community-write-access">
-                <option value="public" data-ui-text="allSignedInUsers">ログインユーザー全員</option>
-                <option value="invite_only" data-ui-text="invitedUsersOnly">招待ユーザーのみ</option>
-              </select>
-            </label>
-            <label><span data-ui-text="viewing">閲覧</span>
-              <select id="community-read-access">
-                <option value="public" data-ui-text="everyone">全員</option>
-                <option value="invite_only" data-ui-text="invitedUsersOnly">招待ユーザーのみ</option>
-              </select>
-            </label>
-            <button id="community-settings-save" type="button" data-ui-text="saveSettings">設定を保存</button>
-            <button id="community-invite-create" type="button" data-ui-text="createInvite">招待コードを発行</button>
-            <input id="community-invite-output" type="text" readonly hidden aria-label="発行した招待コード" data-ui-aria-label="issuedInvite" />
-          </div>
-          <div class="community-invite-redeem">
-            <input id="community-invite-code" type="text" placeholder="招待コード" data-ui-placeholder="inviteCode" autocomplete="off" spellcheck="false" />
-            <button id="community-invite-redeem" type="button" data-ui-text="join">参加</button>
-          </div>
-          <label class="community-group-filter"><span data-ui-text="displayGroup">表示グループ</span>
-            <select id="community-group-filter">
-              <option value="all" data-ui-text="all">すべて</option>
-              <option value="invited" data-ui-text="invitedUsersOnly">招待ユーザーのみ</option>
-            </select>
-          </label>
+          <section class="community-settings-section">
+            <button id="community-sharing-toggle" class="community-section-toggle" type="button" aria-expanded="true" aria-controls="community-sharing-content">
+              <strong data-ui-text="sharingSettings">共有設定</strong>
+              <span class="community-section-toggle-meta">
+                <span id="community-comments-status" data-ui-text="checking">確認中…</span>
+                <span class="community-section-chevron" aria-hidden="true">⌄</span>
+              </span>
+            </button>
+            <div id="community-sharing-content" class="community-section-content">
+              <button id="community-comments-signin" type="button" hidden data-ui-text="connectGoogle">Googleアカウントを接続</button>
+              <div id="community-comments-owner-controls" hidden>
+                <label><span data-ui-text="posting">投稿</span>
+                  <select id="community-write-access">
+                    <option value="public" data-ui-text="allSignedInUsers">ログインユーザー全員</option>
+                    <option value="invite_only" data-ui-text="invitedUsersOnly">招待ユーザーのみ</option>
+                    <option value="rank_verified" data-ui-text="rankVerifiedUsers">LoLランク連携済みユーザー</option>
+                  </select>
+                </label>
+                <label><span data-ui-text="viewing">閲覧</span>
+                  <select id="community-read-access">
+                    <option value="public" data-ui-text="everyone">全員</option>
+                    <option value="invite_only" data-ui-text="invitedUsersOnly">招待ユーザーのみ</option>
+                  </select>
+                </label>
+                <button id="community-settings-save" type="button" data-ui-text="saveSettings">設定を保存</button>
+                <button id="community-invite-create" type="button" data-ui-text="createInvite">招待リンクを発行・コピー</button>
+                <button id="community-invite-link-copy" type="button" hidden data-ui-text="copyAppInviteLink">リンクをもう一度コピー</button>
+                <input id="community-invite-output" type="text" readonly hidden aria-label="発行した招待リンク" data-ui-aria-label="issuedInvite" />
+              </div>
+              <div class="community-invite-redeem">
+                <input id="community-invite-code" type="text" placeholder="招待コード" data-ui-placeholder="inviteCode" autocomplete="off" spellcheck="false" />
+                <button id="community-invite-redeem" type="button" data-ui-text="join">参加</button>
+              </div>
+            </div>
+          </section>
+          <section class="community-settings-section">
+            <button id="community-display-toggle" class="community-section-toggle" type="button" aria-expanded="true" aria-controls="community-display-content">
+              <strong data-ui-text="displayOptions">表示オプション</strong>
+              <span class="community-section-chevron" aria-hidden="true">⌄</span>
+            </button>
+            <div id="community-display-content" class="community-section-content">
+              <label class="community-group-filter"><span data-ui-text="displayGroup">表示グループ</span>
+                <select id="community-group-filter">
+                  <option value="all" data-ui-text="all">すべて</option>
+                  <option value="invited" data-ui-text="invitedUsersOnly">招待ユーザーのみ</option>
+                </select>
+              </label>
+              <fieldset id="community-author-filter" class="community-author-filter" hidden>
+                <legend data-ui-text="displayUsers">表示ユーザー</legend>
+                <label class="community-author-filter-all">
+                  <input id="community-author-filter-all" type="checkbox" checked />
+                  <span data-ui-text="allUsers">すべてのユーザー</span>
+                </label>
+                <div id="community-author-filter-options" class="community-author-filter-options"></div>
+              </fieldset>
+            </div>
+          </section>
         </section>
 
         <div id="review-comment-empty" class="review-comment-empty" data-ui-text="chooseVideoComments">
@@ -401,6 +460,10 @@
           <label id="review-comment-private-label" class="review-comment-private" hidden>
             <input id="review-comment-private" type="checkbox" />
             <span data-ui-text="privateComment">自分だけに表示</span>
+          </label>
+          <label id="review-comment-anonymous-label" class="review-comment-private" hidden>
+            <input id="review-comment-anonymous" type="checkbox" />
+            <span data-ui-text="anonymousComment">匿名で投稿</span>
           </label>
           <button id="review-comment-submit" type="submit" disabled data-ui-text="postCurrentTime">現在時刻に投稿</button>
           <p class="review-comment-hint" data-ui-text="dragHint">コメントを動画へドラッグすると、その位置に固定表示できます。</p>

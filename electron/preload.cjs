@@ -56,6 +56,9 @@ contextBridge.exposeInMainWorld("leagueRecord", {
   clipboard: {
     writeText: (text) => ipcRenderer.invoke("lr:clipboard:writeText", text),
   },
+  deepLink: {
+    rendererReady: () => ipcRenderer.invoke("lr:deep-link:renderer-ready"),
+  },
   youtubeComparison: {
     setEnabled: (enabled) => ipcRenderer.invoke("lr:youtube-ui-comparison:setEnabled", Boolean(enabled)),
   },
@@ -71,6 +74,8 @@ contextBridge.exposeInMainWorld("leagueRecord", {
         downloadAndInstall: () => ipcRenderer.invoke("lr:updater:downloadAndInstall", update),
       };
     },
+    onProgress: (cb) => onEvent("AppUpdateProgress", ({ payload }) => cb(payload)),
+    onStatus: (cb) => onEvent("AppUpdateStatus", ({ payload }) => cb(payload)),
   },
   process: {
     relaunch: () => ipcRenderer.invoke("lr:process:relaunch"),

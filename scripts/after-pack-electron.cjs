@@ -1,6 +1,8 @@
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
+const asar = require("@electron/asar");
 
 function findRcedit(projectDir) {
   const fallback = path.join(projectDir, "node_modules", "electron-winstaller", "vendor", "rcedit.exe");
@@ -45,6 +47,64 @@ module.exports = async function afterPack(context) {
     : path.join(projectDir, "app-icon.ico");
   const rcedit = findRcedit(projectDir);
   const version = context.packager.appInfo.version;
+  const resourcesDir = path.join(context.appOutDir, "resources");
+  const appDir = path.join(resourcesDir, "app");
+  const asarPath = path.join(resourcesDir, "app.asar");
+  const generatedOAuthRelative = "electron/youtube/official-client.generated.cjs";
+  const generatedOAuthClient = path.join(appDir, ...generatedOAuthRelative.split("/"));
+  let generatedOAuthSource;
+  let packagedEntries = [];
+  if (fs.existsSync(asarPath)) {
+    const archiveEntries = asar.listPackage(asarPath);
+    packagedEntries = archiveEntries.map((entry) => entry.replace(/^[/\\]+/, "").replace(/\\/g, "/"));
+    if (!packagedEntries.includes(generatedOAuthRelative)) {
+      throw new Error("The generated official Desktop OAuth client module is missing from app.asar");
+    }
+    generatedOAuthSource = asar
+      .extractFile(asarPath, generatedOAuthRelative.replace(/\//g, path.sep))
+      .toString("utf8");
+  } else {
+    if (!fs.existsSync(generatedOAuthClient)) {
+      throw new Error("The generated official Desktop OAuth client module is missing from the packaged application");
+    }
+    generatedOAuthSource = fs.readFileSync(generatedOAuthClient, "utf8");
+  }
+  const legacyOAuthRelativeFiles = [
+    "electron/youtube/local-client-id.txt",
+    "electron/youtube/local-client-secret.txt",
+  ];
+  const legacyOAuthFiles = [
+    path.join(resourcesDir, "youtube", "client-id.txt"),
+    path.join(resourcesDir, "youtube", "client-secret.txt"),
+    ...legacyOAuthRelativeFiles.map((entry) => path.join(appDir, ...entry.split("/"))),
+  ];
+  if (legacyOAuthFiles.some((file) => fs.existsSync(file))
+    || legacyOAuthRelativeFiles.some((entry) => packagedEntries.includes(entry))) {
+    throw new Error("A legacy plaintext OAuth credential file was included in the packaged application");
+  }
+  const generatedModule = { exports: {} };
+  vm.runInNewContext(generatedOAuthSource, {
+    module: generatedModule,
+    exports: generatedModule.exports,
+    Buffer,
+    Uint8Array,
+  });
+  const packagedOAuth = generatedModule.exports;
+  if (
+    typeof packagedOAuth?.clientId !== "string"
+    || !packagedOAuth.clientId.endsWith(".apps.googleusercontent.com")
+    || typeof packagedOAuth?.clientSecret !== "string"
+    || packagedOAuth.clientSecret.length === 0
+    || packagedOAuth.publicClient !== true
+  ) {
+    throw new Error("The generated official Desktop OAuth client module is invalid");
+  }
+  if (
+    generatedOAuthSource.includes(packagedOAuth.clientId)
+    || generatedOAuthSource.includes(packagedOAuth.clientSecret)
+  ) {
+    throw new Error("The generated official Desktop OAuth client module contains a plaintext credential value");
+  }
 
   const args = [
     exePath,

@@ -71,7 +71,7 @@ const env = {
   CSC_IDENTITY_AUTO_DISCOVERY: "false",
 };
 
-prepareYouTubeClientId(root);
+const { generatedModulePath } = prepareYouTubeClientId(root);
 ensureLibobsBundle();
 ensureTooltipRebuildTool();
 
@@ -82,6 +82,7 @@ const child = spawn("electron-builder", args, {
 });
 
 child.on("exit", (code, signal) => {
+  fs.rmSync(generatedModulePath, { force: true });
   if (signal) {
     process.kill(process.pid, signal);
     return;
