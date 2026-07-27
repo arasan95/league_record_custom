@@ -11,6 +11,15 @@ export type YouTubeAuthStatus = {
     uploading: boolean;
     firebaseIdToken?: string;
 };
+export type YouTubeChannelCapabilities = {
+    channelFound: boolean;
+    channelId: string | null;
+    channelTitle: string | null;
+    standardFeatures: "available" | "unavailable";
+    longUploadsStatus: "allowed" | "eligible" | "disallowed" | "unknown";
+    customThumbnails: "available" | "unavailable" | "unknown";
+    customThumbnailsCheckedAt: number | null;
+};
 export type YouTubeUploadJob = {
     state: "idle" | "thumbnail_preparing" | "preparing" | "uploading" | "thumbnail_uploading" | "processing" | "completed" | "cancelled" | "failed";
     sourceVideoId?: string;
@@ -20,6 +29,8 @@ export type YouTubeUploadJob = {
     youtubeVideoId?: string | null;
     youtubeUrl?: string | null;
     error?: string | null;
+    thumbnailStatus?: "pending" | "succeeded" | "failed";
+    thumbnailError?: string | null;
     processingStatus?: string;
     processingPercent?: number;
 };
@@ -28,8 +39,16 @@ export function getYouTubeAuthStatus(): Promise<YouTubeAuthStatus> {
     return invoke("youtube_get_auth_status");
 }
 
+export function getYouTubeChannelCapabilities(): Promise<YouTubeChannelCapabilities> {
+    return invoke("youtube_get_channel_capabilities");
+}
+
 export function signInToYouTube(): Promise<YouTubeAuthStatus> {
     return invoke("youtube_sign_in");
+}
+
+export function reopenYouTubeSignIn(): Promise<{ opened: boolean }> {
+    return invoke("youtube_reopen_sign_in");
 }
 
 export function signOutFromYouTube(): Promise<YouTubeAuthStatus> {
@@ -54,6 +73,10 @@ export function cancelYouTubeUpload(): Promise<YouTubeUploadJob> {
 
 export function findMissingYouTubeVideos(videoIds: string[]): Promise<string[]> {
     return invoke("youtube_find_missing_videos", { videoIds });
+}
+
+export function getYouTubeVideoPublishedDates(videoIds: string[]): Promise<Record<string, number>> {
+    return invoke("youtube_get_video_published_dates", { videoIds });
 }
 
 export function isPublicYouTubeVideoAvailable(videoId: string): Promise<boolean> {

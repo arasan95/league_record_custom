@@ -17,6 +17,7 @@ function validComment(): Record<string, unknown> {
         x: null,
         y: null,
         visibility: "public",
+        anonymous: false,
         clientRequestId: "comment-safe-id-1234",
     };
 }
@@ -31,10 +32,21 @@ describe("community comment validation", () => {
             writeAccess: "public",
             readAccess: "invite_only",
         });
+        expect(validateCommunitySettings({ writeAccess: "rank_verified", readAccess: "public" })).toEqual({
+            writeAccess: "rank_verified",
+            readAccess: "public",
+        });
     });
 
     test("accepts a bounded public comment", () => {
         expect(validateCommunityCommentInput(validComment()).text).toBe("この場面は先に視界を取る");
+    });
+
+    test("accepts public anonymous comments and rejects private anonymous comments", () => {
+        expect(validateCommunityCommentInput({ ...validComment(), anonymous: true }).anonymous).toBe(true);
+        expect(() => validateCommunityCommentInput({
+            ...validComment(), anonymous: true, visibility: "private",
+        })).toThrow("匿名コメント");
     });
 
     test("accepts private fixed comments with normalized coordinates", () => {

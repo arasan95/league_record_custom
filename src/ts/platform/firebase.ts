@@ -7,15 +7,20 @@ import {
     validateCommunitySettings,
     type CommunityCommentContext,
     type CommunityCommentInput,
+    type CommunityCommentReport,
     type CommunityCommentRecord,
     type CommunityCommentSettings,
+    type CommunityModeration,
+    type CommunityModerationAction,
 } from "../community_comments";
 import {
     communityDisplayName,
     createCommunityPublicId,
     isCommunityPublicId,
     normalizeCommunityAccountName,
+    normalizeCommunityRiotAccount,
     type CommunityAccountProfile,
+    type CommunityRiotAccount,
 } from "../community_identity";
 
 // Firebase Web configuration identifies this app/project; it is not a service
@@ -233,6 +238,7 @@ function communityProfileFromData(uid: string, data: Record<string, any>): Commu
         uid,
         publicId: data.publicId,
         accountName: normalizeCommunityAccountName(data.accountName),
+        riotAccount: normalizeCommunityRiotAccount(data.riotAccount),
         createdAtMs: data.createdAt?.toMillis?.() ?? 0,
         updatedAtMs: data.updatedAt?.toMillis?.() ?? 0,
     };
@@ -258,6 +264,7 @@ export async function ensureCommunityAccountProfile(): Promise<CommunityAccountP
                 uid: user.uid,
                 publicId,
                 accountName: null,
+                riotAccount: null,
                 createdAt: firestoreSdk.serverTimestamp(),
                 updatedAt: firestoreSdk.serverTimestamp(),
         });
@@ -265,7 +272,7 @@ export async function ensureCommunityAccountProfile(): Promise<CommunityAccountP
             // No reservation read is needed. An existing ID turns this set into
             // an update, which security rules reject, so a collision is retried.
             await withTimeout(batch.commit(), "コミュニティIDの作成");
-            return { uid: user.uid, publicId, accountName: null, createdAtMs: Date.now(), updatedAtMs: Date.now() };
+            return { uid: user.uid, publicId, accountName: null, riotAccount: null, createdAtMs: Date.now(), updatedAtMs: Date.now() };
         } catch (error) {
             lastError = error;
             const concurrentlyCreated = await withTimeout(firestoreSdk.getDoc(profileRef), "コミュニティIDの再確認");
@@ -301,6 +308,48 @@ export async function saveCommunityAccountName(value: string | null): Promise<Co
     }
 }
 
+export async function saveCommunityRiotAccount(value: CommunityRiotAccount): Promise<CommunityAccountProfile> {
+    const riotAccount = normalizeCommunityRiotAccount(value);
+    if (!riotAccount) throw new Error("LoLアカウント情報がありません。");
+    const profile = await ensureCommunityAccountProfile();
+    const { firestore, firestoreSdk } = await getFirebaseServices();
+    try {
+        await withTimeout(firestoreSdk.updateDoc(
+            firestoreSdk.doc(firestore, "communityProfiles", profile.uid),
+            {
+                riotAccount: {
+                    puuid: riotAccount.puuid,
+                    gameName: riotAccount.gameName,
+                    tagLine: riotAccount.tagLine,
+                    platformId: riotAccount.platformId,
+                    soloRank: riotAccount.soloRank,
+                    flexRank: riotAccount.flexRank,
+                    primaryRank: riotAccount.primaryRank,
+                    verifiedAt: firestoreSdk.serverTimestamp(),
+                },
+                updatedAt: firestoreSdk.serverTimestamp(),
+            },
+        ), "LoLアカウントの連携");
+        return { ...profile, riotAccount: { ...riotAccount, verifiedAtMs: Date.now() }, updatedAtMs: Date.now() };
+    } catch (error) {
+        throw communityWriteError(error);
+    }
+}
+
+export async function unlinkCommunityRiotAccount(): Promise<CommunityAccountProfile> {
+    const profile = await ensureCommunityAccountProfile();
+    const { firestore, firestoreSdk } = await getFirebaseServices();
+    try {
+        await withTimeout(firestoreSdk.updateDoc(
+            firestoreSdk.doc(firestore, "communityProfiles", profile.uid),
+            { riotAccount: null, updatedAt: firestoreSdk.serverTimestamp() },
+        ), "LoLアカウント連携の解除");
+        return { ...profile, riotAccount: null, updatedAtMs: Date.now() };
+    } catch (error) {
+        throw communityWriteError(error);
+    }
+}
+
 function communityWriteError(error: unknown): Error {
     const code = firebaseErrorCode(error);
     if (code.includes("permission-denied")) {
@@ -328,15 +377,18 @@ export async function getCommunityCommentContext(videoId: string): Promise<Commu
     if (!replaySnapshot.exists()) throw new Error("共有リプレイが見つかりません。");
     const settingsData = settingsSnapshot.data();
     const settings: CommunityCommentSettings = settingsData
-        && (settingsData.writeAccess === "public" || settingsData.writeAccess === "invite_only")
+        && (settingsData.writeAccess === "public" || settingsData.writeAccess === "invite_only" || settingsData.writeAccess === "rank_verified")
         && (settingsData.readAccess === "public" || settingsData.readAccess === "invite_only")
         ? { writeAccess: settingsData.writeAccess, readAccess: settingsData.readAccess }
         : DEFAULT_COMMUNITY_COMMENT_SETTINGS;
     let isMember = false;
     let memberGroupIds: string[] = [];
     let currentPublicId: string | null = null;
+    let isRankVerified = false;
+    let isAdmin = false;
+    let moderation: CommunityModeration | null = null;
     if (user) {
-        const [member, profile] = await Promise.all([
+        const [member, profile, admin, moderationSnapshot] = await Promise.all([
             withTimeout(
                 firestoreSdk.getDoc(firestoreSdk.doc(firestore, "replays", videoId, "commentMembers", user.uid)),
                 "コメント権限の確認",
@@ -345,6 +397,14 @@ export async function getCommunityCommentContext(videoId: string): Promise<Commu
                 firestoreSdk.getDoc(firestoreSdk.doc(firestore, "communityProfiles", user.uid)),
                 "コミュニティIDの確認",
             ),
+            withTimeout(
+                firestoreSdk.getDoc(firestoreSdk.doc(firestore, "appAdmins", user.uid)),
+                "管理者権限の確認",
+            ),
+            withTimeout(
+                firestoreSdk.getDoc(firestoreSdk.doc(firestore, "communityModeration", user.uid)),
+                "利用制限の確認",
+            ),
         ]);
         const memberData = member.data();
         isMember = member.exists() && memberData?.status === "active";
@@ -352,11 +412,33 @@ export async function getCommunityCommentContext(videoId: string): Promise<Commu
             ? memberData.groupIds.filter((value: unknown): value is string => typeof value === "string")
             : [];
         currentPublicId = profile.exists() && isCommunityPublicId(profile.data().publicId) ? profile.data().publicId : null;
+        try {
+            isRankVerified = Boolean(profile.exists() && normalizeCommunityRiotAccount(profile.data().riotAccount));
+        } catch {
+            isRankVerified = false;
+        }
+        isAdmin = admin.exists() && admin.data().role === "admin";
+        if (moderationSnapshot.exists()) {
+            const data = moderationSnapshot.data();
+            const expiresAtMs = data.expiresAt?.toMillis?.() ?? null;
+            if ((data.action === "comment_block" || data.action === "ban")
+                && (expiresAtMs === null || expiresAtMs > Date.now())) {
+                moderation = {
+                    uid: user.uid,
+                    action: data.action,
+                    expiresAtMs,
+                    reason: typeof data.reason === "string" ? data.reason : "",
+                };
+            }
+        }
     }
     const ownerUid = String(replaySnapshot.data().ownerUid || "");
     const isOwner = user?.uid === ownerUid;
-    const canRead = settings.readAccess === "public" || isOwner || isMember;
-    const canWrite = Boolean(user) && canRead && (settings.writeAccess === "public" || isOwner || isMember);
+    const canRead = moderation?.action !== "ban" && (settings.readAccess === "public" || isOwner || isMember);
+    const canWrite = moderation === null && Boolean(user) && canRead && (isOwner
+        || settings.writeAccess === "public"
+        || (settings.writeAccess === "invite_only" && isMember)
+        || (settings.writeAccess === "rank_verified" && isRankVerified));
     return {
         videoId,
         ownerUid,
@@ -364,7 +446,10 @@ export async function getCommunityCommentContext(videoId: string): Promise<Commu
         currentPublicId,
         currentUserName: user?.displayName ?? null,
         isOwner,
+        isAdmin,
         isMember,
+        isRankVerified,
+        moderation,
         memberGroupIds,
         settings,
         canRead,
@@ -386,11 +471,13 @@ function communityRecord(id: string, data: Record<string, any>): CommunityCommen
         x: typeof data.x === "number" ? data.x : null,
         y: typeof data.y === "number" ? data.y : null,
         visibility: data.visibility === "private" ? "private" : "public",
+        anonymous: data.anonymous === true,
         clientRequestId: typeof data.clientRequestId === "string" ? data.clientRequestId : id,
         authorUid: typeof data.authorUid === "string" ? data.authorUid : undefined,
         authorName: data.authorName,
         authorPublicId: isCommunityPublicId(data.authorPublicId) ? data.authorPublicId : null,
         authorGroupIds: Array.isArray(data.authorGroupIds) ? data.authorGroupIds.filter((value: unknown) => typeof value === "string") : [],
+        authorRank: typeof data.authorRank === "string" ? data.authorRank : null,
         createdAtMs: data.createdAt?.toMillis?.() ?? 0,
         updatedAtMs: data.updatedAt?.toMillis?.() ?? 0,
     };
@@ -411,6 +498,7 @@ export async function subscribeCommunityComments(
     const publicIds = new Set<string>();
     const privateIds = new Set<string>();
     const legacyPrivateIds = new Set<string>();
+    const ownedIds = new Set<string>();
     const migratingLegacyIds = new Set<string>();
     const emit = () => onComments([...snapshots.values()].toSorted((a, b) => a.videoTimeMs - b.videoTimeMs || a.createdAtMs - b.createdAtMs));
     const consume = (bucket: Set<string>, snapshot: import("firebase/firestore").QuerySnapshot) => {
@@ -420,6 +508,7 @@ export async function subscribeCommunityComments(
             const data = item.data();
             const record = communityRecord(item.id, data);
             if (!record) return;
+            record.ownedByCurrentUser = ownedIds.has(item.id);
             bucket.add(item.id);
             snapshots.set(item.id, record);
             if (record.authorUid && record.authorPublicId && data.createdAt
@@ -444,6 +533,19 @@ export async function subscribeCommunityComments(
         firestoreSdk.where("visibility", "==", "public"),
         firestoreSdk.limit(500));
     unsubs.push(firestoreSdk.onSnapshot(publicQuery, (snapshot) => consume(publicIds, snapshot), (error) => onError(replayWriteError(error))));
+    if (context.currentUid) {
+        const ownershipQuery = firestoreSdk.query(
+            firestoreSdk.collection(firestore, "replays", context.videoId, "commentAuthors"),
+            firestoreSdk.where("uid", "==", context.currentUid),
+            firestoreSdk.limit(500),
+        );
+        unsubs.push(firestoreSdk.onSnapshot(ownershipQuery, (snapshot) => {
+            ownedIds.clear();
+            snapshot.docs.forEach((item) => ownedIds.add(item.id));
+            snapshots.forEach((record, id) => { record.ownedByCurrentUser = ownedIds.has(id); });
+            emit();
+        }, (error) => onError(replayWriteError(error))));
+    }
     if (context.currentPublicId) {
         const privateQuery = firestoreSdk.query(collectionRef,
             firestoreSdk.where("status", "==", "published"),
@@ -474,19 +576,32 @@ export async function postCommunityComment(videoId: string, input: CommunityComm
     const commentRef = firestoreSdk.doc(firestore, "replays", videoId, "comments", validated.clientRequestId);
     const authorRef = firestoreSdk.doc(firestore, "replays", videoId, "commentAuthors", validated.clientRequestId);
     const quotaRef = firestoreSdk.doc(firestore, "commentWriteQuotas", `${user.uid}_${videoId}`);
+    const moderationRef = firestoreSdk.doc(firestore, "communityModeration", user.uid);
     try {
         await withTimeout(firestoreSdk.runTransaction(firestore, async (transaction) => {
-            const [replay, settingsSnapshot, member, existing, quotaSnapshot] = await Promise.all([
+            const [replay, settingsSnapshot, member, existing, quotaSnapshot, moderationSnapshot] = await Promise.all([
                 transaction.get(replayRef), transaction.get(settingsRef), transaction.get(memberRef),
-                transaction.get(commentRef), transaction.get(quotaRef),
+                transaction.get(commentRef), transaction.get(quotaRef), transaction.get(moderationRef),
             ]);
             if (!replay.exists()) throw new Error("共有リプレイが見つかりません。");
             if (existing.exists()) return;
+            if (moderationSnapshot.exists()) {
+                const restriction = moderationSnapshot.data();
+                const expiresAtMs = restriction.expiresAt?.toMillis?.() ?? null;
+                if (expiresAtMs === null || expiresAtMs > Date.now()) {
+                    throw new Error(restriction.action === "ban"
+                        ? "このアカウントは共有コメント機能をBANされています。"
+                        : "このアカウントはコメント投稿を禁止されています。");
+                }
+            }
             const isOwner = replay.data().ownerUid === user.uid;
             const isMember = member.exists() && member.data().status === "active";
             const settings = settingsSnapshot.exists() ? settingsSnapshot.data() : DEFAULT_COMMUNITY_COMMENT_SETTINGS;
             if (settings.readAccess === "invite_only" && !isOwner && !isMember) throw new Error("コメントの閲覧許可がありません。");
             if (settings.writeAccess === "invite_only" && !isOwner && !isMember) throw new Error("コメントの投稿許可がありません。");
+            if (settings.writeAccess === "rank_verified" && !isOwner && !profile.riotAccount) {
+                throw new Error("コメントを投稿するには設定のアカウントからLoLランクを連携してください。");
+            }
             const quota = quotaSnapshot.data();
             const nowMillis = Date.now();
             const windowStartedAt = quota?.windowStartedAt?.toMillis?.() ?? 0;
@@ -497,15 +612,16 @@ export async function postCommunityComment(videoId: string, input: CommunityComm
                 throw new Error("コメントの連続投稿はできません。少し待ってください。");
             }
             if (writeCount > MAX_COMMENTS_PER_WINDOW) throw new Error("1日のコメント投稿上限に達しました。");
-            const authorGroupIds = isMember && Array.isArray(member.data()?.groupIds)
+            const authorGroupIds = !validated.anonymous && isMember && Array.isArray(member.data()?.groupIds)
                 ? member.data().groupIds.filter((value: unknown): value is string => typeof value === "string").slice(0, 20)
                 : [];
             transaction.set(commentRef, {
                 schemaVersion: 1,
                 ...validated,
-                authorName: communityDisplayName(profile),
-                authorPublicId: profile.publicId,
+                authorName: validated.anonymous ? "Anonymous" : communityDisplayName(profile),
+                authorPublicId: validated.anonymous ? null : profile.publicId,
                 authorGroupIds,
+                authorRank: validated.anonymous ? null : profile.riotAccount?.primaryRank ?? null,
                 status: "published",
                 createdAt: firestoreSdk.serverTimestamp(),
                 updatedAt: firestoreSdk.serverTimestamp(),
@@ -525,6 +641,184 @@ export async function postCommunityComment(videoId: string, input: CommunityComm
             });
         }), "コメントの投稿");
         return validated.clientRequestId;
+    } catch (error) {
+        throw communityWriteError(error);
+    }
+}
+
+function communityReportId(uid: string, videoId: string, commentId: string): string {
+    return `${videoId}_${commentId}_${uid}`;
+}
+
+export async function reportCommunityComment(
+    videoId: string,
+    commentId: string,
+    details: string,
+): Promise<void> {
+    const user = await currentCommunityUser();
+    const normalizedDetails = details.trim().slice(0, 200);
+    const { firestore, firestoreSdk } = await getFirebaseServices();
+    const reportId = communityReportId(user.uid, videoId, commentId);
+    const reportRef = firestoreSdk.doc(firestore, "commentReports", reportId);
+    const commentRef = firestoreSdk.doc(firestore, "replays", videoId, "comments", commentId);
+    try {
+        await withTimeout(firestoreSdk.runTransaction(firestore, async (transaction) => {
+            const [comment, existing] = await Promise.all([
+                transaction.get(commentRef),
+                transaction.get(reportRef),
+            ]);
+            if (existing.exists()) throw new Error("このコメントはすでに通報済みです。");
+            if (!comment.exists() || comment.data().status !== "published") {
+                throw new Error("通報対象のコメントが見つかりません。");
+            }
+            const data = comment.data();
+            transaction.set(reportRef, {
+                reporterUid: user.uid,
+                videoId,
+                commentId,
+                authorName: typeof data.authorName === "string" ? data.authorName : "Unknown",
+                authorPublicId: isCommunityPublicId(data.authorPublicId) ? data.authorPublicId : null,
+                commentText: String(data.text || "").slice(0, 280),
+                details: normalizedDetails,
+                status: "pending",
+                createdAt: firestoreSdk.serverTimestamp(),
+                updatedAt: firestoreSdk.serverTimestamp(),
+            });
+        }), "コメントの通報");
+    } catch (error) {
+        if (error instanceof Error && (error.message.includes("すでに") || error.message.includes("見つかりません"))) throw error;
+        throw communityWriteError(error);
+    }
+}
+
+export async function subscribeAdminCommentReports(
+    onReports: (reports: CommunityCommentReport[]) => void,
+    onError: (error: Error) => void,
+): Promise<() => void> {
+    const user = await currentCommunityUser();
+    const { firestore, firestoreSdk } = await getFirebaseServices();
+    const admin = await firestoreSdk.getDoc(firestoreSdk.doc(firestore, "appAdmins", user.uid));
+    if (!admin.exists() || admin.data().role !== "admin") throw new Error("管理者権限がありません。");
+    const reportsQuery = firestoreSdk.query(
+        firestoreSdk.collection(firestore, "commentReports"),
+        firestoreSdk.where("status", "==", "pending"),
+        firestoreSdk.limit(200),
+    );
+    let generation = 0;
+    return firestoreSdk.onSnapshot(reportsQuery, (snapshot) => {
+        const currentGeneration = ++generation;
+        void Promise.all(snapshot.docs.map(async (item): Promise<CommunityCommentReport | null> => {
+            const data = item.data();
+            const author = await firestoreSdk.getDoc(firestoreSdk.doc(
+                firestore,
+                "replays",
+                String(data.videoId),
+                "commentAuthors",
+                String(data.commentId),
+            ));
+            const authorUid = author.exists() && typeof author.data().uid === "string" ? author.data().uid : "";
+            if (!authorUid) return null;
+            return {
+                id: item.id,
+                videoId: String(data.videoId),
+                commentId: String(data.commentId),
+                reporterUid: String(data.reporterUid),
+                authorUid,
+                authorName: String(data.authorName || "Unknown"),
+                authorPublicId: isCommunityPublicId(data.authorPublicId) ? data.authorPublicId : null,
+                commentText: String(data.commentText || ""),
+                details: String(data.details || ""),
+                createdAtMs: data.createdAt?.toMillis?.() ?? 0,
+            };
+        })).then((reports) => {
+            if (currentGeneration !== generation) return;
+            onReports(reports.filter((report): report is CommunityCommentReport => report !== null)
+                .toSorted((a, b) => b.createdAtMs - a.createdAtMs));
+        }).catch((error) => onError(communityWriteError(error)));
+    }, (error) => onError(communityWriteError(error)));
+}
+
+export async function moderateReportedUser(
+    report: Pick<CommunityCommentReport, "id" | "authorUid">,
+    action: CommunityModerationAction,
+    durationDays: number | null,
+): Promise<void> {
+    const user = await currentCommunityUser();
+    const { firestore, firestoreSdk } = await getFirebaseServices();
+    const batch = firestoreSdk.writeBatch(firestore);
+    batch.set(firestoreSdk.doc(firestore, "communityModeration", report.authorUid), {
+        uid: report.authorUid,
+        action,
+        expiresAt: durationDays === null ? null : firestoreSdk.Timestamp.fromMillis(Date.now() + durationDays * 86_400_000),
+        reason: "管理者による通報対応",
+        adminUid: user.uid,
+        updatedAt: firestoreSdk.serverTimestamp(),
+    });
+    batch.update(firestoreSdk.doc(firestore, "commentReports", report.id), {
+        status: "resolved",
+        resolvedByUid: user.uid,
+        resolvedAt: firestoreSdk.serverTimestamp(),
+        updatedAt: firestoreSdk.serverTimestamp(),
+    });
+    try {
+        await withTimeout(batch.commit(), "管理者による利用制限");
+    } catch (error) {
+        throw communityWriteError(error);
+    }
+}
+
+export async function resolveCommunityCommentReport(reportId: string): Promise<void> {
+    const user = await currentCommunityUser();
+    const { firestore, firestoreSdk } = await getFirebaseServices();
+    try {
+        await withTimeout(firestoreSdk.updateDoc(firestoreSdk.doc(firestore, "commentReports", reportId), {
+            status: "resolved",
+            resolvedByUid: user.uid,
+            resolvedAt: firestoreSdk.serverTimestamp(),
+            updatedAt: firestoreSdk.serverTimestamp(),
+        }), "通報の処理完了");
+    } catch (error) {
+        throw communityWriteError(error);
+    }
+}
+
+export async function subscribeAdminModerations(
+    onModerations: (moderations: CommunityModeration[]) => void,
+    onError: (error: Error) => void,
+): Promise<() => void> {
+    const user = await currentCommunityUser();
+    const { firestore, firestoreSdk } = await getFirebaseServices();
+    const admin = await firestoreSdk.getDoc(firestoreSdk.doc(firestore, "appAdmins", user.uid));
+    if (!admin.exists() || admin.data().role !== "admin") throw new Error("管理者権限がありません。");
+    return firestoreSdk.onSnapshot(
+        firestoreSdk.query(firestoreSdk.collection(firestore, "communityModeration"), firestoreSdk.limit(500)),
+        (snapshot) => {
+            const now = Date.now();
+            onModerations(snapshot.docs.flatMap((item): CommunityModeration[] => {
+                const data = item.data();
+                const expiresAtMs = data.expiresAt?.toMillis?.() ?? null;
+                if ((data.action !== "comment_block" && data.action !== "ban")
+                    || (expiresAtMs !== null && expiresAtMs <= now)) return [];
+                return [{
+                    uid: item.id,
+                    action: data.action,
+                    expiresAtMs,
+                    reason: typeof data.reason === "string" ? data.reason : "",
+                }];
+            }).toSorted((a, b) => a.uid.localeCompare(b.uid)));
+        },
+        (error) => onError(communityWriteError(error)),
+    );
+}
+
+export async function clearCommunityModeration(uid: string): Promise<void> {
+    await currentCommunityUser();
+    const { firestore, firestoreSdk } = await getFirebaseServices();
+    try {
+        await withTimeout(
+            firestoreSdk.deleteDoc(firestoreSdk.doc(firestore, "communityModeration", uid)),
+            "利用制限の解除",
+        );
     } catch (error) {
         throw communityWriteError(error);
     }
@@ -614,7 +908,9 @@ export async function redeemCommunityCommentInvite(videoId: string, code: string
         await withTimeout(firestoreSdk.runTransaction(firestore, async (transaction) => {
             const [invite, member] = await Promise.all([transaction.get(inviteRef), transaction.get(memberRef)]);
             if (!invite.exists()) throw new Error("招待コードが見つかりません。");
-            if (member.exists() && member.data().status === "active") throw new Error("すでに招待メンバーです。");
+            // Reopening an app link must be safe after its one-use invite has
+            // already been redeemed by this same account.
+            if (member.exists() && member.data().status === "active") return;
             const data = invite.data();
             const expiresAt = data.expiresAt?.toMillis?.() ?? 0;
             if (data.status !== "active" || Date.now() >= expiresAt || Number(data.usedCount) >= Number(data.maxUses)) {

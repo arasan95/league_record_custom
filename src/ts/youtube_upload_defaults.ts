@@ -8,6 +8,7 @@ export type YouTubeUploadDefaults = {
 type ChampionNameResolver = (championId: number) => Promise<string | null>;
 
 const TEAM_POSITION_FALLBACKS = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"] as const;
+const APP_HOMEPAGE_URL = "https://leaguerecord.web.app/";
 
 function fallbackTeamPosition(participant: Participant, participants: Participant[]): string | null {
     const team = participants
@@ -102,10 +103,14 @@ function buildChapters(metadata: GameMetadata): string[] {
 export async function buildYouTubeUploadDefaults(
     metadata: GameMetadata,
     resolveChampionName: ChampionNameResolver,
+    options: { isClip?: boolean } = {},
 ): Promise<YouTubeUploadDefaults> {
     const self = metadata.participants.find((participant) => participant.participantId === metadata.participantId) ?? null;
     if (!self) {
-        return { title: metadata.championName.slice(0, 100), description: "" };
+        return {
+            title: metadata.championName.slice(0, 100),
+            description: ["LeagueRecord Electron", APP_HOMEPAGE_URL, "#LeagueOfLegends #LoL #LeagueRecord"].join("\n"),
+        };
     }
     const opponent = findOpponent(self, metadata.participants);
     const names = new Map<number, string>();
@@ -130,16 +135,18 @@ export async function buildYouTubeUploadDefaults(
         return `${label}: ${champions.join(" / ")}`;
     };
     const side = self.teamId === 100 ? "Blue Side" : self.teamId === 200 ? "Red Side" : `Team ${self.teamId}`;
-    const description = [
+    const descriptionLines = [
         `Side: ${side}`,
         teamLine(100, "Blue Team"),
         teamLine(200, "Red Team"),
         "",
         "LeagueRecord Electron",
+        APP_HOMEPAGE_URL,
         "#LeagueOfLegends #LoL #LeagueRecord",
-        "",
-        "Chapters",
-        ...buildChapters(metadata),
-    ].join("\n").slice(0, 5000);
+    ];
+    if (!options.isClip) {
+        descriptionLines.push("", "Chapters", ...buildChapters(metadata));
+    }
+    const description = descriptionLines.join("\n").slice(0, 5000);
     return { title, description };
 }

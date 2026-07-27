@@ -1,17 +1,31 @@
 import {
+    clearCommunityModeration,
     connectReplayShareGoogle,
     createCommunityCommentInvite,
     deleteCommunityComment,
     getCommunityCommentContext,
+    moderateReportedUser,
     postCommunityComment,
+    reportCommunityComment,
     redeemCommunityCommentInvite,
+    resolveCommunityCommentReport,
     saveCommunityCommentSettings,
+    subscribeAdminCommentReports,
+    subscribeAdminModerations,
     subscribeCommunityComments,
     updateCommunityComment,
 } from "./platform/firebase";
 import { getYouTubeFirebaseIdToken, signInToYouTube, YOUTUBE_AUTH_CHANGED_EVENT } from "./platform/youtube";
-import type { CommunityCommentContext, CommunityCommentRecord } from "./community_comments";
+import type {
+    CommunityCommentContext,
+    CommunityCommentReport,
+    CommunityCommentRecord,
+    CommunityModeration,
+    CommunityWriteAccess,
+} from "./community_comments";
 import { UI_LANGUAGE_CHANGED_EVENT, uiText } from "./ui_locale";
+import { writeText } from "./platform/clipboard";
+import { buildReplayShareLink } from "./replay_deep_link";
 
 export type ReviewRating = "good" | "bad" | "question";
 export type ReviewCommentSize = "small" | "medium" | "large";
@@ -35,7 +49,10 @@ export interface ReviewComment {
     authorName?: string;
     authorPublicId?: string;
     authorGroupIds?: string[];
+    authorRank?: string;
     visibility?: "public" | "private";
+    anonymous?: boolean;
+    ownedByCurrentUser?: boolean;
 }
 
 type ReviewCommentDatabase = Record<string, ReviewComment[]>;
@@ -53,6 +70,10 @@ const FLOW_ENABLED_STORAGE_KEY = "lr.reviewComments.flowEnabled.v1";
 const COMMENTS_VISIBLE_STORAGE_KEY = "lr.reviewComments.visible.v1";
 const SIDEBAR_WIDTH_STORAGE_KEY = "lr.reviewComments.sidebarWidth.v1";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "lr.reviewComments.sidebarCollapsed.v1";
+const COMMUNITY_AUTHOR_FILTER_STORAGE_KEY = "lr.reviewComments.hiddenCommunityAuthors.v1";
+const COMMUNITY_SHARING_COLLAPSED_STORAGE_KEY = "lr.reviewComments.sharingCollapsed.v1";
+const COMMUNITY_DISPLAY_COLLAPSED_STORAGE_KEY = "lr.reviewComments.displayCollapsed.v1";
+const COMMUNITY_BLOCKED_AUTHORS_STORAGE_KEY = "lr.reviewComments.blockedCommunityAuthors.v1";
 const MAX_COMMENTS_PER_VIDEO = 1000;
 const SIZE_VALUES = new Set<ReviewCommentSize>(["small", "medium", "large"]);
 
@@ -127,6 +148,13 @@ function allowReviewCommentDrop(event: DragEvent): void {
     event.dataTransfer.dropEffect = "move";
 }
 
+export function getCommunityAuthorFilterKey(comment: Pick<ReviewComment, "source" | "authorName" | "authorPublicId">): string | null {
+    if (comment.source !== "community") return null;
+    if (comment.authorPublicId?.trim()) return `id:${comment.authorPublicId.trim()}`;
+    if (comment.authorName?.trim()) return `name:${comment.authorName.trim().toLocaleLowerCase()}`;
+    return "name:unknown";
+}
+
 export class ReviewCommentsController {
     private readonly player: ReviewPlayer;
     private readonly storage: Storage;
@@ -149,7 +177,16 @@ export class ReviewCommentsController {
     private communityContext: CommunityCommentContext | null = null;
     private communityComments: ReviewComment[] = [];
     private communityUnsubscribe: (() => void) | null = null;
+    private adminReportsUnsubscribe: (() => void) | null = null;
+    private adminModerationsUnsubscribe: (() => void) | null = null;
+    private adminReports: CommunityCommentReport[] = [];
+    private adminModerations: CommunityModeration[] = [];
+    private seenAdminReportIds: Set<string> | null = null;
     private communityGroupFilter = "all";
+    private hiddenCommunityAuthors = new Set<string>();
+    private blockedCommunityAuthors = new Map<string, string>();
+    private communitySharingCollapsed = false;
+    private communityDisplayCollapsed = false;
     private communityLoadSerial = 0;
     private pendingScrollCommentId: string | null = null;
 
@@ -168,8 +205,12 @@ export class ReviewCommentsController {
         this.player.el().append(this.overlay);
         this.restoreDisplayPreference();
         this.restoreSidebarWidth();
+        this.restoreCommunitySectionPreferences();
+        this.restoreBlockedCommunityAuthors();
         this.bindControls();
         this.bindCommunityControls();
+        this.bindModerationControls();
+        this.bindCommunitySectionToggles();
         this.bindDropPlacement();
         this.bindSidebarResize();
         this.bindSidebarCollapseToggle();
@@ -179,7 +220,9 @@ export class ReviewCommentsController {
         window.addEventListener(UI_LANGUAGE_CHANGED_EVENT, () => {
             this.updateVisibilityButton();
             this.updateSidebarCollapseState();
+            this.updateCommunitySectionCollapseState();
             this.refreshCommunityGroupFilter();
+            this.refreshCommunityAuthorFilter();
             this.renderSidebar();
         });
         this.player.on("timeupdate", () => this.renderOverlay());
@@ -194,14 +237,24 @@ export class ReviewCommentsController {
         this.communityLoadSerial++;
         this.communityUnsubscribe?.();
         this.communityUnsubscribe = null;
+        this.adminReportsUnsubscribe?.();
+        this.adminReportsUnsubscribe = null;
+        this.adminModerationsUnsubscribe?.();
+        this.adminModerationsUnsubscribe = null;
+        this.adminReports = [];
+        this.adminModerations = [];
+        this.seenAdminReportIds = null;
         this.communityContext = null;
         this.communityComments = [];
         this.activeVideoId = videoId;
+        this.restoreCommunityAuthorFilter(videoId);
         this.input.disabled = videoId === null;
         this.submit.disabled = videoId === null;
         this.overlay.replaceChildren();
+        this.refreshCommunityAuthorFilter();
         this.rebuildLaneAssignments();
         this.renderSidebar();
+        this.renderModerationPanel();
         this.renderOverlay();
         void this.activateCommunityVideo(videoId, this.communityLoadSerial);
     }
@@ -264,6 +317,12 @@ export class ReviewCommentsController {
             this.renderOverlay();
         });
         this.updateVisibilityButton();
+        const anonymousInput = document.querySelector<HTMLInputElement>("#review-comment-anonymous")!;
+        const privateInput = document.querySelector<HTMLInputElement>("#review-comment-private")!;
+        anonymousInput.addEventListener("change", () => {
+            if (anonymousInput.checked) privateInput.checked = false;
+            privateInput.disabled = anonymousInput.checked;
+        });
     }
 
     private restoreDisplayPreference(): void {
@@ -271,9 +330,56 @@ export class ReviewCommentsController {
         this.commentsVisible = this.storage.getItem(COMMENTS_VISIBLE_STORAGE_KEY) !== "false";
     }
 
+    private restoreCommunitySectionPreferences(): void {
+        this.communitySharingCollapsed = this.storage.getItem(COMMUNITY_SHARING_COLLAPSED_STORAGE_KEY) === "true";
+        this.communityDisplayCollapsed = this.storage.getItem(COMMUNITY_DISPLAY_COLLAPSED_STORAGE_KEY) === "true";
+    }
+
+    private bindCommunitySectionToggles(): void {
+        document.querySelector<HTMLButtonElement>("#community-sharing-toggle")!.addEventListener("click", () => {
+            this.communitySharingCollapsed = !this.communitySharingCollapsed;
+            this.storage.setItem(COMMUNITY_SHARING_COLLAPSED_STORAGE_KEY, String(this.communitySharingCollapsed));
+            this.updateCommunitySectionCollapseState();
+        });
+        document.querySelector<HTMLButtonElement>("#community-display-toggle")!.addEventListener("click", () => {
+            this.communityDisplayCollapsed = !this.communityDisplayCollapsed;
+            this.storage.setItem(COMMUNITY_DISPLAY_COLLAPSED_STORAGE_KEY, String(this.communityDisplayCollapsed));
+            this.updateCommunitySectionCollapseState();
+        });
+        this.updateCommunitySectionCollapseState();
+    }
+
+    private updateCommunitySectionCollapseState(): void {
+        const sharingToggle = document.querySelector<HTMLButtonElement>("#community-sharing-toggle")!;
+        const sharingContent = document.querySelector<HTMLElement>("#community-sharing-content")!;
+        const displayToggle = document.querySelector<HTMLButtonElement>("#community-display-toggle")!;
+        const displayContent = document.querySelector<HTMLElement>("#community-display-content")!;
+        sharingToggle.setAttribute("aria-expanded", String(!this.communitySharingCollapsed));
+        sharingToggle.setAttribute("aria-label", this.communitySharingCollapsed
+            ? uiText("共有設定を展開", "Expand sharing settings")
+            : uiText("共有設定を格納", "Collapse sharing settings"));
+        sharingContent.hidden = this.communitySharingCollapsed;
+        displayToggle.setAttribute("aria-expanded", String(!this.communityDisplayCollapsed));
+        displayToggle.setAttribute("aria-label", this.communityDisplayCollapsed
+            ? uiText("表示オプションを展開", "Expand display options")
+            : uiText("表示オプションを格納", "Collapse display options"));
+        displayContent.hidden = this.communityDisplayCollapsed;
+    }
+
     private bindCommunityControls(): void {
         document.querySelector<HTMLSelectElement>("#community-group-filter")!.addEventListener("change", (event) => {
             this.communityGroupFilter = (event.target as HTMLSelectElement).value;
+            this.renderSidebar();
+            this.renderOverlay();
+        });
+        document.querySelector<HTMLInputElement>("#community-author-filter-all")!.addEventListener("change", (event) => {
+            const checked = (event.target as HTMLInputElement).checked;
+            for (const author of this.getCommunityAuthors()) {
+                if (checked) this.hiddenCommunityAuthors.delete(author.key);
+                else this.hiddenCommunityAuthors.add(author.key);
+            }
+            this.saveCommunityAuthorFilter();
+            this.refreshCommunityAuthorFilter();
             this.renderSidebar();
             this.renderOverlay();
         });
@@ -289,7 +395,7 @@ export class ReviewCommentsController {
             if (!videoId) return;
             await this.runCommunityAction(async () => {
                 await saveCommunityCommentSettings(videoId, {
-                    writeAccess: document.querySelector<HTMLSelectElement>("#community-write-access")!.value as "public" | "invite_only",
+                    writeAccess: document.querySelector<HTMLSelectElement>("#community-write-access")!.value as CommunityWriteAccess,
                     readAccess: document.querySelector<HTMLSelectElement>("#community-read-access")!.value as "public" | "invite_only",
                 });
                 await this.reloadCommunityVideo();
@@ -300,9 +406,26 @@ export class ReviewCommentsController {
             if (!videoId) return;
             await this.runCommunityAction(async () => {
                 const output = document.querySelector<HTMLInputElement>("#community-invite-output")!;
-                output.value = await createCommunityCommentInvite(videoId);
+                const code = await createCommunityCommentInvite(videoId);
+                output.value = buildReplayShareLink(videoId, code);
                 output.hidden = false;
-                output.select();
+                document.querySelector<HTMLButtonElement>("#community-invite-link-copy")!.hidden = false;
+                await writeText(output.value);
+                document.querySelector<HTMLElement>("#community-comments-status")!.textContent = uiText(
+                    "招待リンクを発行してコピーしました。",
+                    "Invite link created and copied.",
+                );
+            });
+        });
+        document.querySelector<HTMLButtonElement>("#community-invite-link-copy")!.addEventListener("click", async () => {
+            const link = document.querySelector<HTMLInputElement>("#community-invite-output")!.value;
+            if (!link) return;
+            await this.runCommunityAction(async () => {
+                await writeText(link);
+                document.querySelector<HTMLElement>("#community-comments-status")!.textContent = uiText(
+                    "招待リンクをコピーしました。",
+                    "Invite link copied.",
+                );
             });
         });
         document.querySelector<HTMLButtonElement>("#community-invite-redeem")!.addEventListener("click", async () => {
@@ -315,6 +438,20 @@ export class ReviewCommentsController {
                 await this.reloadCommunityVideo();
             });
         });
+    }
+
+    private bindModerationControls(): void {
+        const toggle = document.querySelector<HTMLButtonElement>("#community-report-toggle")!;
+        const panel = document.querySelector<HTMLElement>("#community-moderation-panel")!;
+        const close = document.querySelector<HTMLButtonElement>("#community-moderation-close")!;
+        const setOpen = (open: boolean) => {
+            panel.hidden = !open;
+            toggle.classList.toggle("active", open);
+            toggle.setAttribute("aria-expanded", String(open));
+            if (open) this.renderModerationPanel();
+        };
+        toggle.addEventListener("click", () => setOpen(panel.hidden));
+        close.addEventListener("click", () => setOpen(false));
     }
 
     private async runCommunityAction(action: () => Promise<void>): Promise<void> {
@@ -338,13 +475,20 @@ export class ReviewCommentsController {
     private async activateCommunityVideo(activeVideoId: string | null, serial: number): Promise<void> {
         const panel = document.querySelector<HTMLElement>("#community-comments-panel")!;
         const privateLabel = document.querySelector<HTMLElement>("#review-comment-private-label")!;
+        const anonymousLabel = document.querySelector<HTMLElement>("#review-comment-anonymous-label")!;
+        document.querySelector<HTMLInputElement>("#community-invite-output")!.hidden = true;
+        document.querySelector<HTMLButtonElement>("#community-invite-link-copy")!.hidden = true;
         if (!activeVideoId?.startsWith("youtube:")) {
             panel.hidden = true;
             privateLabel.hidden = true;
+            anonymousLabel.hidden = true;
+            document.querySelector<HTMLButtonElement>("#community-report-toggle")!.disabled = true;
+            document.querySelector<HTMLElement>("#community-moderation-panel")!.hidden = true;
             return;
         }
         panel.hidden = false;
         privateLabel.hidden = false;
+        anonymousLabel.hidden = false;
         const videoId = activeVideoId.slice("youtube:".length);
         const status = document.querySelector<HTMLElement>("#community-comments-status")!;
         status.textContent = uiText("権限を確認中…", "Checking permissions…");
@@ -359,6 +503,7 @@ export class ReviewCommentsController {
             const context = await getCommunityCommentContext(videoId);
             if (serial !== this.communityLoadSerial || this.activeVideoId !== activeVideoId) return;
             this.communityContext = context;
+            document.querySelector<HTMLButtonElement>("#community-report-toggle")!.disabled = context.currentUid === null;
             this.input.disabled = !context.canWrite;
             this.submit.disabled = !context.canWrite;
             document.querySelector<HTMLButtonElement>("#community-comments-signin")!.hidden = context.currentUid !== null;
@@ -371,14 +516,35 @@ export class ReviewCommentsController {
                     ? uiText("所有者", "Owner")
                     : context.isMember ? uiText("招待メンバー", "Invited member") : uiText("投稿可能", "Can post");
             } else if (context.canRead) {
-                status.textContent = uiText("閲覧のみ", "View only");
+                status.textContent = context.moderation?.action === "comment_block"
+                    ? uiText("管理者によりコメント投稿が禁止されています", "Comment posting was disabled by an administrator")
+                    : context.settings.writeAccess === "rank_verified" && !context.isRankVerified
+                    ? uiText("投稿にはLoLランク連携が必要です", "Link your LoL rank to post")
+                    : uiText("閲覧のみ", "View only");
             } else {
-                status.textContent = uiText("招待が必要です", "Invitation required");
+                status.textContent = context.moderation?.action === "ban"
+                    ? uiText("管理者により共有コメント機能をBANされています", "This account is banned from shared comments")
+                    : uiText("招待が必要です", "Invitation required");
             }
+            if (context.isAdmin) {
+                this.adminReportsUnsubscribe = await subscribeAdminCommentReports(
+                    (reports) => this.receiveAdminReports(reports),
+                    (error) => { status.textContent = error.message; },
+                );
+                this.adminModerationsUnsubscribe = await subscribeAdminModerations(
+                    (moderations) => {
+                        this.adminModerations = moderations;
+                        this.renderModerationPanel();
+                    },
+                    (error) => { status.textContent = error.message; },
+                );
+            }
+            this.renderModerationPanel();
             this.communityUnsubscribe = await subscribeCommunityComments(context, (records) => {
                 if (serial !== this.communityLoadSerial) return;
                 this.communityComments = records.map((record) => this.toReviewComment(record, activeVideoId));
                 this.refreshCommunityGroupFilter();
+                this.refreshCommunityAuthorFilter();
                 this.rebuildLaneAssignments();
                 this.renderSidebar();
                 this.renderOverlay();
@@ -390,6 +556,228 @@ export class ReviewCommentsController {
             this.submit.disabled = true;
             status.textContent = error instanceof Error ? error.message : String(error);
         }
+    }
+
+    private receiveAdminReports(reports: CommunityCommentReport[]): void {
+        const incoming = new Set(reports.map((report) => report.id));
+        const newReports = this.seenAdminReportIds === null
+            ? []
+            : reports.filter((report) => !this.seenAdminReportIds!.has(report.id));
+        this.seenAdminReportIds = incoming;
+        this.adminReports = reports;
+        this.renderModerationPanel();
+        if (newReports.length > 0 && typeof Notification !== "undefined" && Notification.permission === "granted") {
+            const notification = new Notification(uiText("共有コメントの新しい通報", "New shared-comment report"), {
+                body: uiText(`${newReports.length}件の未処理通報があります。`, `${newReports.length} report(s) need review.`),
+            });
+            notification.addEventListener("click", () => {
+                document.querySelector<HTMLButtonElement>("#community-report-toggle")?.click();
+            });
+        }
+    }
+
+    private openCommunityDialog(
+        message: string,
+        options: { input?: boolean; confirmLabel?: string; danger?: boolean } = {},
+    ): Promise<string | null> {
+        return new Promise((resolve) => {
+            document.querySelector(".community-action-dialog-overlay")?.remove();
+            const overlay = document.createElement("div");
+            overlay.className = "community-action-dialog-overlay";
+            overlay.setAttribute("role", "presentation");
+            const dialog = document.createElement("section");
+            dialog.className = "community-action-dialog";
+            dialog.setAttribute("role", "dialog");
+            dialog.setAttribute("aria-modal", "true");
+            dialog.setAttribute("aria-label", uiText("共有コメントの操作", "Shared comment action"));
+            const prompt = document.createElement("p");
+            prompt.textContent = message;
+            const input = options.input ? document.createElement("textarea") : null;
+            if (input) {
+                input.rows = 4;
+                input.maxLength = 200;
+                input.placeholder = uiText("通報理由（任意・200文字まで）", "Reason (optional, up to 200 characters)");
+            }
+            const actions = document.createElement("div");
+            actions.className = "community-action-dialog-actions";
+            const cancel = document.createElement("button");
+            cancel.type = "button";
+            cancel.textContent = uiText("キャンセル", "Cancel");
+            const confirm = document.createElement("button");
+            confirm.type = "button";
+            confirm.textContent = options.confirmLabel ?? uiText("実行", "Continue");
+            confirm.classList.toggle("danger", options.danger === true);
+            actions.append(cancel, confirm);
+            dialog.append(prompt);
+            if (input) dialog.append(input);
+            dialog.append(actions);
+            overlay.append(dialog);
+            const finish = (value: string | null) => {
+                overlay.remove();
+                resolve(value);
+            };
+            cancel.addEventListener("click", () => finish(null));
+            confirm.addEventListener("click", () => finish(input?.value ?? ""));
+            overlay.addEventListener("click", (event) => {
+                if (event.target === overlay) finish(null);
+            });
+            overlay.addEventListener("keydown", (event) => {
+                if (event.key === "Escape") finish(null);
+                if (event.key === "Enter" && !input && !event.isComposing) finish("");
+            });
+            document.body.append(overlay);
+            requestAnimationFrame(() => (input ?? cancel).focus());
+        });
+    }
+
+    private async reportComment(comment: ReviewComment): Promise<void> {
+        const context = this.communityContext;
+        if (!context || comment.source !== "community") return;
+        const details = await this.openCommunityDialog(
+            uiText(
+                "この共有コメントを管理者へ通報します。理由を入力してください。",
+                "Report this shared comment to the administrator. Describe the reason.",
+            ),
+            { input: true, confirmLabel: uiText("通報する", "Report"), danger: true },
+        );
+        if (details === null) return;
+        await this.runCommunityAction(async () => {
+            await reportCommunityComment(context.videoId, comment.id.replace(/^community:/u, ""), details);
+            document.querySelector<HTMLElement>("#community-comments-status")!.textContent = uiText(
+                "管理者へ通報しました。投稿者には通知されません。",
+                "Reported to the administrator. The author will not be notified.",
+            );
+        });
+    }
+
+    private async blockCommentAuthor(comment: ReviewComment): Promise<void> {
+        const key = comment.authorPublicId?.trim() ? `id:${comment.authorPublicId.trim()}` : "anonymous";
+        const name = comment.anonymous
+            ? uiText("匿名コメント", "Anonymous comments")
+            : comment.authorName?.trim() || uiText("不明なユーザー", "Unknown user");
+        const confirmed = await this.openCommunityDialog(
+            uiText(
+                `${name}をブロックしますか？この設定は自分の画面だけに適用されます。`,
+                `Block ${name}? This only affects your own display.`,
+            ),
+            { confirmLabel: uiText("ブロック", "Block"), danger: true },
+        );
+        if (confirmed === null) return;
+        this.blockedCommunityAuthors.set(key, name);
+        this.saveBlockedCommunityAuthors();
+        this.renderModerationPanel();
+        this.renderSidebar();
+        this.renderOverlay();
+    }
+
+    private restoreBlockedCommunityAuthors(): void {
+        try {
+            const value: unknown = JSON.parse(this.storage.getItem(COMMUNITY_BLOCKED_AUTHORS_STORAGE_KEY) ?? "{}");
+            if (!value || typeof value !== "object" || Array.isArray(value)) return;
+            this.blockedCommunityAuthors = new Map(Object.entries(value as Record<string, unknown>)
+                .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+                .slice(0, 500));
+        } catch {
+            this.blockedCommunityAuthors.clear();
+        }
+    }
+
+    private saveBlockedCommunityAuthors(): void {
+        this.storage.setItem(COMMUNITY_BLOCKED_AUTHORS_STORAGE_KEY, JSON.stringify(Object.fromEntries(this.blockedCommunityAuthors)));
+    }
+
+    private renderModerationPanel(): void {
+        const context = this.communityContext;
+        const badge = document.querySelector<HTMLElement>("#community-report-badge")!;
+        badge.hidden = !context?.isAdmin || this.adminReports.length === 0;
+        badge.textContent = this.adminReports.length > 99 ? "99+" : String(this.adminReports.length);
+        const adminSection = document.querySelector<HTMLElement>("#community-admin-reports")!;
+        const reportList = document.querySelector<HTMLElement>("#community-admin-report-list")!;
+        adminSection.hidden = !context?.isAdmin;
+        reportList.replaceChildren(...this.adminReports.map((report) => {
+            const item = document.createElement("div");
+            item.className = "community-admin-report-item";
+            const meta = document.createElement("div");
+            meta.className = "community-admin-report-meta";
+            meta.textContent = `${report.authorName}${report.authorPublicId ? ` (${report.authorPublicId})` : ""} · ${report.videoId}`;
+            const text = document.createElement("div");
+            text.className = "community-admin-report-text";
+            text.textContent = `「${report.commentText}」${report.details ? ` — ${report.details}` : ""}`;
+            const actions = document.createElement("div");
+            actions.className = "community-admin-report-actions";
+            const apply = (label: string, className: string, action: () => Promise<void>) => {
+                const button = this.createActionButton(label, label, className, () => {
+                    void (async () => {
+                        const confirmed = await this.openCommunityDialog(
+                            uiText(`${label}を実行しますか？`, `Apply "${label}"?`),
+                            { confirmLabel: label, danger: className.includes("danger") },
+                        );
+                        if (confirmed !== null) await this.runCommunityAction(action);
+                    })();
+                });
+                actions.append(button);
+            };
+            apply(uiText("コメント禁止", "Disable comments"), "danger", () => moderateReportedUser(report, "comment_block", null));
+            apply(uiText("3日BAN", "Ban 3 days"), "danger", () => moderateReportedUser(report, "ban", 3));
+            apply(uiText("無期限BAN", "Permanent ban"), "danger", () => moderateReportedUser(report, "ban", null));
+            apply(uiText("対応不要", "Dismiss"), "", () => resolveCommunityCommentReport(report.id));
+            item.append(meta, text, actions);
+            return item;
+        }));
+        if (context?.isAdmin && this.adminReports.length === 0) {
+            const empty = document.createElement("p");
+            empty.textContent = uiText("未処理の通報はありません。", "There are no pending reports.");
+            reportList.replaceChildren(empty);
+        }
+        const moderationSection = document.querySelector<HTMLElement>("#community-admin-moderations")!;
+        const moderationList = document.querySelector<HTMLElement>("#community-admin-moderation-list")!;
+        moderationSection.hidden = !context?.isAdmin;
+        moderationList.replaceChildren(...this.adminModerations.map((moderation) => {
+            const item = document.createElement("div");
+            item.className = "community-blocked-user-item";
+            const label = document.createElement("span");
+            const action = moderation.action === "ban" ? "BAN" : uiText("コメント禁止", "Comments disabled");
+            const expiry = moderation.expiresAtMs === null
+                ? uiText("無期限", "Indefinite")
+                : new Date(moderation.expiresAtMs).toLocaleString();
+            label.textContent = `${moderation.uid} · ${action} · ${expiry}`;
+            const button = this.createActionButton(uiText("解除", "Lift"), uiText("制限を解除", "Lift restriction"), "", () => {
+                void (async () => {
+                    const confirmed = await this.openCommunityDialog(
+                        uiText("この利用制限を解除しますか？", "Lift this restriction?"),
+                        { confirmLabel: uiText("解除", "Lift") },
+                    );
+                    if (confirmed !== null) {
+                        await this.runCommunityAction(() => clearCommunityModeration(moderation.uid));
+                    }
+                })();
+            });
+            item.append(label, button);
+            return item;
+        }));
+        if (context?.isAdmin && this.adminModerations.length === 0) {
+            const empty = document.createElement("p");
+            empty.textContent = uiText("適用中の制限はありません。", "There are no active restrictions.");
+            moderationList.replaceChildren(empty);
+        }
+        const blockedSection = document.querySelector<HTMLElement>("#community-blocked-users")!;
+        const blockedList = document.querySelector<HTMLElement>("#community-blocked-user-list")!;
+        blockedSection.hidden = this.blockedCommunityAuthors.size === 0;
+        blockedList.replaceChildren(...[...this.blockedCommunityAuthors].map(([key, name]) => {
+            const item = document.createElement("div");
+            item.className = "community-blocked-user-item";
+            const label = document.createElement("span");
+            label.textContent = name;
+            const button = this.createActionButton(uiText("解除", "Unblock"), uiText("ブロック解除", "Unblock"), "", () => {
+                this.blockedCommunityAuthors.delete(key);
+                this.saveBlockedCommunityAuthors();
+                this.renderModerationPanel();
+                this.renderSidebar();
+                this.renderOverlay();
+            });
+            item.append(label, button);
+            return item;
+        }));
     }
 
     private toReviewComment(record: CommunityCommentRecord, activeVideoId: string): ReviewComment {
@@ -411,7 +799,10 @@ export class ReviewCommentsController {
             authorName: record.authorName,
             authorPublicId: record.authorPublicId ?? undefined,
             authorGroupIds: record.authorGroupIds,
+            authorRank: record.authorRank ?? undefined,
             visibility: record.visibility,
+            anonymous: record.anonymous,
+            ownedByCurrentUser: record.ownedByCurrentUser,
         };
     }
 
@@ -426,6 +817,87 @@ export class ReviewCommentsController {
         );
         select.value = Array.from(select.options).some((option) => option.value === previous) ? previous : "all";
         this.communityGroupFilter = select.value;
+    }
+
+    private getCommunityAuthors(): Array<{ key: string; name: string; publicId: string | null }> {
+        const authors = new Map<string, { key: string; name: string; publicId: string | null }>();
+        for (const comment of this.communityComments) {
+            const key = getCommunityAuthorFilterKey(comment);
+            if (!key) continue;
+            authors.set(key, {
+                key,
+                name: comment.authorName?.trim() || uiText("不明なユーザー", "Unknown user"),
+                publicId: comment.authorPublicId?.trim() || null,
+            });
+        }
+        return [...authors.values()].toSorted((a, b) => a.name.localeCompare(b.name));
+    }
+
+    private refreshCommunityAuthorFilter(): void {
+        const fieldset = document.querySelector<HTMLFieldSetElement>("#community-author-filter")!;
+        const options = document.querySelector<HTMLElement>("#community-author-filter-options")!;
+        const allCheckbox = document.querySelector<HTMLInputElement>("#community-author-filter-all")!;
+        const authors = this.getCommunityAuthors();
+        fieldset.hidden = !this.activeVideoId?.startsWith("youtube:") || authors.length === 0;
+        options.replaceChildren(...authors.map((author) => {
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = !this.hiddenCommunityAuthors.has(author.key);
+            checkbox.addEventListener("change", () => {
+                if (checkbox.checked) this.hiddenCommunityAuthors.delete(author.key);
+                else this.hiddenCommunityAuthors.add(author.key);
+                this.saveCommunityAuthorFilter();
+                this.refreshCommunityAuthorFilter();
+                this.renderSidebar();
+                this.renderOverlay();
+            });
+            const name = document.createElement("span");
+            name.className = "community-author-filter-name";
+            name.textContent = author.name;
+            const label = document.createElement("label");
+            label.title = author.publicId
+                ? uiText(`投稿者ID: ${author.publicId}`, `Author ID: ${author.publicId}`)
+                : author.name;
+            label.append(checkbox, name);
+            if (author.publicId) {
+                const id = document.createElement("span");
+                id.className = "community-author-filter-id";
+                id.textContent = author.publicId;
+                label.append(id);
+            }
+            return label;
+        }));
+        const checkedCount = authors.filter((author) => !this.hiddenCommunityAuthors.has(author.key)).length;
+        allCheckbox.checked = authors.length > 0 && checkedCount === authors.length;
+        allCheckbox.indeterminate = checkedCount > 0 && checkedCount < authors.length;
+    }
+
+    private restoreCommunityAuthorFilter(videoId: string | null): void {
+        this.hiddenCommunityAuthors.clear();
+        if (!videoId?.startsWith("youtube:")) return;
+        try {
+            const value: unknown = JSON.parse(this.storage.getItem(COMMUNITY_AUTHOR_FILTER_STORAGE_KEY) ?? "{}");
+            const parsed = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+            const saved = parsed[videoId];
+            if (!Array.isArray(saved)) return;
+            this.hiddenCommunityAuthors = new Set(saved.filter((value): value is string => typeof value === "string").slice(0, 500));
+        } catch (error) {
+            console.warn("[review-comments] 投稿者フィルターを読み込めませんでした", error);
+        }
+    }
+
+    private saveCommunityAuthorFilter(): void {
+        const videoId = this.activeVideoId;
+        if (!videoId?.startsWith("youtube:")) return;
+        try {
+            const value: unknown = JSON.parse(this.storage.getItem(COMMUNITY_AUTHOR_FILTER_STORAGE_KEY) ?? "{}");
+            const parsed = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+            if (this.hiddenCommunityAuthors.size > 0) parsed[videoId] = [...this.hiddenCommunityAuthors];
+            else delete parsed[videoId];
+            this.storage.setItem(COMMUNITY_AUTHOR_FILTER_STORAGE_KEY, JSON.stringify(parsed));
+        } catch (error) {
+            console.warn("[review-comments] 投稿者フィルターを保存できませんでした", error);
+        }
     }
 
     private updateVisibilityButton(): void {
@@ -571,7 +1043,10 @@ export class ReviewCommentsController {
             this.submit.disabled = true;
             this.pendingScrollCommentId = `community:${comment.id}`;
             try {
-                const visibility = document.querySelector<HTMLInputElement>("#review-comment-private")!.checked ? "private" : "public";
+                const anonymous = document.querySelector<HTMLInputElement>("#review-comment-anonymous")!.checked;
+                const visibility = anonymous
+                    ? "public"
+                    : document.querySelector<HTMLInputElement>("#review-comment-private")!.checked ? "private" : "public";
                 await postCommunityComment(this.communityContext.videoId, {
                     text: comment.text,
                     videoTimeMs: Math.round(comment.timestamp * 1000),
@@ -583,10 +1058,13 @@ export class ReviewCommentsController {
                     x: null,
                     y: null,
                     visibility,
+                    anonymous,
                     clientRequestId: comment.id,
                 });
                 this.input.value = "";
-                status.textContent = visibility === "private"
+                status.textContent = anonymous
+                    ? uiText("匿名コメントを投稿しました", "Anonymous comment posted")
+                    : visibility === "private"
                     ? uiText("非公開コメントを投稿しました", "Private comment posted")
                     : uiText("コメントを投稿しました", "Comment posted");
             } catch (error) {
@@ -654,8 +1132,10 @@ export class ReviewCommentsController {
         this.list.style.setProperty("--review-comment-scroll-tail", "0px");
         const comments = this.comments.toSorted((a, b) => a.timestamp - b.timestamp || a.createdAt - b.createdAt);
         const ratingFiltered = this.filter === "all" ? comments : comments.filter((comment) => comment.rating === this.filter);
-        const visible = ratingFiltered.filter((comment) => this.matchesCommunityGroupFilter(comment));
-        this.count.textContent = this.filter === "all" ? String(comments.length) : `${visible.length}/${comments.length}`;
+        const visible = ratingFiltered.filter((comment) => this.matchesCommunityGroupFilter(comment) && this.matchesCommunityAuthorFilter(comment));
+        const hasAuthorFilter = this.getCommunityAuthors().some((author) => this.hiddenCommunityAuthors.has(author.key));
+        const hasDisplayFilter = this.communityGroupFilter !== "all" || hasAuthorFilter;
+        this.count.textContent = this.filter === "all" && !hasDisplayFilter ? String(comments.length) : `${visible.length}/${comments.length}`;
         this.list.replaceChildren(...visible.map((comment) => this.createListItem(comment)));
         this.list.hidden = visible.length === 0;
         this.empty.hidden = visible.length > 0;
@@ -698,7 +1178,8 @@ export class ReviewCommentsController {
         item.className = `review-comment-item ${ratingClass}`;
         item.dataset.commentId = comment.id;
         const ownsCommunityComment = comment.source === "community"
-            && ((comment.authorPublicId && comment.authorPublicId === this.communityContext?.currentPublicId)
+            && (comment.ownedByCurrentUser === true
+                || (comment.authorPublicId && comment.authorPublicId === this.communityContext?.currentPublicId)
                 || (comment.authorUid && comment.authorUid === this.communityContext?.currentUid));
         item.draggable = comment.source !== "community" || ownsCommunityComment;
         item.addEventListener("click", (event) => {
@@ -736,14 +1217,23 @@ export class ReviewCommentsController {
             ? uiText(`固定 ${comment.duration}秒`, `Pinned ${comment.duration}s`)
             : uiText(`${comment.duration}秒`, `${comment.duration}s`);
         meta.append(time, mode);
-        if (comment.authorName) {
+        if (comment.authorName || comment.anonymous) {
             const author = document.createElement("span");
             author.className = "review-comment-author";
-            author.textContent = comment.authorName;
-            author.title = comment.authorPublicId
+            author.textContent = comment.anonymous ? uiText("匿名", "Anonymous") : comment.authorName;
+            author.title = comment.anonymous
+                ? uiText("匿名コメント", "Anonymous comment")
+                : comment.authorPublicId
                 ? uiText(`投稿者ID: ${comment.authorPublicId}`, `Author ID: ${comment.authorPublicId}`)
                 : uiText("投稿者", "Author");
             meta.append(author);
+        }
+        if (comment.authorRank && !comment.anonymous) {
+            const rank = document.createElement("span");
+            rank.className = `review-comment-rank rank-${comment.authorRank.split(/\s+/u)[0].toLowerCase()}`;
+            rank.textContent = comment.authorRank;
+            rank.title = uiText("投稿時のSolo/Duo優先ランク", "Solo/Duo-preferred rank when posted");
+            meta.append(rank);
         }
         if (comment.visibility === "private") {
             const privacy = document.createElement("span");
@@ -769,6 +1259,12 @@ export class ReviewCommentsController {
         }
         if (comment.source !== "community" || ownsCommunityComment || this.communityContext?.isOwner) {
             actions.append(this.createActionButton("×", uiText("削除", "Delete"), "delete-comment", () => this.deleteComment(comment)));
+        }
+        if (comment.source === "community" && !ownsCommunityComment && this.communityContext?.currentUid) {
+            actions.append(
+                this.createActionButton("!", uiText("管理者へ通報", "Report to administrator"), "report-comment", () => { void this.reportComment(comment); }),
+                this.createActionButton("⊘", uiText("このユーザーをブロック", "Block this user"), "block-comment-author", () => { void this.blockCommentAuthor(comment); }),
+            );
         }
         item.append(body, actions);
         return item;
@@ -800,6 +1296,7 @@ export class ReviewCommentsController {
                 x: comment.mode === "fixed" ? Math.round((comment.x ?? 50) * 100) : null,
                 y: comment.mode === "fixed" ? Math.round((comment.y ?? 45) * 100) : null,
                 visibility: comment.visibility ?? "public",
+                anonymous: comment.anonymous === true,
                 clientRequestId: commentId,
             });
         });
@@ -824,6 +1321,7 @@ export class ReviewCommentsController {
             && currentTime < comment.timestamp + comment.duration
             && (comment.mode === "fixed" || this.flowEnabled)
             && this.matchesCommunityGroupFilter(comment)
+            && this.matchesCommunityAuthorFilter(comment)
         );
         const activeIds = new Set(active.map((comment) => comment.id));
         this.overlay.querySelectorAll<HTMLElement>(".lr-video-comment").forEach((element) => {
@@ -860,6 +1358,13 @@ export class ReviewCommentsController {
         if (comment.source !== "community") return false;
         if (this.communityGroupFilter === "invited") return (comment.authorGroupIds?.length ?? 0) > 0;
         return comment.authorGroupIds?.includes(this.communityGroupFilter) === true;
+    }
+
+    private matchesCommunityAuthorFilter(comment: ReviewComment): boolean {
+        const key = getCommunityAuthorFilterKey(comment);
+        const blockKey = comment.authorPublicId?.trim() ? `id:${comment.authorPublicId.trim()}` : comment.anonymous ? "anonymous" : null;
+        return (key === null || !this.hiddenCommunityAuthors.has(key))
+            && (blockKey === null || !this.blockedCommunityAuthors.has(blockKey));
     }
 
     private rebuildLaneAssignments(): void {

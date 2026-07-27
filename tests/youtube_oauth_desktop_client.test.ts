@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,7 +42,7 @@ describe("YouTube desktop OAuth client", () => {
     expect(gitignore).toContain(".build-input/");
   });
 
-  test("generates both package inputs without committing their values", () => {
+  test("generates an obfuscated public-client module without plaintext credential files", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "league-record-youtube-oauth-"));
     try {
       const clientId = "123-official.apps.googleusercontent.com";
@@ -51,8 +51,36 @@ describe("YouTube desktop OAuth client", () => {
         YOUTUBE_OAUTH_CLIENT_ID: clientId,
         YOUTUBE_OAUTH_CLIENT_SECRET: clientSecret,
       });
-      expect(readFileSync(output.clientIdPath, "utf8")).toBe(`${clientId}\n`);
-      expect(readFileSync(output.clientSecretPath, "utf8")).toBe(`${clientSecret}\n`);
+      const generated = readFileSync(output.generatedModulePath, "utf8");
+      expect(generated).not.toContain(clientId);
+      expect(generated).not.toContain(clientSecret);
+      expect(generated).toContain("publicClient: true");
+      const decoded = require(output.generatedModulePath);
+      expect(decoded).toEqual({
+        clientId,
+        clientSecret,
+        publicClient: true,
+      });
+      expect(existsSync(join(temporaryRoot, ".build-input", "youtube-client-id.txt"))).toBe(false);
+      expect(existsSync(join(temporaryRoot, ".build-input", "youtube-client-secret.txt"))).toBe(false);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("removes legacy plaintext build inputs during packaging preparation", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "league-record-youtube-oauth-"));
+    try {
+      const buildInput = join(temporaryRoot, ".build-input");
+      mkdirSync(buildInput, { recursive: true });
+      writeFileSync(join(buildInput, "youtube-client-id.txt"), "legacy-id");
+      writeFileSync(join(buildInput, "youtube-client-secret.txt"), "legacy-secret");
+      buildConfig.prepareYouTubeClientId(temporaryRoot, {
+        YOUTUBE_OAUTH_CLIENT_ID: "123-official.apps.googleusercontent.com",
+        YOUTUBE_OAUTH_CLIENT_SECRET: "desktop-client-credential",
+      });
+      expect(existsSync(join(buildInput, "youtube-client-id.txt"))).toBe(false);
+      expect(existsSync(join(buildInput, "youtube-client-secret.txt"))).toBe(false);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -79,5 +107,10 @@ describe("YouTube desktop OAuth client", () => {
     for (const relativePath of checkedFiles) {
       expect(readFileSync(join(root, relativePath), "utf8")).not.toMatch(/GOCSPX-[A-Za-z0-9_-]+/);
     }
+  });
+
+  test("keeps the generated official module out of source control", () => {
+    const gitignore = readFileSync(join(root, ".gitignore"), "utf8");
+    expect(gitignore).toContain("electron/youtube/official-client.generated.cjs");
   });
 });

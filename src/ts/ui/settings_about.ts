@@ -25,7 +25,7 @@ export function createSettingsAboutTabContent({
     getText,
     onShowUpdateModal,
 }: CreateSettingsAboutTabInput): HTMLDivElement {
-    const aboutTabContent = createEl("div", {}, { class: "settings-tab-content scrollable hidden" }) as HTMLDivElement;
+    const aboutTabContent = createEl("div", {}, { class: "settings-tab-content settings-scroll-container hidden" }) as HTMLDivElement;
     const aboutWrapper = createEl(
         "div",
         {},

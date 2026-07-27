@@ -1,30 +1,62 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LeagueRecord Electron</title>
-  <style>
-    :root { color-scheme: dark; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
-    body { max-width: 760px; margin: 0 auto; padding: 48px 20px; line-height: 1.7; background: #0b1020; color: #e6edf8; }
-    h1 { line-height: 1.2; } a { color: #8cc7ff; } nav { display:flex; gap:16px; flex-wrap:wrap; margin: 28px 0; }
-    .card { padding: 20px; border: 1px solid #344568; border-radius: 12px; background: #111a30; }
-    footer { margin-top: 44px; font-size: .9rem; color: #adbad2; }
-  </style>
+  <title>LeagueRecord Custom</title>
+  <meta name="description" content="LeagueRecord Custom is an open-source Windows desktop app for locally recording League of Legends gameplay and uploading user-selected videos to the user's own YouTube channel.">
+  <link rel="canonical" href="https://leaguerecord.web.app/">
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="stylesheet" href="/styles.css">
+  <meta property="og:title" content="LeagueRecord Custom">
+  <meta property="og:description" content="Record locally. Upload to your YouTube channel.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://leaguerecord.web.app/">
+  <meta property="og:image" content="https://leaguerecord.web.app/og.png">
+  <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
-  <h1>LeagueRecord Electron</h1>
-  <p>LeagueRecord Electronは、League of LegendsのゲームプレイをWindows PC上へローカル録画するデスクトップアプリです。</p>
-  <div class="card">
-    <p>任意のYouTubeアップロード機能では、利用者が選択した完成済みの録画またはクリップを、利用者自身のYouTubeチャンネルへ投稿できます。</p>
-  </div>
-  <nav>
-    <a href="security.html">安全性と共有データ</a>
-    <a href="privacy.html">プライバシーポリシー</a>
-    <a href="terms.html">利用規約</a>
-    <a href="https://github.com/arasan95/league_record_custom">GitHub</a>
-    <a href="https://github.com/arasan95/league_record_custom/issues">問い合わせ</a>
-  </nav>
-  <footer>最終更新日: 2026-07-18</footer>
+  <header>
+    <a class="brand" href="/"><img src="/icon.png" alt=""><span>LeagueRecord Custom</span></a>
+    <a class="language" href="/ja/" lang="ja">日本語</a>
+  </header>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Open-source Windows desktop app</p>
+      <h1>Record locally. Upload only when you choose.</h1>
+      <p class="lead">LeagueRecord Custom records League of Legends gameplay on your Windows PC. Its optional YouTube feature lets you upload a finished recording or clip that you select to your own authorized YouTube channel.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/arasan95/league_record_custom">View source on GitHub</a>
+        <a class="button" href="/privacy.html">How Google data is used</a>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <strong>Local by default</strong>
+        <p>Recording and video management happen on your computer. LeagueRecord Custom does not upload a video unless you select it and explicitly start the upload.</p>
+      </section>
+      <section class="card">
+        <strong>Your channel, your settings</strong>
+        <p>You connect a Google account in the system browser and confirm the title, description, visibility, audience setting, and thumbnail before uploading.</p>
+      </section>
+    </div>
+
+    <section class="card">
+      <strong>YouTube API use</strong>
+      <p>LeagueRecord Custom uses YouTube API Services for user-authorized video uploads, custom thumbnails, upload-processing checks, and availability checks for videos shared through the app. It does not collect or analyze a user's general YouTube activity.</p>
+    </section>
+
+    <nav aria-label="Legal and support">
+      <a href="/privacy.html">Privacy Policy</a>
+      <a href="/terms.html">Terms of Service</a>
+      <a href="/security.html">Security and Shared Data</a>
+      <a href="https://github.com/arasan95/league_record_custom/issues">Support</a>
+    </nav>
+  </main>
+  <footer>
+    <nav><a href="/">Home</a><a href="/ja/" lang="ja">日本語</a></nav>
+    <span>Last updated: July 27, 2026</span>
+  </footer>
 </body>
 </html>

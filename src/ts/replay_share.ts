@@ -43,11 +43,18 @@ export type PreparedReplayShare = {
 export type LoadedReplayShare = {
     youtubeVideoId: string;
     youtubeUrl: string;
+    uploadedAtMs: number | null;
     metadataFile: { Metadata: GameMetadata };
 };
 
 function isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function firestoreTimestampMillis(value: unknown): number | null {
+    if (!isObject(value) || typeof value.toMillis !== "function") return null;
+    const millis = (value.toMillis as () => unknown)();
+    return typeof millis === "number" && Number.isFinite(millis) && millis > 0 ? millis : null;
 }
 
 const MAX_SHARED_JSON_DEPTH = 10;
@@ -397,6 +404,7 @@ export async function loadReplayShare(input: string): Promise<LoadedReplayShare>
     return {
         youtubeVideoId,
         youtubeUrl: `https://www.youtube.com/watch?v=${youtubeVideoId}`,
+        uploadedAtMs: firestoreTimestampMillis(document.createdAt),
         metadataFile: { Metadata: normalizeSharedMetadata(payload.metadata) },
     };
 }

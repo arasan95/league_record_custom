@@ -130,6 +130,12 @@
     line-height: 1.2;
 }
 
+.review-comments-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .review-comment-count {
     min-width: 25px;
     padding: 4px 7px;
@@ -139,6 +145,121 @@
     font-size: 12px;
     text-align: center;
 }
+
+.community-report-toggle {
+    position: relative;
+    width: 27px;
+    height: 27px;
+    padding: 0;
+    border: 1px solid #4b5367;
+    border-radius: 999px;
+    color: #c6cada;
+    background: #252c3d;
+    font-weight: 800;
+    cursor: pointer;
+}
+.community-report-toggle:hover,
+.community-report-toggle.active { color: #fff; border-color: #d16a73; background: #543039; }
+.community-report-toggle:disabled { opacity: .35; cursor: default; }
+.community-report-badge {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    min-width: 15px;
+    padding: 1px 3px;
+    border-radius: 999px;
+    color: #fff;
+    background: #d84655;
+    font-size: 9px;
+    line-height: 13px;
+}
+
+.community-moderation-panel {
+    flex: 0 0 auto;
+    max-height: 42%;
+    padding: 10px 12px;
+    overflow-y: auto;
+    border-block: 1px solid #4b3538;
+    color: #ccc;
+    background: #211b1c;
+    font-size: 10px;
+}
+.community-moderation-panel[hidden] { display: none !important; }
+.community-moderation-heading { display: flex; align-items: center; justify-content: space-between; }
+.community-moderation-heading strong { color: #eee; font-size: 11px; }
+.community-moderation-heading button,
+.community-moderation-panel button {
+    min-height: 24px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: #ddd;
+    background: #303030;
+    cursor: pointer;
+}
+.community-moderation-panel p { margin: 7px 0; color: #aaa; line-height: 1.45; }
+#community-admin-reports > strong,
+#community-admin-moderations > strong,
+#community-blocked-users > strong { display: block; margin: 9px 0 5px; color: #ccc; }
+.community-admin-report-item,
+.community-blocked-user-item {
+    margin-top: 5px;
+    padding: 7px;
+    border: 1px solid #454545;
+    border-radius: 5px;
+    background: #252525;
+}
+.community-admin-report-meta { color: #aaa; }
+.community-admin-report-text { margin: 4px 0; color: #eee; overflow-wrap: anywhere; }
+.community-admin-report-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.community-admin-report-actions .danger { color: #ffd7da; border-color: #82464c; background: #512c31; }
+.community-blocked-user-item { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+
+.community-action-dialog-overlay {
+    position: fixed;
+    z-index: 10000;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, .68);
+}
+.community-action-dialog {
+    width: min(420px, calc(100vw - 40px));
+    padding: 16px;
+    border: 1px solid #555;
+    border-radius: 9px;
+    box-shadow: 0 18px 55px rgba(0, 0, 0, .55);
+    color: #eee;
+    background: #242424;
+}
+.community-action-dialog p { margin: 0 0 12px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+.community-action-dialog textarea {
+    width: 100%;
+    min-height: 88px;
+    padding: 9px;
+    resize: vertical;
+    box-sizing: border-box;
+    border: 1px solid #505050;
+    border-radius: 6px;
+    outline: none;
+    color: #eee;
+    background: #171717;
+    font: 12px/1.5 Inter, sans-serif;
+}
+.community-action-dialog textarea:focus { border-color: #949494; }
+.community-action-dialog-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 12px; }
+.community-action-dialog-actions button {
+    min-width: 78px;
+    padding: 7px 10px;
+    border: 1px solid #5b5b5b;
+    border-radius: 5px;
+    color: #eee;
+    background: #343434;
+    cursor: pointer;
+}
+.community-action-dialog-actions button:hover { background: #444; }
+.community-action-dialog-actions button.danger { border-color: #8c4c53; background: #612f35; }
+.community-action-dialog-actions button.danger:hover { background: #793b43; }
 
 .review-comment-filters,
 .review-comment-rating {
@@ -205,14 +326,34 @@
 
 .community-comments-panel {
     flex: 0 0 auto;
-    padding: 9px 12px;
+    padding: 0;
     border-bottom: 1px solid #343434;
     background: #1b1b1b;
     font: 10px/1.35 'Inter', sans-serif;
 }
 .community-comments-panel[hidden] { display: none !important; }
-.community-comments-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; }
-.community-comments-title-row strong { color: #ddd; font-size: 11px; }
+.community-settings-section + .community-settings-section { border-top: 1px solid #343434; }
+.community-comments-panel .community-section-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-height: 32px;
+    padding: 7px 12px;
+    border: 0;
+    border-radius: 0;
+    background: #202020;
+    color: #ddd;
+    text-align: left;
+}
+.community-comments-panel .community-section-toggle:hover { background: #292929; }
+.community-section-toggle strong { font-size: 11px; }
+.community-section-toggle-meta { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.community-section-chevron { color: #888; font-size: 14px; transition: transform 0.15s ease; }
+.community-section-toggle[aria-expanded="false"] .community-section-chevron { transform: rotate(-90deg); }
+.community-section-content { padding: 8px 12px 9px; }
+.community-section-content[hidden] { display: none !important; }
 #community-comments-status { color: #929292; text-align: right; }
 #community-comments-owner-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 7px; }
 #community-comments-owner-controls[hidden] { display: none !important; }
@@ -224,6 +365,41 @@
 #community-invite-output { grid-column: 1 / -1; width: 100%; }
 .community-invite-redeem { display: grid; grid-template-columns: 1fr auto; gap: 5px; margin-bottom: 7px; }
 .community-group-filter select { width: 100%; }
+.community-author-filter {
+    min-width: 0;
+    margin: 8px 0 0;
+    padding: 7px;
+    border: 1px solid #3f3f3f;
+    border-radius: 5px;
+}
+.community-author-filter[hidden] { display: none !important; }
+.community-author-filter legend { padding: 0 4px; color: #aaa; font-size: 10px; }
+.community-comments-panel .community-author-filter label {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 3px 4px;
+    color: #bbb;
+    cursor: pointer;
+}
+.community-comments-panel .community-author-filter label:hover { background: #292929; }
+.community-author-filter input[type="checkbox"] { flex: 0 0 auto; margin: 0; }
+.community-author-filter-options {
+    max-height: 112px;
+    margin-top: 3px;
+    overflow-y: auto;
+    border-top: 1px solid #353535;
+    padding-top: 3px;
+}
+.community-author-filter-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.community-author-filter-id { margin-left: auto; color: #777; font-size: 9px; }
 .review-comment-private { display: flex; align-items: center; gap: 6px; margin: -2px 0 8px; color: #aaa; font-size: 10px; cursor: pointer; }
 .review-comment-private[hidden] { display: none !important; }
 
@@ -329,6 +505,8 @@
 .review-comment-actions .set-good.active { color: #4ed58a; }
 .review-comment-actions .set-bad.active { color: #ff6f7f; }
 .review-comment-actions .set-question.active { color: #ffd75e; }
+.review-comment-actions .report-comment:hover { color: #ff8c98; background: #4c292d; }
+.review-comment-actions .block-comment-author:hover { color: #f1c06c; background: #483a23; }
 
 .review-comment-form {
     flex: 0 0 auto;
@@ -361,7 +539,15 @@
 }
 
 .review-comment-rating { margin-right: auto; }
-.review-comment-rating button { padding: 6px 7px; }
+.review-comment-rating button {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
 .review-comment-rating .good.active { color: #7be4a8; border-color: #3a9e67; background: #183528; }
 .review-comment-rating .bad.active { color: #ff91a0; border-color: #ad4857; background: #3a1d25; }
 .review-comment-rating .question.active { color: #ffe187; border-color: #a88927; background: #372f17; }
@@ -469,6 +655,26 @@
 .review-comment-item:hover { border-color: #494949; background: #2b2b2b; }
 .review-comment-time { color: #c8c8c8; }
 .review-comment-mode { color: #858585; }
+.review-comment-rank {
+    padding: 1px 5px;
+    border: 1px solid #4a4a4a;
+    border-radius: 4px;
+    color: #c7c7c7;
+    background: #1b1b1b;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.4;
+}
+.review-comment-rank.rank-iron { color: #9b9192; }
+.review-comment-rank.rank-bronze { color: #bd8065; }
+.review-comment-rank.rank-silver { color: #a9bdc1; }
+.review-comment-rank.rank-gold { color: #d8c17b; }
+.review-comment-rank.rank-platinum { color: #72cbc8; }
+.review-comment-rank.rank-emerald { color: #49cf99; }
+.review-comment-rank.rank-diamond { color: #8998ef; }
+.review-comment-rank.rank-master { color: #bb78eb; }
+.review-comment-rank.rank-grandmaster { color: #ef7777; }
+.review-comment-rank.rank-challenger { color: #f4eb74; }
 .review-comment-text { color: #dedede; }
 .review-comment-actions button { color: #929292; }
 .review-comment-actions button:hover { color: #fff; background: #444; }
@@ -478,7 +684,7 @@
 .review-comment-options label { color: #929292; }
 .review-comment-options select,
 .review-color-control input { color: #dedede; border-color: #484848; background: #292929; }
-#review-comment-submit { color: #181818; background: #bcbcbc; }
+#review-comment-submit { color: #181818; background: #989898; }
 #review-comment-submit:hover:enabled { background: #d2d2d2; }
 .review-comment-hint { color: #858585; }
 

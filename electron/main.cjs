@@ -23,16 +23,21 @@ const fsNode = require("node:fs");
 const { promises: fs, watch: fsWatch } = fsNode;
 const https = require("node:https");
 const path = require("node:path");
+const { fileURLToPath, pathToFileURL } = require("node:url");
 const zlib = require("node:zlib");
+const LcuWebSocket = require("ws");
 const { createYouTubeService } = require("./youtube/service.cjs");
-const isDev = process.env.LR_ELECTRON_DEV === "1" || !app.isPackaged;
+const useDevServer = process.env.LR_ELECTRON_DEV === "1";
+const isDevExecutable = path.basename(process.execPath).toLowerCase() === "leaguerecorddev.exe";
+const isDev = useDevServer || isDevExecutable || !app.isPackaged;
 const APP_NAME = isDev ? "LeagueRecord Electron Dev" : "LeagueRecord Electron";
 const APP_ID = isDev ? "com.leaguerecord.custom.dev" : "com.leaguerecord.custom.electron";
 const APP_LOCAL_DATA_DIR_NAME = isDev ? "com.leaguerecord.custom.dev" : "com.leaguerecord.custom.electron";
+const APP_PROTOCOL = "leaguerecord";
 const ELECTRON_RELEASE_TAG_PREFIX = "electron-v";
 const TOOLTIP_DB_REMOTE_URL = "https://raw.githubusercontent.com/arasan95/league_record_custom/main/src-tauri/resources/tooltip_data.db";
-const APP_RELEASES_API_URL = "https://api.github.com/repos/arasan95/League_Record_custom/releases?per_page=20";
-const appFile = (...segments) => path.join(app.getAppPath(), ...segments);
+const sourceRoot = path.resolve(__dirname, "..");
+const appFile = (...segments) => path.join(isDev ? sourceRoot : app.getAppPath(), ...segments);
 let activeLogFile = "";
 let tooltipSqlPromise = null;
 const tooltipLocaleJsonCache = new Map();
@@ -44,8 +49,59 @@ let recordingHotkeysGameActive = false;
 let recordingHotkeySettings = null;
 let currentMainWindow = null;
 let externalInstallerPending = false;
+let configuredAutoUpdater = null;
+let latestUpdateCheck = null;
 let youtubeService = null;
 let youtubeUiComparisonEnabled = true;
+const pendingReplayDeepLinks = [];
+let deepLinkRendererReady = false;
+
+function parseReplayDeepLinkUrl(value) {
+  try {
+    const url = new URL(String(value));
+    const keys = [...url.searchParams.keys()];
+    const videoId = url.searchParams.get("v") || "";
+    const inviteCode = (url.searchParams.get("invite") || "").toLowerCase();
+    if (url.protocol !== `${APP_PROTOCOL}:` || url.hostname !== "replay"
+      || (url.pathname !== "" && url.pathname !== "/") || url.username || url.password || url.port || url.hash
+      || keys.length !== 2 || !keys.includes("v") || !keys.includes("invite")
+      || !/^[A-Za-z0-9_-]{11}$/.test(videoId) || !/^[0-9a-f]{48}$/.test(inviteCode)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function findReplayDeepLink(argv) {
+  for (const value of argv || []) {
+    const parsed = parseReplayDeepLinkUrl(value);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function focusMainWindow() {
+  const win = currentMainWindow;
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+function queueReplayDeepLink(value) {
+  const parsed = parseReplayDeepLinkUrl(value);
+  if (!parsed) return false;
+  void writeLog("deep-link", `received replay link rendererReady=${deepLinkRendererReady}`);
+  focusMainWindow();
+  if (deepLinkRendererReady && currentMainWindow && !currentMainWindow.isDestroyed()) {
+    void writeLog("deep-link", "delivering replay link to renderer");
+    emitAppEvent(currentMainWindow, "ReplayDeepLinkOpened", parsed);
+  } else {
+    void writeLog("deep-link", "holding replay link until renderer is ready");
+    if (!pendingReplayDeepLinks.includes(parsed)) pendingReplayDeepLinks.push(parsed);
+  }
+  return true;
+}
 
 const YOUTUBE_UI_COMPARISON_STYLE_ID = "league-record-youtube-ui-comparison";
 const YOUTUBE_UI_COMPARISON_CSS = `
@@ -526,61 +582,87 @@ function compareAppVersions(left, right) {
   return 0;
 }
 
-function selectWindowsInstallerAsset(release) {
-  const assets = Array.isArray(release?.assets) ? release.assets : [];
-  return assets.find((asset) => /LeagueRecordElectron Setup .*\.exe$/i.test(asset?.name ?? ""))
-    ?? assets.find((asset) => /^LeagueRecordElectron[_-].*x64-setup\.exe$/i.test(asset?.name ?? ""))
-    ?? assets.find((asset) => /\.exe$/i.test(asset?.name ?? "") && /^LeagueRecordElectron/i.test(asset?.name ?? "") && !/updater|uninstaller|blockmap|\.sig$/i.test(asset?.name ?? ""));
+function normalizeReleaseNotes(value) {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => typeof entry?.note === "string" ? entry.note : "")
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  return "";
+}
+
+function getAutoUpdater() {
+  if (configuredAutoUpdater) return configuredAutoUpdater;
+  // Load lazily so updater dependencies do not delay the first app window.
+  const { autoUpdater } = require("electron-updater");
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.allowPrerelease = String(app.getVersion()).includes("-");
+  autoUpdater.logger = {
+    info: (...args) => void writeLog("updater", args.map(String).join(" ")),
+    warn: (...args) => void writeLog("updater", `warning ${args.map(String).join(" ")}`),
+    error: (...args) => void writeLog("updater", `error ${args.map(String).join(" ")}`),
+    debug: (...args) => void writeLog("updater", `debug ${args.map(String).join(" ")}`),
+  };
+  autoUpdater.on("checking-for-update", () => {
+    emitAppEvent(currentMainWindow, "AppUpdateStatus", { phase: "checking" });
+  });
+  autoUpdater.on("download-progress", (progress) => {
+    emitAppEvent(currentMainWindow, "AppUpdateProgress", {
+      percent: Number(progress?.percent ?? 0),
+      transferred: Number(progress?.transferred ?? 0),
+      total: Number(progress?.total ?? 0),
+      bytesPerSecond: Number(progress?.bytesPerSecond ?? 0),
+    });
+  });
+  autoUpdater.on("update-downloaded", (info) => {
+    emitAppEvent(currentMainWindow, "AppUpdateStatus", {
+      phase: "downloaded",
+      version: String(info?.version ?? ""),
+    });
+  });
+  autoUpdater.on("error", (error) => {
+    emitAppEvent(currentMainWindow, "AppUpdateStatus", {
+      phase: "error",
+      message: String(error?.message || error),
+    });
+  });
+  configuredAutoUpdater = autoUpdater;
+  return autoUpdater;
 }
 
 async function checkAppUpdate() {
+  if (!app.isPackaged) return null;
+  const updater = getAutoUpdater();
+  const result = await updater.checkForUpdates();
+  const info = result?.updateInfo;
   const current = parseAppVersion(app.getVersion());
-  const includePrerelease = String(app.getVersion()).includes("-");
-  const response = await fetch(APP_RELEASES_API_URL, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "LeagueRecord electron-updater",
-      "Cache-Control": "no-cache",
-    },
-  });
-  if (!response.ok) throw new Error(`Update API request failed (${response.status})`);
-  const releases = await response.json();
-  for (const release of releases) {
-    if (release?.draft) continue;
-    if (!includePrerelease && release?.prerelease) continue;
-    const next = parseElectronReleaseVersion(release?.tag_name);
-    if (!next) continue;
-    const newer = current ? compareAppVersions(next, current) > 0 : next.normalized !== app.getVersion();
-    if (!newer) continue;
-    const installer = selectWindowsInstallerAsset(release);
-    if (!installer?.browser_download_url) continue;
-    return {
-      version: next.normalized,
-      body: release.body ?? "No release notes provided.",
-      url: release.html_url ?? installer.browser_download_url,
-      prerelease: Boolean(release.prerelease),
-      publishedAt: release.published_at ?? null,
-      installerUrl: installer.browser_download_url,
-      installerName: installer.name ?? `LeagueRecordElectron Setup ${next.normalized}.exe`,
-    };
+  const next = parseAppVersion(info?.version);
+  if (!info || !next || (current && compareAppVersions(next, current) <= 0)) {
+    latestUpdateCheck = null;
+    return null;
   }
-  return null;
+  latestUpdateCheck = result;
+  return {
+    version: next.normalized,
+    body: normalizeReleaseNotes(info.releaseNotes) || "No release notes provided.",
+    prerelease: next.prerelease.length > 0,
+    publishedAt: info.releaseDate ?? null,
+  };
 }
 
 async function downloadAndInstallAppUpdate(update) {
-  const installerUrl = String(update?.installerUrl ?? "");
-  if (!/^https:\/\//i.test(installerUrl)) {
-    throw new Error("Update installer URL is missing.");
+  const requestedVersion = parseAppVersion(update?.version);
+  const availableVersion = parseAppVersion(latestUpdateCheck?.updateInfo?.version);
+  if (!requestedVersion || !availableVersion || compareAppVersions(requestedVersion, availableVersion) !== 0) {
+    throw new Error("Update information has expired. Check for updates again.");
   }
-  const installerName = sanitizeFileName(update?.installerName || `LeagueRecordElectron Setup ${update?.version ?? "update"}.exe`);
-  const installerPath = path.join(app.getPath("temp"), "LeagueRecordElectron", "updates", installerName);
-  await downloadToPath(installerUrl, installerPath);
-  const child = spawn(installerPath, [], {
-    detached: true,
-    stdio: "ignore",
-  });
-  child.unref();
+  const updater = getAutoUpdater();
+  await updater.downloadUpdate();
   externalInstallerPending = true;
+  setTimeout(() => updater.quitAndInstall(true, true), 500);
   return null;
 }
 
@@ -2842,6 +2924,43 @@ async function fetchCurrentSummonerSafe() {
   }
 }
 
+function formatLinkedRank(entry) {
+  const tier = String(entry?.tier ?? "").trim().toUpperCase();
+  if (!tier || tier === "NONE" || tier === "UNRANKED") return "UNRANKED";
+  const division = String(entry?.division ?? entry?.rank ?? "").trim().toUpperCase();
+  return `${tier}${division && division !== "NA" ? ` ${division}` : ""}`.slice(0, 32);
+}
+
+async function getCurrentLolAccountForLink() {
+  let summoner;
+  try {
+    summoner = await lcuRequest("GET", "/lol-summoner/v1/current-summoner");
+  } catch {
+    throw new Error("LoLクライアントを起動してアカウントにログインしてください。");
+  }
+  const puuid = String(summoner?.puuid ?? summoner?.puuId ?? "").trim();
+  const gameName = String(summoner?.gameName ?? summoner?.displayName ?? "").trim();
+  const tagLine = String(summoner?.tagLine ?? "").trim();
+  if (!puuid || !gameName) throw new Error("起動中のLoLアカウント情報を取得できませんでした。");
+  const [ranked, platformId] = await Promise.all([
+    lcuRequest("GET", "/lol-ranked/v1/current-ranked-stats").catch(() => ({})),
+    getPlatformIdSafe(),
+  ]);
+  const queueMap = ranked?.queueMap && typeof ranked.queueMap === "object" ? ranked.queueMap : {};
+  const soloRank = formatLinkedRank(queueMap.RANKED_SOLO_5x5);
+  const flexRank = formatLinkedRank(queueMap.RANKED_FLEX_SR ?? queueMap.RANKED_FLEX_5x5);
+  return {
+    puuid: puuid.slice(0, 128),
+    gameName: gameName.slice(0, 32),
+    tagLine: tagLine.slice(0, 16),
+    platformId: String(platformId || "UNKNOWN").trim().toUpperCase().slice(0, 12),
+    soloRank,
+    flexRank,
+    primaryRank: soloRank !== "UNRANKED" ? soloRank : flexRank,
+    verifiedAtMs: Date.now(),
+  };
+}
+
 async function processRecordingMetadata(current, syntheticItemEvents = []) {
   const matchId = {
     gameId: Number(current.gameId ?? 0),
@@ -2962,10 +3081,15 @@ class GameMonitor {
   }
 
   async connectWebSocket() {
-    if (typeof WebSocket === "undefined" || this.ws) return;
+    if (this.ws) return;
     const auth = await getLcuAuth();
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-    const ws = new WebSocket(`wss://riot:${encodeURIComponent(auth.password)}@127.0.0.1:${auth.port}/`);
+    // Riot's local LCU endpoint uses a self-signed certificate. Limit the
+    // exception to this authenticated loopback connection instead of disabling
+    // TLS verification for every HTTPS request made by the application.
+    const ws = new LcuWebSocket(
+      `wss://riot:${encodeURIComponent(auth.password)}@127.0.0.1:${auth.port}/`,
+      { rejectUnauthorized: false },
+    );
     this.ws = ws;
     ws.addEventListener("open", () => {
       try {
@@ -3442,8 +3566,21 @@ function makeInvokeHandler(win) {
         return settings.markerFlags ?? defaultMarkerFlags;
       case "youtube_get_auth_status":
         return youtubeService.getAuthStatus();
-      case "youtube_sign_in":
-        return youtubeService.signIn();
+      case "get_current_lol_account_for_link":
+        return getCurrentLolAccountForLink();
+      case "youtube_get_channel_capabilities":
+        return youtubeService.getChannelCapabilities();
+      case "youtube_sign_in": {
+        const result = await youtubeService.signIn();
+        if (!win.isDestroyed()) {
+          if (win.isMinimized()) win.restore();
+          win.show();
+          win.focus();
+        }
+        return result;
+      }
+      case "youtube_reopen_sign_in":
+        return youtubeService.reopenSignIn();
       case "youtube_get_firebase_id_token":
         return youtubeService.getFirebaseIdToken();
       case "youtube_sign_out":
@@ -3468,6 +3605,8 @@ function makeInvokeHandler(win) {
         return youtubeService.cancelUpload();
       case "youtube_find_missing_videos":
         return youtubeService.findMissingVideos(args.videoIds);
+      case "youtube_get_video_published_dates":
+        return youtubeService.getVideoPublishedDates(args.videoIds);
       case "youtube_is_public_video_available":
         return youtubeService.isPublicVideoAvailable(args.videoId);
       case "set_marker_flags":
@@ -3639,6 +3778,23 @@ function makeInvokeHandler(win) {
 }
 
 function createWindow() {
+  deepLinkRendererReady = false;
+  const productionIndexPath = appFile("dist", "index.html");
+  const productionIndexUrl = pathToFileURL(productionIndexPath).toString();
+  const isTrustedAppUrl = (value) => {
+    try {
+      const parsed = new URL(value);
+      if (useDevServer) {
+        return parsed.protocol === "http:"
+          && parsed.hostname === "localhost"
+          && parsed.port === "1420";
+      }
+      return parsed.protocol === "file:"
+        && path.resolve(fileURLToPath(parsed)) === path.resolve(productionIndexPath);
+    } catch {
+      return false;
+    }
+  };
   const windowIconPath = resolveAppAsset("app-icon.ico") ?? resolveAppAsset("app-icon.png");
   const win = new BrowserWindow({
     title: APP_NAME,
@@ -3650,11 +3806,11 @@ function createWindow() {
     icon: windowIconPath,
     show: false,
     webPreferences: {
-      preload: isDev ? path.join(process.cwd(), "electron", "preload.cjs") : appFile("electron", "preload.cjs"),
+      preload: appFile("electron", "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      webSecurity: !isDev,
+      webSecurity: !useDevServer,
       backgroundThrottling: false,
     },
   });
@@ -3675,10 +3831,7 @@ function createWindow() {
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (event, url) => {
-    const isAppUrl = isDev
-      ? url.startsWith("http://localhost:1420/")
-      : url.startsWith("file:");
-    if (isAppUrl) return;
+    if (isTrustedAppUrl(url)) return;
     event.preventDefault();
     openExternalLink(url);
   });
@@ -3779,9 +3932,16 @@ function createWindow() {
     try {
       ipcMain.removeHandler(channel);
     } catch {}
-    ipcMain.handle(channel, async (...args) => {
+    ipcMain.handle(channel, async (event, ...args) => {
       try {
-        return await handler(...args);
+        if (
+          event.sender !== win.webContents
+          || event.senderFrame !== win.webContents.mainFrame
+          || !isTrustedAppUrl(event.senderFrame?.url || "")
+        ) {
+          throw new Error(`Rejected IPC from an untrusted renderer: ${channel}`);
+        }
+        return await handler(event, ...args);
       } catch (error) {
         await writeLog("ipc", `${channel} failed: ${String(error?.stack || error)}`);
         throw error;
@@ -3790,18 +3950,70 @@ function createWindow() {
   };
   const safeOn = (channel, handler) => {
     ipcMain.removeAllListeners(channel);
-    ipcMain.on(channel, handler);
+    ipcMain.on(channel, (event, ...args) => {
+      if (
+        event.sender !== win.webContents
+        || event.senderFrame !== win.webContents.mainFrame
+        || !isTrustedAppUrl(event.senderFrame?.url || "")
+      ) {
+        void writeLog("ipc", `Rejected event from an untrusted renderer: ${channel}`);
+        return;
+      }
+      handler(event, ...args);
+    });
   };
 
   safeHandle("tauri:invoke", makeInvokeHandler(win));
-  const resolveBaseDir = (baseDir) => {
-    if (baseDir === "AppLocalData") return getAppLocalDataPath();
-    if (baseDir === "AppData") return app.getPath("appData");
-    return "";
+  const isPathInside = (candidate, root) => {
+    const resolvedCandidate = path.resolve(candidate);
+    const resolvedRoot = path.resolve(root);
+    return resolvedCandidate === resolvedRoot
+      || resolvedCandidate.startsWith(`${resolvedRoot}${path.sep}`);
   };
-  const resolveFsPath = (target, options = {}) => {
-    const base = resolveBaseDir(options.baseDir);
-    return base ? path.join(base, target) : target;
+  const validatePathText = (target) => {
+    if (typeof target !== "string" || target.length < 1 || target.length > 32767 || target.includes("\0")) {
+      throw new Error("ファイルパスが不正です。");
+    }
+    return target;
+  };
+  const resolveCachePath = (target, options = {}) => {
+    const value = validatePathText(target);
+    if (options.baseDir !== "AppLocalData") {
+      throw new Error("アプリのキャッシュ領域以外にはアクセスできません。");
+    }
+    const root = getAppLocalDataPath();
+    const resolved = path.resolve(root, value);
+    if (!isPathInside(resolved, root)) {
+      throw new Error("アプリのキャッシュ領域外へのアクセスを拒否しました。");
+    }
+    return resolved;
+  };
+  const assertCachePathDoesNotEscapeThroughLinks = async (target) => {
+    const root = getAppLocalDataPath();
+    const rootReal = await fs.realpath(root).catch(() => path.resolve(root));
+    let existingAncestor = target;
+    while (!fsNode.existsSync(existingAncestor)) {
+      const parent = path.dirname(existingAncestor);
+      if (parent === existingAncestor) break;
+      existingAncestor = parent;
+    }
+    const ancestorReal = await fs.realpath(existingAncestor).catch(() => path.resolve(existingAncestor));
+    if (!isPathInside(ancestorReal, rootReal)) {
+      throw new Error("リンクを経由したキャッシュ領域外へのアクセスを拒否しました。");
+    }
+  };
+  const resolveRecordingPath = async (target) => {
+    const value = validatePathText(target);
+    if (!path.isAbsolute(value) || !/\.(?:mp4|webm)$/i.test(value)) {
+      throw new Error("録画ファイルのパスが不正です。");
+    }
+    const settings = await readSettings();
+    const roots = [settings.recordingsFolder, settings.clipsFolder].filter(Boolean);
+    const resolved = path.resolve(value);
+    if (!roots.some((root) => isPathInside(resolved, root))) {
+      throw new Error("設定済み録画フォルダー外へのアクセスを拒否しました。");
+    }
+    return resolved;
   };
 
   safeHandle("lr:path:appLocalDataDir", () => getAppLocalDataPath());
@@ -3822,42 +4034,61 @@ function createWindow() {
     await shell.openExternal(parsed.toString());
     return null;
   });
-  safeHandle("lr:drag:start", (event, options = {}) => {
+  safeHandle("lr:drag:start", async (event, options = {}) => {
     const file = Array.isArray(options.item) ? options.item[0] : null;
     if (!file) throw new Error("No file supplied for drag");
+    const resolvedFile = await resolveRecordingPath(String(file));
     const icon = typeof options.icon === "string" && options.icon.startsWith("data:")
       ? nativeImage.createFromDataURL(options.icon)
       : nativeImage.createEmpty();
-    event.sender.startDrag({ file: String(file), icon });
+    event.sender.startDrag({ file: resolvedFile, icon });
     return null;
   });
   safeHandle("lr:clipboard:writeText", (_e, text) => {
     clipboard.writeText(String(text ?? ""));
     return null;
   });
+  safeHandle("lr:deep-link:renderer-ready", () => {
+    deepLinkRendererReady = true;
+    const pending = pendingReplayDeepLinks.splice(0);
+    void writeLog("deep-link", `renderer ready pending=${pending.length}`);
+    return pending;
+  });
   safeHandle("lr:youtube-ui-comparison:setEnabled", (_e, enabled) => {
     return setYouTubeUiComparison(win, Boolean(enabled));
   });
   safeHandle("lr:fs:exists", async (_e, target, options) => {
     try {
-      await fs.stat(resolveFsPath(target, options));
+      const resolved = options?.baseDir
+        ? resolveCachePath(target, options)
+        : await resolveRecordingPath(target);
+      if (options?.baseDir) await assertCachePathDoesNotEscapeThroughLinks(resolved);
+      await fs.stat(resolved);
       return true;
     } catch {
       return false;
     }
   });
   safeHandle("lr:fs:mkdir", async (_e, target, options) => {
-    await fs.mkdir(resolveFsPath(target, options), { recursive: Boolean(options?.recursive) });
+    const resolved = resolveCachePath(target, options);
+    await assertCachePathDoesNotEscapeThroughLinks(resolved);
+    await fs.mkdir(resolved, { recursive: Boolean(options?.recursive) });
     return null;
   });
   safeHandle("lr:fs:readFile", async (_e, target, options) => {
-    const data = await fs.readFile(resolveFsPath(target, options));
+    const resolved = resolveCachePath(target, options);
+    await assertCachePathDoesNotEscapeThroughLinks(resolved);
+    const data = await fs.readFile(resolved);
     return new Uint8Array(data);
   });
   safeHandle("lr:fs:writeFile", async (_e, target, data, options) => {
-    const fullPath = resolveFsPath(target, options);
+    const fullPath = resolveCachePath(target, options);
+    await assertCachePathDoesNotEscapeThroughLinks(fullPath);
     await fs.mkdir(path.dirname(fullPath), { recursive: true });
     const content = data instanceof Uint8Array ? data : new Uint8Array(data);
+    if (content.byteLength > 32 * 1024 * 1024) {
+      throw new Error("キャッシュファイルは32MB以下にしてください。");
+    }
     await fs.writeFile(fullPath, content);
     return null;
   });
@@ -3882,13 +4113,12 @@ function createWindow() {
   safeOn("lr:window:unminimize", () => win.restore());
   safeOn("lr:window:fullscreen", (_e, value) => win.setFullScreen(Boolean(value)));
 
-  if (isDev) {
+  if (useDevServer) {
     void writeLog("main", "loading dev url http://localhost:1420");
     win.loadURL("http://localhost:1420");
   } else {
-    const indexPath = appFile("dist", "index.html");
-    void writeLog("main", `loading file ${indexPath}`);
-    win.loadFile(indexPath);
+    void writeLog("main", `loading file ${productionIndexPath}`);
+    win.loadURL(productionIndexUrl);
   }
 
   win.webContents.on("did-finish-load", () => {
@@ -3900,7 +4130,16 @@ function createWindow() {
       .catch(() => {});
     win.show();
   });
+  win.webContents.on("did-start-navigation", (_event, _url, _isInPlace, isMainFrame) => {
+    // Embedded YouTube frames load while the renderer is already listening.
+    // Reset readiness only when the application document itself navigates.
+    if (isMainFrame) deepLinkRendererReady = false;
+  });
   win.on("closed", () => {
+    if (currentMainWindow === win) {
+      currentMainWindow = null;
+      deepLinkRendererReady = false;
+    }
     void writeLog("main", "window closed");
     win.__recordingWatcher?.stop();
   });
@@ -3921,6 +4160,29 @@ function toFsPathFromRequestUrl(requestUrl) {
 }
 
 appendBootLog(`main loaded packaged=${app.isPackaged} appPath=${app.getAppPath()}`);
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  const initialReplayDeepLink = findReplayDeepLink(process.argv);
+  if (initialReplayDeepLink) pendingReplayDeepLinks.push(initialReplayDeepLink);
+
+  if (isDev && process.platform === "win32") {
+    app.setAsDefaultProtocolClient(APP_PROTOCOL, process.execPath, [path.resolve(process.argv[1] || "electron/main.cjs")]);
+  } else {
+    app.setAsDefaultProtocolClient(APP_PROTOCOL);
+  }
+
+  app.on("second-instance", (_event, argv) => {
+    const replayDeepLink = findReplayDeepLink(argv);
+    if (replayDeepLink) queueReplayDeepLink(replayDeepLink);
+    else focusMainWindow();
+  });
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    queueReplayDeepLink(url);
+  });
 
 app.whenReady().then(() => {
   return initLogging().then(() => {
@@ -3960,3 +4222,4 @@ app.on("before-quit", () => {
   gameMonitor?.stop();
   void recorderController?.shutdown();
 });
+}

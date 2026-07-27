@@ -1,9 +1,10 @@
 export type CommunityAccess = "public" | "invite_only";
+export type CommunityWriteAccess = CommunityAccess | "rank_verified";
 export type CommunityCommentVisibility = "public" | "private";
 export type CommunityRating = "good" | "bad" | "question" | null;
 
 export interface CommunityCommentSettings {
-    writeAccess: CommunityAccess;
+    writeAccess: CommunityWriteAccess;
     readAccess: CommunityAccess;
 }
 
@@ -18,6 +19,7 @@ export interface CommunityCommentInput {
     x: number | null;
     y: number | null;
     visibility: CommunityCommentVisibility;
+    anonymous: boolean;
     clientRequestId: string;
 }
 
@@ -28,6 +30,9 @@ export interface CommunityCommentRecord extends CommunityCommentInput {
     authorName: string;
     authorPublicId: string | null;
     authorGroupIds: string[];
+    authorRank: string | null;
+    /** Derived from the private ownership collection; never stored on the public comment. */
+    ownedByCurrentUser?: boolean;
     createdAtMs: number;
     updatedAtMs: number;
 }
@@ -39,11 +44,36 @@ export interface CommunityCommentContext {
     currentPublicId: string | null;
     currentUserName: string | null;
     isOwner: boolean;
+    isAdmin: boolean;
     isMember: boolean;
+    isRankVerified: boolean;
+    moderation: CommunityModeration | null;
     memberGroupIds: string[];
     settings: CommunityCommentSettings;
     canRead: boolean;
     canWrite: boolean;
+}
+
+export type CommunityModerationAction = "comment_block" | "ban";
+
+export interface CommunityModeration {
+    uid: string;
+    action: CommunityModerationAction;
+    expiresAtMs: number | null;
+    reason: string;
+}
+
+export interface CommunityCommentReport {
+    id: string;
+    videoId: string;
+    commentId: string;
+    reporterUid: string;
+    authorUid: string;
+    authorName: string;
+    authorPublicId: string | null;
+    commentText: string;
+    details: string;
+    createdAtMs: number;
 }
 
 export const DEFAULT_COMMUNITY_COMMENT_SETTINGS: CommunityCommentSettings = {
@@ -77,7 +107,7 @@ export function validateCommunitySettings(value: unknown): CommunityCommentSetti
     if (!isObject(value) || !exactKeys(value, ["writeAccess", "readAccess"])) {
         throw new Error("コメント公開設定の項目が不正です。");
     }
-    if ((value.writeAccess !== "public" && value.writeAccess !== "invite_only")
+    if ((value.writeAccess !== "public" && value.writeAccess !== "invite_only" && value.writeAccess !== "rank_verified")
         || (value.readAccess !== "public" && value.readAccess !== "invite_only")) {
         throw new Error("コメント公開設定が不正です。");
     }
@@ -85,7 +115,7 @@ export function validateCommunitySettings(value: unknown): CommunityCommentSetti
 }
 
 export function validateCommunityCommentInput(value: unknown): CommunityCommentInput {
-    const keys = ["text", "videoTimeMs", "rating", "color", "size", "durationMs", "mode", "x", "y", "visibility", "clientRequestId"];
+    const keys = ["text", "videoTimeMs", "rating", "color", "size", "durationMs", "mode", "x", "y", "visibility", "anonymous", "clientRequestId"];
     if (!isObject(value) || !exactKeys(value, keys)) throw new Error("コメントの項目が不正です。");
     const text = typeof value.text === "string" ? value.text.trim() : "";
     if (!text || text.length > 280 || hasUnsafeCommentText(text)) throw new Error("コメント本文が不正です。");
@@ -106,6 +136,8 @@ export function validateCommunityCommentInput(value: unknown): CommunityCommentI
     }
     if (value.mode === "fixed" && (value.x === null || value.y === null)) throw new Error("固定コメントの位置がありません。");
     if (value.visibility !== "public" && value.visibility !== "private") throw new Error("コメント公開範囲が不正です。");
+    if (typeof value.anonymous !== "boolean") throw new Error("匿名投稿設定が不正です。");
+    if (value.anonymous && value.visibility !== "public") throw new Error("匿名コメントは公開コメントとして投稿してください。");
     if (typeof value.clientRequestId !== "string" || !REQUEST_ID.test(value.clientRequestId)) throw new Error("コメントリクエストIDが不正です。");
     return {
         text,
@@ -118,6 +150,7 @@ export function validateCommunityCommentInput(value: unknown): CommunityCommentI
         x: value.x === null ? null : Number(value.x),
         y: value.y === null ? null : Number(value.y),
         visibility: value.visibility,
+        anonymous: value.anonymous,
         clientRequestId: value.clientRequestId,
     };
 }

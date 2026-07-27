@@ -8,7 +8,6 @@
     grid-template-rows: [header] 0.5fr [list] 11fr;
 
     /* border-right: 1px solid #333; */
-    border-left: 1px solid #1e1e1e; /* 1px Invisible Safety Buffer for DWM */
     background-color: var(--sidebar-surface);
     isolation: isolate;
 }
@@ -321,6 +320,7 @@
     list-style: none;
     overflow: auto;
     background: #000;
+    border-top: 1px solid #333;
 }
 
 #youtube-replay-owned[hidden] {
@@ -555,7 +555,7 @@
     border: 1px solid #41444c;
     border-radius: 7px;
     outline: none;
-    background: #111318;
+    background: #111;
     color: #f3f4f6;
     padding: 10px;
     font-family: Inter, sans-serif;
@@ -564,17 +564,17 @@
 }
 
 #youtube-replay-url:focus {
-    border-color: #9aa9d0;
-    box-shadow: 0 0 0 2px rgba(154, 169, 208, 0.15);
+    border-color: #d9d9d9;
+    box-shadow: 0 0 0 2px rgba(209, 209, 209, 0.15);
 }
 
 #youtube-replay-load {
     width: 100%;
     margin-top: 12px;
-    border: 1px solid #a1b0d8;
+    border: 1px solid #d4d4d4;
     border-radius: 7px;
-    background: #2c3448;
-    color: #eef2ff;
+    background: #989898;
+    color: #181818;
     padding: 10px 12px;
     font-family: Inter, sans-serif;
     font-size: 12px;
@@ -583,7 +583,7 @@
 }
 
 #youtube-replay-load:hover:enabled {
-    background: #3a4661;
+    background: #bdbdbd;
 }
 
 #youtube-replay-load:disabled {
@@ -765,7 +765,8 @@
 
 /* Side Indicators (Bar via pseudo-element) */
 #sidebar #sidebar-content li::before,
-#youtube-replay-history li::before {
+#youtube-replay-history li::before,
+#youtube-replay-owned li::before {
     content: "";
     position: absolute;
     left: 0px;
@@ -777,18 +778,21 @@
 }
 
 #sidebar #sidebar-content li.side-blue::before,
-#youtube-replay-history li.side-blue::before {
+#youtube-replay-history li.side-blue::before,
+#youtube-replay-owned li.side-blue::before {
     background-color: #0acbe6;
 }
 
 #sidebar #sidebar-content li.side-red::before,
-#youtube-replay-history li.side-red::before {
+#youtube-replay-history li.side-red::before,
+#youtube-replay-owned li.side-red::before {
     background-color: #e63b3b;
 }
 
 /* Fallback for active item with no side info - Neutral color */
 #sidebar #sidebar-content li.active:not(.side-blue):not(.side-red)::before,
-#youtube-replay-history li.active:not(.side-blue):not(.side-red)::before {
+#youtube-replay-history li.active:not(.side-blue):not(.side-red)::before,
+#youtube-replay-owned li.active:not(.side-blue):not(.side-red)::before {
     background-color: #e0e0e0 !important;
     box-shadow: 
         0 0 8px 2px rgba(220, 220, 220, 0.8),
@@ -798,13 +802,15 @@
 
 /* Fallback for INACTIVE item with no side info - Neutral line */
 #sidebar #sidebar-content li:not(.side-blue):not(.side-red)::before,
-#youtube-replay-history li:not(.side-blue):not(.side-red)::before {
+#youtube-replay-history li:not(.side-blue):not(.side-red)::before,
+#youtube-replay-owned li:not(.side-blue):not(.side-red)::before {
     background-color: #444;
 }
 
 /* Neon Glow Effect on Active State - Intensified */
 #sidebar #sidebar-content li.active.side-blue::before,
-#youtube-replay-history li.active.side-blue::before {
+#youtube-replay-history li.active.side-blue::before,
+#youtube-replay-owned li.active.side-blue::before {
     background-color: #b5f6ff !important;
     box-shadow: 
         0 0 8px 2px rgba(10, 203, 230, 0.9),
@@ -813,7 +819,8 @@
 }
 
 #sidebar #sidebar-content li.active.side-red::before,
-#youtube-replay-history li.active.side-red::before {
+#youtube-replay-history li.active.side-red::before,
+#youtube-replay-owned li.active.side-red::before {
     background-color: #ffc8c8 !important;
     box-shadow: 
         0 0 8px 2px rgba(255, 0, 0, 0.685),
@@ -823,12 +830,14 @@
 
 /* Yellow Glow for TFT */
 #sidebar #sidebar-content li.tft-match::before,
-#youtube-replay-history li.tft-match::before {
+#youtube-replay-history li.tft-match::before,
+#youtube-replay-owned li.tft-match::before {
     background-color: #bf9d46;
 }
 
 #sidebar #sidebar-content li.active.tft-match::before,
-#youtube-replay-history li.active.tft-match::before {
+#youtube-replay-history li.active.tft-match::before,
+#youtube-replay-owned li.active.tft-match::before {
     background-color: #fff09c !important;
     box-shadow: 
         0 0 8px 2px rgba(255, 215, 0, 0.8),
@@ -1092,6 +1101,17 @@
     display: flex;
 }
 
+#youtube-replay-history li:hover .youtube-replay-actions,
+#youtube-replay-history li:focus-within .youtube-replay-actions,
+#youtube-replay-owned li:hover .youtube-replay-actions,
+#youtube-replay-owned li:focus-within .youtube-replay-actions {
+    display: flex;
+}
+
+#youtube-replay-history .youtube-replay-actions {
+    right: 38px;
+}
+
 .favorite, .share, .rename, .delete, .delete-video-only, .replay-action {
     font-size: 16px;
     color: #666;
@@ -1104,6 +1124,40 @@
     justify-content: center;
     min-width: 20px;
     height: 25px;
+}
+
+.youtube-replay-actions .replay-action {
+    border: 0;
+    font: inherit;
+    cursor: pointer;
+}
+
+.youtube-replay-open:hover,
+.youtube-replay-open:focus-visible {
+    color: #f5f5f5;
+    background: rgba(80, 80, 80, 0.8);
+    outline: none;
+}
+
+.youtube-replay-video-id {
+    display: flex;
+    justify-content: flex-end;
+    gap: 3px;
+    width: 100%;
+    margin-top: 2px;
+    padding-right: 8px;
+    box-sizing: border-box;
+    color: #777;
+    font: 9px/1.25 Inter, sans-serif;
+    white-space: nowrap;
+}
+
+.youtube-replay-video-id strong {
+    overflow: hidden;
+    color: #999;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-weight: 600;
+    text-overflow: ellipsis;
 }
 
 /* Keep the existing full-width CS label as one line. Compact mode below
@@ -1257,6 +1311,28 @@
     font: inherit;
     text-decoration: underline;
     cursor: pointer;
+}
+
+.recording-youtube-requirements {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid #665f45;
+    border-radius: 7px;
+    background: #2b2921;
+    color: #ddd7bd;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.recording-youtube-requirements[hidden] {
+    display: none;
+}
+
+.recording-youtube-studio-link {
+    width: fit-content;
+    color: #f1d77a;
 }
 
 .recording-share-upload {

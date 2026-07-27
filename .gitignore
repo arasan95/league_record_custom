@@ -18,7 +18,14 @@ release-electron/
 electron/youtube/local-config.cjs
 electron/youtube/local-client-id.txt
 electron/youtube/local-client-secret.txt
+electron/youtube/official-client.generated.cjs
 .build-input/
+.artifacts/
+.firebase/
+
+# Maintainer-only notes and compliance submission drafts.
+# Documentation is kept locally and is not published with the source repository.
+docs/
 
 # Editor directories and files
 .vscode/*
