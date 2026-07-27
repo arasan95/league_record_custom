@@ -1,43 +1,78 @@
 /* Settings Modal Styles */
 /* Settings Modal Styles */
 
+#modal:has(#modal-content.settings-mode) {
+    padding-top: 0;
+    box-sizing: border-box;
+}
+
 /* When in settings mode, strip the parent modal styling */
 #modal-content.settings-mode {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;
-    width: auto !important; /* Let child decide width */
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100% !important;
+    height: 100%;
+    margin: 0 !important;
     max-width: none !important;
     max-height: 100vh !important;
     overflow: visible !important;
+    box-sizing: border-box;
 }
 
 #settings-modal-content {
   text-align: left;
-  max-width: 900px; /* Widened for Discord-like appearance */
-  width: 95%;
-  margin: 0 auto; /* Center the modal horizontally */
+  flex: 1 1 1000px;
+  min-width: 0;
+  max-width: 1000px;
+  width: auto;
+  height: 100%;
+  margin: 0;
   display: flex; /* Turn into flex container for sticky footer layout */
   flex-direction: column;
-  max-height: 85vh; /* Limit height to viewport to ensure buttons are visible */
+  max-height: none;
+  overflow: hidden;
   
   /* Restore Window Styling here */
   background-color: #1d1d1d;
-  padding: 20px 0; /* Vertical padding only, allows scrollbar to be at the edge */
-  border-radius: 8px;
-  border: 1px solid #444;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 
+  box-sizing: border-box;
+}
+
+.settings-modal-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1000px);
+  align-items: stretch;
+  width: min(1200px, 96vw);
+  height: min(960px, calc(100vh - 90px));
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid #404040;
+  border-radius: 10px;
+  background: #1d1d1d;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.6);
   box-sizing: border-box;
 }
 
 /* Scroll Container - Handles the scrollbar at the edge */
 .settings-scroll-container {
   overflow-y: auto !important; /* Override .settings-tab-content overflow: hidden */
-  flex: 1; /* Take up remaining vertical space */
+  flex: 1 1 0; /* Take up remaining vertical space */
+  height: 100%;
+  max-height: 100%;
   min-height: 0; /* Ensures flex item shrinks properly */
   width: 100%;
+  overscroll-behavior: contain;
 }
 
 /* Custom Scrollbar with margin */
@@ -74,13 +109,12 @@
   /* overflow and padding moved to wrapper/scroll-container */
 }
 
-/* Standard padding for header, footer, and tabs (keep them at normal width */
-#settings-modal-content > h2,
-#settings-modal-content > div:nth-child(2), /* Patch version div */
-.settings-tabs,
-.settings-actions {
-  padding-left: 20px;
-  padding-right: 20px;
+/* Fixed header and footer around the scrollable settings pane. */
+.settings-header {
+  flex: 0 0 auto;
+  padding: 14px 20px 4px;
+  border-bottom: 1px solid #292929;
+  background: #1d1d1d;
 }
 
 .settings-group {
@@ -198,9 +232,9 @@ input:checked + .slider:before {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 0;
-  padding-top: 20px;
-  border-top: 1px solid #444; /* Separator line */
-  background-color: transparent; /* Match modal bg */
+  padding: 16px 20px 18px;
+  border-top: 1px solid #292929;
+  background-color: #1d1d1d;
   flex-shrink: 0; /* Prevent shrinking */
 }
 
@@ -264,25 +298,65 @@ input[type="range"] {
 /* Tabs */
 .settings-tabs {
   display: flex;
-  justify-content: center;
-  margin-bottom: 20px;
-  border-bottom: 1px solid #444;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 22px 10px 18px;
+  overflow-y: auto;
+  border-right: 1px solid #363636;
+  background: #171717;
+  box-sizing: border-box;
+}
+
+.settings-tabs-heading {
+  margin: 0 9px 9px;
+  color: #8d8d8d;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-modal-body {
+  display: flex;
+  flex: 1 1 0;
+  height: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-panels {
+  display: flex;
+  flex: 1 1 auto;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .tab-btn {
   background: transparent;
   border: none;
-  color: #aaa;
-  padding: 10px 20px;
+  width: 100%;
+  min-height: 34px;
+  color: #b5b5b5;
+  padding: 7px 10px;
   cursor: pointer;
-  font-size: 16px;
-  font-weight: bold;
-  border-bottom: 3px solid transparent;
-  transition: all 0.2s;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 20px;
+  text-align: left;
+  border-radius: 4px;
+  transition: color 0.12s ease, background-color 0.12s ease;
+  box-sizing: border-box;
 }
 
 .tab-btn:hover {
-  color: #fff;
+  color: #e5e5e5;
+  background: #262626;
 }
 
 .btn-danger {
@@ -298,14 +372,28 @@ input[type="range"] {
 }
 
 .tab-btn.active {
-  color: #4785FF; /* Modern Blue */
-  border-bottom-color: #4785FF;
+  color: #fff;
+  background: #353535;
+}
+
+@media (max-width: 820px) {
+  .settings-modal-layout {
+    grid-template-columns: 150px minmax(0, 1fr);
+    width: 98vw;
+  }
+
+  .settings-content-wrapper {
+    padding-right: 32px;
+    padding-left: 32px;
+  }
 }
 
 .settings-tab-content {
   display: flex; /* Maintain flex layout or block depending on inner grid needs */
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 0;
+  height: 100%;
+  min-height: 0;
   overflow: hidden; /* Manage scroll inside grid */
 }
 
@@ -401,6 +489,170 @@ input[type="range"] {
   border: 1px solid #444;
   border-radius: 8px;
   background: #222;
+}
+
+.settings-riot-account {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: #222;
+}
+
+.settings-riot-account-header,
+.settings-riot-account-actions,
+.settings-riot-account-ranks {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-riot-account-header {
+  justify-content: space-between;
+  color: #e5e5e5;
+  font-size: 13px;
+}
+
+.settings-riot-account-state {
+  color: #999;
+  font-size: 11px;
+}
+
+.settings-riot-account-state.is-linked {
+  color: #8fc79c;
+}
+
+.settings-riot-account-identity {
+  margin-top: 12px;
+  color: #eee;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-riot-account-ranks {
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.settings-riot-account-ranks span {
+  padding: 4px 8px;
+  border: 1px solid #4b4b4b;
+  border-radius: 5px;
+  background: #191919;
+  color: #ccc;
+  font-size: 11px;
+}
+
+.settings-riot-account > p {
+  margin: 10px 0 12px;
+  color: #999;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.settings-riot-account-actions button {
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: #393939;
+  color: #eee;
+  cursor: pointer;
+}
+
+.settings-riot-account-actions button:hover:enabled {
+  background: #484848;
+}
+
+.settings-riot-account-unlink {
+  border-color: #704848 !important;
+  color: #e7b1b1 !important;
+}
+
+.settings-youtube-capabilities {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: #222;
+}
+
+.settings-youtube-capabilities-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #e5e5e5;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-youtube-capabilities-header button {
+  border: 0;
+  padding: 2px 0;
+  background: transparent;
+  color: #b9b9b9;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.settings-youtube-capabilities > p {
+  margin: 5px 0 12px;
+  color: #999;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.settings-youtube-capability-list {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #3d3d3d;
+  border-radius: 6px;
+  background: #3d3d3d;
+}
+
+.settings-youtube-capability {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.8fr) minmax(110px, 0.55fr) minmax(190px, 1.65fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #1c1c1c;
+}
+
+.settings-youtube-capability-name {
+  color: #ddd;
+  font-size: 12px;
+}
+
+.settings-youtube-capability strong {
+  color: #aaa;
+  font-size: 12px;
+}
+
+.settings-youtube-capability.is-available strong {
+  color: #8fc79c;
+}
+
+.settings-youtube-capability.is-warning strong {
+  color: #e0b47a;
+}
+
+.settings-youtube-capability small {
+  color: #888;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .settings-youtube-capability {
+    grid-template-columns: 1fr auto;
+  }
+
+  .settings-youtube-capability small {
+    grid-column: 1 / -1;
+  }
 }
 
 .settings-account-profile-editor label {

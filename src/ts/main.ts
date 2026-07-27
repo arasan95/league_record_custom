@@ -6,8 +6,9 @@ import "@fffffffxxxxxxx/videojs-markers";
 import { convertFileSrc } from "./platform/core";
 import { join, sep } from "./platform/path";
 import { exists } from "./platform/fs";
+import { open as openExternalUrl } from "./platform/shell";
 import { registerYouTubeTech } from "./platform/videojs_youtube_tech";
-import { getYouTubeFirebaseIdToken, YOUTUBE_AUTH_CHANGED_EVENT } from "./platform/youtube";
+import { getYouTubeFirebaseIdToken, getYouTubeVideoPublishedDates, signInToYouTube, YOUTUBE_AUTH_CHANGED_EVENT } from "./platform/youtube";
 
 import { commands, type ClipAudioTrack, type GameEvent, type Recording } from "./bindings";
 import ListenerManager from "./listeners";
@@ -30,11 +31,14 @@ import { createKeyboardHandlers } from "./main_keyboard_usecase";
 import { refreshSidebar, retrySidebarUpdateLoop } from "./main_recordings_usecase";
 import { buildTimelineRows } from "./main_timeline_usecase";
 import { loadReplayShare, type LoadedReplayShare } from "./replay_share";
-import { cleanupDeletedReplayShares, connectReplayShareGoogle, listOwnedReplayShareIds } from "./platform/firebase";
-import { hasYouTubeUploadHistory, removeYouTubeUploadsByVideoIds } from "./youtube_upload_history";
+import { cleanupDeletedReplayShares, connectReplayShareGoogle, listOwnedReplayShareIds, redeemCommunityCommentInvite } from "./platform/firebase";
+import { hasYouTubeUploadHistory, readYouTubeUploadHistory, removeYouTubeUploadsByVideoIds } from "./youtube_upload_history";
 import { bindYouTubeReplaySidebar, updateYouTubeReplayStatus } from "./ui/youtube_replay_sidebar_usecase";
 import { ReviewCommentsController } from "./review_comments";
 import { uiText } from "./ui_locale";
+import { listen } from "./platform/event";
+import { getBridge } from "./platform/bridge";
+import { parseReplayDeepLink } from "./replay_deep_link";
 import {
     deleteVideoFlow,
     deleteVideoOnlyWithConfirm,
@@ -43,13 +47,18 @@ import {
     showDeleteWithConfirm,
 } from "./main_video_management_usecase";
 
+// Explicit registration guards against bundler tree-shaking of the side‑effect import.
+if (!videojs.getPlugin("markers")) {
+  videojs.registerPlugin("markers", MarkersPlugin);
+}
+
 // initDebug();
 
 // sets the time a marker jumps to before the actual event happens
 // jumps to (eventTime - EVENT_DELAY) when a marker is clicked
 const EVENT_DELAY = 2;
 
-registerYouTubeTech(videojs);
+await registerYouTubeTech(videojs);
 const ui = new UI(videojs);
 new TitleBar();
 
@@ -85,6 +94,75 @@ const YOUTUBE_REPLAY_HISTORY_STORAGE_KEY = "league-record.youtube-replay-history
 const YOUTUBE_REPLAY_HISTORY_LIMIT = 100;
 let youtubeReplayHistoryRestoreGeneration = 0;
 let remotePlaybackActive = false;
+let replayDeepLinkTransitionActive = false;
+let replayDeepLinkQueue = Promise.resolve();
+
+async function openReplayDeepLink(value: string): Promise<void> {
+    const link = parseReplayDeepLink(value);
+    replayDeepLinkTransitionActive = true;
+    console.info("[replay-deep-link] opening shared replay", { videoId: link.youtubeVideoId });
+    player.pause();
+    const replayButton = document.querySelector<HTMLButtonElement>("#nav-youtube-replay");
+    if (!replayButton) {
+        replayDeepLinkTransitionActive = false;
+        throw new Error(uiText(
+            "共有リプレイ画面を開けませんでした。",
+            "Could not open the shared replay screen.",
+        ));
+    }
+    replayButton.click();
+    const youtubeUrl = `https://www.youtube.com/watch?v=${link.youtubeVideoId}`;
+    const urlInput = document.querySelector<HTMLTextAreaElement>("#youtube-replay-url");
+    if (urlInput) urlInput.value = youtubeUrl;
+    updateYouTubeReplayStatus(uiText(
+        "招待リンクを確認しています…",
+        "Checking the invite link…",
+    ));
+
+    try {
+        let firebaseIdToken: string;
+        try {
+            firebaseIdToken = await getYouTubeFirebaseIdToken();
+        } catch {
+            const signedIn = await signInToYouTube();
+            firebaseIdToken = signedIn.firebaseIdToken || await getYouTubeFirebaseIdToken();
+        }
+        await connectReplayShareGoogle(firebaseIdToken);
+        await redeemCommunityCommentInvite(link.youtubeVideoId, link.inviteCode);
+        updateYouTubeReplayStatus(uiText(
+            "招待を適用しました。リプレイを読み込んでいます…",
+            "Invite applied. Loading the replay…",
+        ));
+        const loaded = await loadReplayShare(youtubeUrl);
+        replayButton.click();
+        await setYouTubeReplay(loaded);
+        updateYouTubeReplayStatus(uiText(
+            "招待を適用し、共有リプレイを開きました。",
+            "Invite applied and shared replay opened.",
+        ));
+        console.info("[replay-deep-link] shared replay opened", { videoId: link.youtubeVideoId });
+    } finally {
+        replayDeepLinkTransitionActive = false;
+    }
+}
+
+function enqueueReplayDeepLink(value: string): void {
+    replayDeepLinkQueue = replayDeepLinkQueue
+        .catch(() => {})
+        .then(() => openReplayDeepLink(value))
+        .catch((error) => {
+            console.error("[replay-deep-link] failed", error);
+            updateYouTubeReplayStatus(error instanceof Error ? error.message : String(error), true);
+        });
+}
+
+async function bindReplayDeepLinks(): Promise<void> {
+    const bridge = getBridge();
+    if (!bridge?.deepLink) return;
+    await listen<string>("ReplayDeepLinkOpened", ({ payload }) => enqueueReplayDeepLink(payload));
+    const pending = await bridge.deepLink.rendererReady();
+    for (const value of pending) enqueueReplayDeepLink(value);
+}
 
 function readYouTubeReplayHistory(): string[] {
     try {
@@ -189,7 +267,9 @@ function initializeYouTubeUiComparison(): void {
 }
 
 function ensureYouTubeTechLoaded(): void {
-    registerYouTubeTech(videojs);
+    if (!videojs.getTech("Youtube")) {
+        throw new Error("Video.jsにYouTubeプレイヤーを登録できませんでした。");
+    }
     // videojs-youtube calls Object.keys(customVars) whenever this option is
     // present. Video.js may normalize an omitted value to null, so always
     // provide a real object before the YouTube tech is instantiated.
@@ -833,8 +913,11 @@ async function main() {
 
     // handle context menu based on developer mode
     const patchVersionStartedAt = perfNowMs();
-    await initPatchVersion();
-    logPerf("startup:initPatchVersion", patchVersionStartedAt);
+    // Use the cached patch immediately. A slow Data Dragon request must never
+    // hold back the first usable window.
+    void initPatchVersion()
+        .then(() => logPerf("startup:initPatchVersion(background)", patchVersionStartedAt))
+        .catch((error) => console.warn("initPatchVersion failed during startup:", error));
     
     // Warm up DataDragon cache in background to avoid startup stalls on slow network.
     ensureDataLoaded("ja").catch((e) => console.warn("ensureDataLoaded failed during startup:", e));
@@ -1061,6 +1144,7 @@ async function main() {
         },
         refreshOwnedReplays: refreshOwnedYouTubeReplays,
     });
+    void bindReplayDeepLinks();
     document.querySelector<HTMLButtonElement>("#youtube-replay-history-clear")?.addEventListener("click", () => {
         clearYouTubeReplayHistory();
     });
@@ -1365,7 +1449,7 @@ async function main() {
     logPerf("startup:updateSidebar(initial)", initialSidebarStartedAt);
     checkLatestAndRetry(videoIds);
     const firstVideo = videoIds.find((v: Recording) => v.videoExists);
-    if (firstVideo) {
+    if (firstVideo && !replayDeepLinkTransitionActive && !remotePlaybackActive) {
         void (async () => {
             const initialSetVideoStartedAt = perfNowMs();
             await setVideo(firstVideo.videoId, false);
@@ -1373,7 +1457,7 @@ async function main() {
         })();
         player.one("canplay", ui.showWindow);
     } else {
-        void setVideo(null);
+        if (!replayDeepLinkTransitionActive && !remotePlaybackActive) void setVideo(null);
         player.one("ready", ui.showWindow);
     }
 
@@ -1429,6 +1513,10 @@ async function retrySidebarUpdate(attemptsLeft: number, targetId: string) {
 // use this function to set the video (null => no video)
 async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
     const startedAt = perfNowMs();
+    if (replayDeepLinkTransitionActive) {
+        console.info("[replay-deep-link] ignored local video selection during shared replay transition", { videoId });
+        return;
+    }
     remotePlaybackActive = false;
     updateClipBtnState();
     if (videoId === null) {
@@ -1563,8 +1651,9 @@ function addYouTubeReplayHistoryCard(
     // Shared replays use the familiar match card, with only a local history
     // removal action. Removing it never deletes the YouTube or Firestore data.
     item.querySelector(".sidebar-actions")?.remove();
-    item.querySelector<HTMLElement>(".sidebar-date")?.replaceChildren(`YouTube: ${loaded.youtubeVideoId}`);
+    decorateYouTubeReplayCard(item, loaded);
     item.dataset.sharedReplayId = loaded.youtubeVideoId;
+    addYouTubeReplayOpenAction(item, loaded.youtubeVideoId);
     const removeButton = document.createElement("button");
     removeButton.type = "button";
     removeButton.className = "youtube-replay-remove";
@@ -1585,6 +1674,77 @@ function addYouTubeReplayHistoryCard(
         item.classList.add("active");
         ui.setActiveVideoId(sharedVideoId);
     }
+}
+
+function resolveYouTubeUploadTimestamp(loaded: LoadedReplayShare): number | null {
+    const localUpload = readYouTubeUploadHistory()
+        .find((entry) => entry.youtubeVideoId === loaded.youtubeVideoId && entry.sourceVideoId !== null);
+    return localUpload?.uploadedAt ?? loaded.uploadedAtMs;
+}
+
+function formatYouTubeUploadDate(timestamp: number | null): string {
+    if (timestamp === null || !Number.isFinite(timestamp)) return uiText("アップロード日不明", "Upload date unavailable");
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return uiText("アップロード日不明", "Upload date unavailable");
+    const hours = date.getHours().toString().padStart(2, "0");
+    const minutes = date.getMinutes().toString().padStart(2, "0");
+    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${hours}:${minutes}`;
+}
+
+function decorateYouTubeReplayCard(item: HTMLElement, loaded: LoadedReplayShare): void {
+    const uploadTimestamp = resolveYouTubeUploadTimestamp(loaded);
+    const date = item.querySelector<HTMLElement>(".sidebar-date");
+    if (date) {
+        date.textContent = formatYouTubeUploadDate(uploadTimestamp);
+        date.title = uiText("YouTube動画のアップロード日時", "YouTube video upload date");
+    }
+    item.querySelector(".youtube-replay-video-id")?.remove();
+    const id = document.createElement("div");
+    id.className = "youtube-replay-video-id";
+    id.title = uiText(`YouTube動画ID: ${loaded.youtubeVideoId}`, `YouTube video ID: ${loaded.youtubeVideoId}`);
+    const label = document.createElement("span");
+    label.textContent = "ID:";
+    const value = document.createElement("strong");
+    value.textContent = loaded.youtubeVideoId;
+    id.append(label, value);
+    const participants = item.querySelector<HTMLElement>(".sidebar-participants");
+    if (participants) {
+        participants.insertAdjacentElement("afterend", id);
+        return;
+    }
+    item.querySelector<HTMLElement>(".sidebar-body-row")?.insertAdjacentElement("afterend", id);
+}
+
+async function loadYouTubePublishedDates(videoIds: string[]): Promise<Record<string, number>> {
+    if (videoIds.length === 0) return {};
+    const chunks = Array.from(
+        { length: Math.ceil(videoIds.length / 50) },
+        (_, index) => videoIds.slice(index * 50, index * 50 + 50),
+    );
+    const results = await Promise.all(chunks.map((chunk) => getYouTubeVideoPublishedDates(chunk)));
+    return Object.assign({}, ...results);
+}
+
+function addYouTubeReplayOpenAction(item: HTMLElement, youtubeVideoId: string): void {
+    const actions = document.createElement("div");
+    actions.className = "sidebar-actions youtube-replay-actions";
+
+    const openButton = document.createElement("button");
+    openButton.type = "button";
+    openButton.className = "replay-action youtube-replay-open";
+    openButton.title = uiText("YouTubeページを規定ブラウザで開く", "Open this video on YouTube");
+    openButton.setAttribute("aria-label", uiText("YouTubeページを規定ブラウザで開く", "Open this video on YouTube"));
+    openButton.textContent = "↗";
+    openButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const url = `https://www.youtube.com/watch?v=${encodeURIComponent(youtubeVideoId)}`;
+        void openExternalUrl(url).catch((error) => {
+            console.error("[youtube-replay] could not open YouTube in browser", error);
+            updateYouTubeReplayStatus(uiText("YouTubeページを開けませんでした。", "Could not open the YouTube page."), true);
+        });
+    });
+    actions.append(openButton);
+    item.append(actions);
 }
 
 async function restoreYouTubeReplayHistory(): Promise<void> {
@@ -1625,11 +1785,20 @@ async function refreshOwnedYouTubeReplays(): Promise<void> {
     try {
         await connectReplayShareGoogle(await getYouTubeFirebaseIdToken());
         const videoIds = await listOwnedReplayShareIds();
-        const results = await Promise.allSettled(videoIds.map((videoId) => loadReplayShare(videoId)));
+        const [publishedDatesResult, results] = await Promise.all([
+            loadYouTubePublishedDates(videoIds).catch((error) => {
+                console.warn("[youtube-replay] YouTube publish dates unavailable; using Firestore dates", error);
+                return {} as Record<string, number>;
+            }),
+            Promise.allSettled(videoIds.map((videoId) => loadReplayShare(videoId))),
+        ]);
+        const loadedReplays = results
+            .flatMap((result) => result.status === "fulfilled"
+                ? [{ ...result.value, uploadedAtMs: publishedDatesResult[result.value.youtubeVideoId] ?? result.value.uploadedAtMs }]
+                : [])
+            .toSorted((a, b) => (resolveYouTubeUploadTimestamp(b) ?? 0) - (resolveYouTubeUploadTimestamp(a) ?? 0));
         list.replaceChildren();
-        for (const result of results) {
-            if (result.status !== "fulfilled") continue;
-            const loaded = result.value;
+        for (const loaded of loadedReplays) {
             const sharedVideoId = `youtube:${loaded.youtubeVideoId}`;
             const item = ui.createRecordingItem(
                 { videoId: sharedVideoId, metadata: loaded.metadataFile, videoExists: true },
@@ -1639,8 +1808,9 @@ async function refreshOwnedYouTubeReplays(): Promise<void> {
                 () => {},
             );
             item.querySelector(".sidebar-actions")?.remove();
-            item.querySelector<HTMLElement>(".sidebar-date")?.replaceChildren(`YouTube: ${loaded.youtubeVideoId}`);
+            decorateYouTubeReplayCard(item, loaded);
             item.dataset.sharedReplayId = loaded.youtubeVideoId;
+            addYouTubeReplayOpenAction(item, loaded.youtubeVideoId);
             list.append(item);
         }
         list.hidden = list.childElementCount === 0;

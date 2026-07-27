@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const devUrl = "http://localhost:1420/";
+const watchElectronMainEnabled = process.argv.includes("--watch-main");
 
 function waitForServer(url, timeoutMs = 30000) {
   const startedAt = Date.now();
@@ -133,7 +134,12 @@ devServer.on("exit", (code) => {
 
 waitForServer(devUrl)
   .then(() => {
-    watchElectronMain();
+    if (watchElectronMainEnabled) {
+      console.log("Electron main-process auto-restart is enabled.");
+      watchElectronMain();
+    } else {
+      console.log("Electron main-process auto-restart is disabled. Use electron:dev:watch to enable it.");
+    }
     startElectron();
   })
   .catch((error) => {

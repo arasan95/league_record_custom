@@ -5,6 +5,7 @@ import {
     createCommunityPublicId,
     isCommunityPublicId,
     normalizeCommunityAccountName,
+    normalizeCommunityRiotAccount,
 } from "../src/ts/community_identity";
 
 describe("community account identity", () => {
@@ -23,5 +24,35 @@ describe("community account identity", () => {
         expect(normalizeCommunityAccountName("   ")).toBeNull();
         expect(normalizeCommunityAccountName("  Coach  ")).toBe("Coach");
         expect(() => normalizeCommunityAccountName("hidden\u202ename")).toThrow();
+    });
+});
+
+describe("community Riot account validation", () => {
+    test("accepts a bounded linked account and normalized ranks", () => {
+        const account = normalizeCommunityRiotAccount({
+            puuid: "verified-puuid-value-0000000001",
+            gameName: "Player",
+            tagLine: "JP1",
+            platformId: "jp1",
+            soloRank: "gold iv",
+            flexRank: "unranked",
+            primaryRank: "gold iv",
+            verifiedAtMs: 123456,
+        });
+        expect(account?.platformId).toBe("JP1");
+        expect(account?.primaryRank).toBe("GOLD IV");
+    });
+
+    test("rejects malformed identity and rank values", () => {
+        expect(() => normalizeCommunityRiotAccount({
+            puuid: "short",
+            gameName: "Player",
+            tagLine: "JP1",
+            platformId: "JP1",
+            soloRank: "GOLD IV",
+            flexRank: "UNRANKED",
+            primaryRank: "ADMIN",
+            verifiedAtMs: 123456,
+        })).toThrow("不正");
     });
 });

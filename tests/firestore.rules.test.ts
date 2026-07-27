@@ -348,7 +348,7 @@ describe("Firestore replay security rules", () => {
 
 async function seedCommunityComments(
     readAccess: "public" | "invite_only" = "public",
-    writeAccess: "public" | "invite_only" = "invite_only",
+    writeAccess: "public" | "invite_only" | "rank_verified" = "invite_only",
 ): Promise<void> {
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
         const db = context.firestore();
@@ -385,6 +385,8 @@ function validCommunityComment(
     commentId: string,
     groupIds: string[] = [],
     authorName = testPublicId(authorUid),
+    authorRank: string | null = null,
+    anonymous = false,
 ): Record<string, unknown> {
     const authorPublicId = testPublicId(authorUid);
     return {
@@ -400,9 +402,11 @@ function validCommunityComment(
         y: null,
         visibility: "public",
         clientRequestId: commentId,
-        authorName,
-        authorPublicId,
-        authorGroupIds: groupIds,
+        authorName: anonymous ? "Anonymous" : authorName,
+        authorPublicId: anonymous ? null : authorPublicId,
+        authorGroupIds: anonymous ? [] : groupIds,
+        authorRank: anonymous ? null : authorRank,
+        anonymous,
         status: "published",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -429,6 +433,8 @@ function createCommentWithQuota(
     commentId: string,
     groupIds: string[] = [],
     authorName = testPublicId(uid),
+    authorRank: string | null = null,
+    anonymous = false,
 ) {
     const batch = writeBatch(db);
     batch.set(doc(db, "commentWriteQuotas", `${uid}_${VIDEO_ID}`), {
@@ -439,7 +445,7 @@ function createCommentWithQuota(
         lastWriteAt: serverTimestamp(),
         writeCount: 1,
     });
-    batch.set(doc(db, "replays", VIDEO_ID, "comments", commentId), validCommunityComment(uid, commentId, groupIds, authorName));
+    batch.set(doc(db, "replays", VIDEO_ID, "comments", commentId), validCommunityComment(uid, commentId, groupIds, authorName, authorRank, anonymous));
     batch.set(doc(db, "replays", VIDEO_ID, "commentAuthors", commentId), {
         uid,
         publicId: testPublicId(uid),
@@ -543,7 +549,7 @@ describe("Firestore community comment security rules", () => {
         await assertSucceeds(createCommentWithQuota(bob, "bob", commentId));
         const created = await getDoc(doc(bob, "replays", VIDEO_ID, "comments", commentId));
         expect(created.data()).not.toHaveProperty("authorUid");
-        await assertFails(getDoc(doc(bob, "replays", VIDEO_ID, "commentAuthors", commentId)));
+        await assertSucceeds(getDoc(doc(bob, "replays", VIDEO_ID, "commentAuthors", commentId)));
         await assertFails(getDoc(doc(aliceDb(), "replays", VIDEO_ID, "commentAuthors", commentId)));
         await assertSucceeds(updateDoc(doc(bob, "replays", VIDEO_ID, "comments", commentId), {
             text: "updated review",
@@ -553,6 +559,87 @@ describe("Firestore community comment security rules", () => {
             text: "hijacked",
             updatedAt: serverTimestamp(),
         }));
+    });
+
+    test("publishes anonymous comments without public identity while retaining private ownership", async () => {
+        await seedCommunityComments("public", "public");
+        await seedCommunityProfile("bob", "Coach Bob");
+        const bob = googleDb("bob");
+        const commentId = "anonymous-bob-0001";
+        await assertSucceeds(createCommentWithQuota(
+            bob, "bob", commentId, [], "Coach Bob", "GOLD IV", true,
+        ));
+
+        const created = await getDoc(doc(bob, "replays", VIDEO_ID, "comments", commentId));
+        expect(created.data()).toMatchObject({
+            anonymous: true,
+            visibility: "public",
+            authorName: "Anonymous",
+            authorPublicId: null,
+            authorGroupIds: [],
+            authorRank: null,
+        });
+        expect(created.data()).not.toHaveProperty("authorUid");
+
+        const ownRecords = await assertSucceeds(getDocs(query(
+            collection(bob, "replays", VIDEO_ID, "commentAuthors"),
+            where("uid", "==", "bob"),
+            limit(500),
+        )));
+        expect(ownRecords.docs.map((item) => item.id)).toContain(commentId);
+        await assertFails(getDoc(doc(aliceDb(), "replays", VIDEO_ID, "commentAuthors", commentId)));
+        await assertFails(getDocs(query(
+            collection(aliceDb(), "replays", VIDEO_ID, "commentAuthors"),
+            where("uid", "==", "bob"),
+            limit(500),
+        )));
+
+        await testEnvironment.withSecurityRulesDisabled(async (context) => {
+            const ownership = await getDoc(doc(context.firestore(), "replays", VIDEO_ID, "commentAuthors", commentId));
+            expect(ownership.data()?.uid).toBe("bob");
+        });
+    });
+
+    test("requires a linked LoL rank when rank-verified posting is configured", async () => {
+        await seedCommunityComments("public", "rank_verified");
+        await seedCommunityProfile("bob");
+        const bob = googleDb("bob");
+        await assertFails(createCommentWithQuota(bob, "bob", "rank-required-no-link"));
+
+        await assertSucceeds(updateDoc(doc(bob, "communityProfiles", "bob"), {
+            riotAccount: {
+                puuid: "bob-puuid-verified-account-000001",
+                gameName: "Ranked Bob",
+                tagLine: "JP1",
+                platformId: "JP1",
+                soloRank: "GOLD IV",
+                flexRank: "SILVER II",
+                primaryRank: "GOLD IV",
+                verifiedAt: serverTimestamp(),
+            },
+            updatedAt: serverTimestamp(),
+        }));
+        await assertSucceeds(createCommentWithQuota(
+            bob,
+            "bob",
+            "rank-required-linked",
+            [],
+            testPublicId("bob"),
+            "GOLD IV",
+        ));
+        const created = await getDoc(doc(bob, "replays", VIDEO_ID, "comments", "rank-required-linked"));
+        expect(created.data()?.authorRank).toBe("GOLD IV");
+        await testEnvironment.withSecurityRulesDisabled(async (context) => {
+            await deleteDoc(doc(context.firestore(), "commentWriteQuotas", `bob_${VIDEO_ID}`));
+        });
+        await assertFails(createCommentWithQuota(
+            bob,
+            "bob",
+            "rank-required-spoofed",
+            [],
+            testPublicId("bob"),
+            "CHALLENGER",
+        ));
     });
 
     test("allows the replay owner to soft-delete another user's comment", async () => {
@@ -590,7 +677,7 @@ describe("Firestore community comment security rules", () => {
         await assertSucceeds(migrate.commit());
         const migrated = await getDoc(doc(bob, "replays", VIDEO_ID, "comments", commentId));
         expect(migrated.data()).not.toHaveProperty("authorUid");
-        await assertFails(getDoc(doc(bob, "replays", VIDEO_ID, "commentAuthors", commentId)));
+        await assertSucceeds(getDoc(doc(bob, "replays", VIDEO_ID, "commentAuthors", commentId)));
     });
 
     test("requires the configured account name instead of a forged comment author name", async () => {
@@ -660,5 +747,78 @@ describe("Firestore community comment security rules", () => {
         await assertFails(setDoc(doc(aliceDb(), "replays", VIDEO_ID, "commentMembers", "mallory"), {
             uid: "mallory", status: "active", role: "commenter",
         }));
+    });
+
+    test("keeps reports private and grants only the registered DB admin moderation powers", async () => {
+        await seedCommunityComments("public", "public");
+        await seedCommunityProfile("bob");
+        const commentId = "reported-bob-0001";
+        await assertSucceeds(createCommentWithQuota(googleDb("bob"), "bob", commentId));
+        await testEnvironment.withSecurityRulesDisabled(async (context) => {
+            await setDoc(doc(context.firestore(), "appAdmins", "admin"), { role: "admin" });
+        });
+
+        const reportId = `${VIDEO_ID}_${commentId}_charlie`;
+        const charlie = googleDb("charlie");
+        const reportRef = doc(charlie, "commentReports", reportId);
+        await assertSucceeds(setDoc(reportRef, {
+            reporterUid: "charlie",
+            videoId: VIDEO_ID,
+            commentId,
+            authorName: testPublicId("bob"),
+            authorPublicId: testPublicId("bob"),
+            commentText: "review comment",
+            details: "spam",
+            status: "pending",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        }));
+        await assertSucceeds(getDoc(reportRef));
+        await assertFails(getDocs(collection(charlie, "commentReports")));
+        await assertFails(getDoc(doc(aliceDb(), "commentReports", reportId)));
+        await assertFails(getDocs(collection(aliceDb(), "commentReports")));
+
+        const admin = googleDb("admin");
+        await assertSucceeds(getDocs(query(
+            collection(admin, "commentReports"),
+            where("status", "==", "pending"),
+            limit(200),
+        )));
+        await assertSucceeds(getDoc(doc(admin, "replays", VIDEO_ID, "commentAuthors", commentId)));
+        await assertFails(setDoc(doc(googleDb("bob"), "communityModeration", "bob"), {
+            uid: "bob",
+            action: "ban",
+            expiresAt: null,
+            reason: "self elevation",
+            adminUid: "bob",
+            updatedAt: serverTimestamp(),
+        }));
+        await assertSucceeds(setDoc(doc(admin, "communityModeration", "bob"), {
+            uid: "bob",
+            action: "ban",
+            expiresAt: Timestamp.fromMillis(Date.now() + 3 * 24 * 60 * 60 * 1000),
+            reason: "confirmed spam",
+            adminUid: "admin",
+            updatedAt: serverTimestamp(),
+        }));
+        await testEnvironment.withSecurityRulesDisabled(async (context) => {
+            await deleteDoc(doc(context.firestore(), "commentWriteQuotas", `bob_${VIDEO_ID}`));
+        });
+        await assertFails(createCommentWithQuota(googleDb("bob"), "bob", "banned-bob-comment"));
+        await assertFails(updateDoc(doc(charlie, "commentReports", reportId), {
+            status: "resolved",
+            resolvedByUid: "charlie",
+            resolvedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        }));
+        await assertSucceeds(updateDoc(doc(admin, "commentReports", reportId), {
+            status: "resolved",
+            resolvedByUid: "admin",
+            resolvedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        }));
+        await assertFails(deleteDoc(doc(googleDb("bob"), "communityModeration", "bob")));
+        await assertSucceeds(deleteDoc(doc(admin, "communityModeration", "bob")));
+        await assertSucceeds(createCommentWithQuota(googleDb("bob"), "bob", "unbanned-bob-comment"));
     });
 });

@@ -65,11 +65,51 @@ jobs:
 
       - run: bun install --linker=isolated
 
+      - name: Verify release secrets
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          YOUTUBE_OAUTH_CLIENT_ID: ${{ secrets.YOUTUBE_OAUTH_CLIENT_ID }}
+          YOUTUBE_OAUTH_CLIENT_SECRET: ${{ secrets.YOUTUBE_OAUTH_CLIENT_SECRET }}
+        run: |
+          $required = @(
+            "WINDOWS_CERTIFICATE_BASE64",
+            "WINDOWS_CERTIFICATE_PASSWORD",
+            "YOUTUBE_OAUTH_CLIENT_ID",
+            "YOUTUBE_OAUTH_CLIENT_SECRET"
+          )
+          $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
+          if ($missing.Count -gt 0) {
+            Write-Error "Required release secrets are missing: $($missing -join ', ')"
+            exit 1
+          }
+
       - name: Build Electron installer
         run: bun run electron:build
         env:
           LEAGUE_RECORD_CARGO_TOOLCHAIN: "+nightly"
           LEAGUE_RECORD_CARGO_BINDEPS: "1"
+          CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          YOUTUBE_OAUTH_CLIENT_ID: ${{ secrets.YOUTUBE_OAUTH_CLIENT_ID }}
+          YOUTUBE_OAUTH_CLIENT_SECRET: ${{ secrets.YOUTUBE_OAUTH_CLIENT_SECRET }}
+
+      - name: Verify Windows signatures
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path "release-electron" -Filter "*.exe" -File -Recurse
+          if ($files.Count -eq 0) {
+            Write-Error "No signed Windows executables were produced."
+            exit 1
+          }
+          foreach ($file in $files) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+              Write-Error "Invalid Authenticode signature: $($file.Name) ($($signature.Status))"
+              exit 1
+            }
+          }
 
       - name: Stage Electron artifacts
         shell: pwsh
@@ -77,7 +117,7 @@ jobs:
           $stageDir = ".artifacts/electron"
           New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
 
-          $setup = Get-ChildItem -Path "release-electron" -Filter "LeagueRecordElectron Setup *.exe" -File |
+          $setup = Get-ChildItem -Path "release-electron" -Filter "LeagueRecordElectron-Setup-*.exe" -File |
             Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
           if ($null -eq $setup) {

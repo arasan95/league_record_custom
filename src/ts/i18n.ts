@@ -204,7 +204,7 @@ export const APP_TEXT = {
         otherOptions: "その他のオプション",
         trackingUrl: "トラッキングサイトURL ({q} はIDに置換)",
         trackingUrlExample: "例: https://www.deeplol.gg/summoner/jp/{q}",
-        scoreboardLinks: "スコアボード リンク",
+        scoreboardLinks: "サイトリンク",
         scoreboardLinksHint: "利用可能タグ: {id}=LeeSin, {name}=Lee Sin, {name_}=Lee_Sin, {nameEsc}=Lee%20Sin",
         primaryLinkUrl: "通常クリックで開くURL",
         alternateLinkUrl: "装飾キー + クリックで開くURL",

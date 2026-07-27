@@ -9,24 +9,44 @@ type VideoJsRegistry = {
 };
 
 let registered = false;
+let registrationPromise: Promise<void> | null = null;
 
-export function registerYouTubeTech(videojs: VideoJsRegistry): void {
+export function registerYouTubeTech(videojs: VideoJsRegistry): Promise<void> {
     if (registered || videojs.getTech("Youtube")) {
         registered = true;
-        return;
+        return Promise.resolve();
     }
+    if (registrationPromise) return registrationPromise;
 
     const browserWindow = window as Window & { videojs?: VideoJsRegistry };
     browserWindow.videojs = videojs;
 
     // The source is bundled from the installed dependency, not remote input.
-    // Running it as a browser script selects the UMD global branch and calls
-    // videojs.registerTech("Youtube", ... ) on the registry above.
-    new Function(youtubeTechSource).call(browserWindow);
-
-    if (!videojs.getTech("Youtube")) {
-        throw new Error("YouTubeプレイヤーを初期化できませんでした。");
-    }
-    registered = true;
-    console.info("[youtube-replay] YouTube tech registered on application Video.js");
+    // Load it through a temporary blob script so the strict CSP does not need
+    // unsafe-eval. The UMD browser branch uses the shared window.videojs above.
+    registrationPromise = new Promise<void>((resolve, reject) => {
+        const sourceUrl = URL.createObjectURL(new Blob([youtubeTechSource], { type: "text/javascript" }));
+        const script = document.createElement("script");
+        script.src = sourceUrl;
+        script.onload = () => {
+            script.remove();
+            URL.revokeObjectURL(sourceUrl);
+            if (!videojs.getTech("Youtube")) {
+                registrationPromise = null;
+                reject(new Error("YouTubeプレイヤーを初期化できませんでした。"));
+                return;
+            }
+            registered = true;
+            console.info("[youtube-replay] YouTube tech registered on application Video.js");
+            resolve();
+        };
+        script.onerror = () => {
+            script.remove();
+            URL.revokeObjectURL(sourceUrl);
+            registrationPromise = null;
+            reject(new Error("YouTubeプレイヤーのコードを読み込めませんでした。"));
+        };
+        document.head.append(script);
+    });
+    return registrationPromise;
 }

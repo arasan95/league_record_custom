@@ -7,6 +7,112 @@ service cloud.firestore {
         && request.auth.token.firebase.sign_in_provider == 'google.com';
     }
 
+    function isDatabaseAdmin() {
+      return isGoogleUser()
+        && exists(/databases/$(database)/documents/appAdmins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/appAdmins/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function hasActiveModeration(uid) {
+      let path = /databases/$(database)/documents/communityModeration/$(uid);
+      let moderation = get(path).data;
+      return exists(path)
+        && (
+          moderation.expiresAt == null
+          || moderation.expiresAt > request.time
+        );
+    }
+
+    function isCurrentUserBanned() {
+      let path = /databases/$(database)/documents/communityModeration/$(request.auth.uid);
+      let moderation = get(path).data;
+      return exists(path)
+        && (moderation.expiresAt == null || moderation.expiresAt > request.time)
+        && moderation.action == 'ban';
+    }
+
+    function hasValidModeration(data, uid) {
+      return data.keys().hasAll(['uid', 'action', 'expiresAt', 'reason', 'adminUid', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'action', 'expiresAt', 'reason', 'adminUid', 'updatedAt'])
+        && data.uid == uid
+        && (data.action == 'comment_block' || data.action == 'ban')
+        && (data.expiresAt == null || (data.expiresAt is timestamp && data.expiresAt > request.time))
+        && data.reason is string
+        && data.reason.size() > 0
+        && data.reason.size() <= 280
+        && data.adminUid == request.auth.uid
+        && data.updatedAt == request.time;
+    }
+
+    match /appAdmins/{uid} {
+      allow get: if isGoogleUser() && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+    }
+
+    match /communityModeration/{uid} {
+      allow get: if isGoogleUser() && (request.auth.uid == uid || isDatabaseAdmin());
+      allow list: if isDatabaseAdmin();
+      allow create, update: if isDatabaseAdmin() && hasValidModeration(request.resource.data, uid);
+      allow delete: if isDatabaseAdmin();
+    }
+
+    match /commentReports/{reportId} {
+      function reportedCommentPath() {
+        return /databases/$(database)/documents/replays/$(request.resource.data.videoId)/comments/$(request.resource.data.commentId);
+      }
+
+      function hasValidReport(data) {
+        return data.keys().hasAll([
+            'reporterUid', 'videoId', 'commentId', 'authorName', 'authorPublicId',
+            'commentText', 'details', 'status', 'createdAt', 'updatedAt'
+          ])
+          && data.keys().hasOnly([
+            'reporterUid', 'videoId', 'commentId', 'authorName', 'authorPublicId',
+            'commentText', 'details', 'status', 'createdAt', 'updatedAt'
+          ])
+          && data.reporterUid == request.auth.uid
+          && reportId == data.videoId + '_' + data.commentId + '_' + request.auth.uid
+          && data.videoId is string
+          && data.videoId.matches('^[A-Za-z0-9_-]{11}$')
+          && data.commentId is string
+          && data.commentId.matches('^[A-Za-z0-9_-]{8,80}$')
+          && data.authorName is string
+          && data.authorName.size() > 0
+          && data.authorName.size() <= 64
+          && (data.authorPublicId == null
+            || (data.authorPublicId is string && data.authorPublicId.matches('^[A-Za-z0-9]{10}$')))
+          && data.commentText is string
+          && data.commentText.size() > 0
+          && data.commentText.size() <= 280
+          && data.details is string
+          && data.details.size() <= 200
+          && data.status == 'pending'
+          && data.createdAt == request.time
+          && data.updatedAt == request.time
+          && exists(reportedCommentPath())
+          && get(reportedCommentPath()).data.status == 'published'
+          && get(reportedCommentPath()).data.authorName == data.authorName
+          && get(reportedCommentPath()).data.authorPublicId == data.authorPublicId
+          && get(reportedCommentPath()).data.text == data.commentText;
+      }
+
+      allow get: if isGoogleUser()
+        && (resource == null || resource.data.reporterUid == request.auth.uid || isDatabaseAdmin());
+      allow list: if isDatabaseAdmin();
+      allow create: if isGoogleUser()
+        && !hasActiveModeration(request.auth.uid)
+        && hasValidReport(request.resource.data);
+      allow update: if isDatabaseAdmin()
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'resolved'
+        && request.resource.data.resolvedByUid == request.auth.uid
+        && request.resource.data.resolvedAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'resolvedByUid', 'resolvedAt', 'updatedAt']);
+      allow delete: if false;
+    }
+
     function quotaPath(uid) {
       return /databases/$(database)/documents/writeQuotas/$(uid);
     }
@@ -177,12 +283,32 @@ service cloud.firestore {
 
     function hasValidCommunityProfile(data, uid) {
       return data.keys().hasAll(['uid', 'publicId', 'accountName', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['uid', 'publicId', 'accountName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'publicId', 'accountName', 'riotAccount', 'createdAt', 'updatedAt'])
         && data.uid == uid
         && data.publicId is string
         && data.publicId.matches('^[A-Za-z0-9]{10}$')
         && (data.accountName == null || (data.accountName is string
           && data.accountName.size() > 0 && data.accountName.size() <= 32))
+        && (data.get('riotAccount', null) == null || (
+          data.riotAccount is map
+          && data.riotAccount.keys().hasAll([
+            'puuid', 'gameName', 'tagLine', 'platformId', 'soloRank', 'flexRank', 'primaryRank', 'verifiedAt'
+          ])
+          && data.riotAccount.keys().hasOnly([
+            'puuid', 'gameName', 'tagLine', 'platformId', 'soloRank', 'flexRank', 'primaryRank', 'verifiedAt'
+          ])
+          && data.riotAccount.puuid is string
+          && data.riotAccount.puuid.matches('^[A-Za-z0-9_-]{20,128}$')
+          && data.riotAccount.gameName is string
+          && data.riotAccount.gameName.size() > 0 && data.riotAccount.gameName.size() <= 32
+          && data.riotAccount.tagLine is string && data.riotAccount.tagLine.size() <= 16
+          && data.riotAccount.platformId is string
+          && data.riotAccount.platformId.matches('^[A-Z0-9]{2,12}$')
+          && data.riotAccount.soloRank is string && data.riotAccount.soloRank.size() > 0 && data.riotAccount.soloRank.size() <= 32
+          && data.riotAccount.flexRank is string && data.riotAccount.flexRank.size() > 0 && data.riotAccount.flexRank.size() <= 32
+          && data.riotAccount.primaryRank is string && data.riotAccount.primaryRank.size() > 0 && data.riotAccount.primaryRank.size() <= 32
+          && data.riotAccount.verifiedAt is timestamp
+        ))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -194,6 +320,7 @@ service cloud.firestore {
         && request.auth.uid == uid
         && hasValidCommunityProfile(request.resource.data, uid)
         && request.resource.data.accountName == null
+        && request.resource.data.get('riotAccount', null) == null
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time
         && existsAfter(/databases/$(database)/documents/communityPublicIds/$(request.resource.data.publicId))
@@ -205,7 +332,10 @@ service cloud.firestore {
         && request.resource.data.publicId == resource.data.publicId
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.updatedAt == request.time
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['accountName', 'updatedAt']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['accountName', 'riotAccount', 'updatedAt'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['riotAccount'])
+          || request.resource.data.riotAccount == null
+          || request.resource.data.riotAccount.verifiedAt == request.time);
     }
 
     match /communityPublicIds/{publicId} {
@@ -317,20 +447,42 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/replays/$(videoId)/commentMembers/$(request.auth.uid)).data.status == 'active';
       }
 
-      function canReadPublicComments() {
+      function hasRankVerifiedProfile() {
+        return isGoogleUser()
+          && exists(/databases/$(database)/documents/communityProfiles/$(request.auth.uid))
+          && get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.get('riotAccount', null) is map;
+      }
+
+      function currentProfileRank() {
+        let profile = get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data;
+        return profile.get('riotAccount', null) is map ? profile.riotAccount.primaryRank : null;
+      }
+
+      function hasPublicCommentAccess() {
         return !exists(/databases/$(database)/documents/replays/$(videoId)/commentSettings/access)
           || get(/databases/$(database)/documents/replays/$(videoId)/commentSettings/access).data.readAccess == 'public'
           || isReplayCommentOwner()
           || isActiveCommentMember();
       }
 
+      function canReadPublicComments() {
+        return hasPublicCommentAccess()
+          && (!isGoogleUser() || !isCurrentUserBanned());
+      }
+
       function canWriteCommunityComments() {
-        return canReadPublicComments()
+        return !hasActiveModeration(request.auth.uid)
+          && hasPublicCommentAccess()
           && (
             isReplayCommentOwner()
-            || isActiveCommentMember()
+            || ((!exists(/databases/$(database)/documents/replays/$(videoId)/commentSettings/access)
+                || get(/databases/$(database)/documents/replays/$(videoId)/commentSettings/access).data.writeAccess == 'invite_only')
+              && isActiveCommentMember())
             || (exists(/databases/$(database)/documents/replays/$(videoId)/commentSettings/access)
               && get(/databases/$(database)/documents/replays/$(videoId)/commentSettings/access).data.writeAccess == 'public')
+            || (exists(/databases/$(database)/documents/replays/$(videoId)/commentSettings/access)
+              && get(/databases/$(database)/documents/replays/$(videoId)/commentSettings/access).data.writeAccess == 'rank_verified'
+              && hasRankVerifiedProfile())
           );
       }
 
@@ -338,7 +490,7 @@ service cloud.firestore {
         return data.keys().hasAll(['ownerUid', 'writeAccess', 'readAccess', 'createdAt', 'updatedAt'])
           && data.keys().hasOnly(['ownerUid', 'writeAccess', 'readAccess', 'createdAt', 'updatedAt'])
           && data.ownerUid == replayOwnerUid()
-          && (data.writeAccess == 'public' || data.writeAccess == 'invite_only')
+          && (data.writeAccess == 'public' || data.writeAccess == 'invite_only' || data.writeAccess == 'rank_verified')
           && (data.readAccess == 'public' || data.readAccess == 'invite_only')
           && data.createdAt is timestamp
           && data.updatedAt is timestamp;
@@ -436,7 +588,7 @@ service cloud.firestore {
           && data.keys().hasOnly([
             'schemaVersion', 'text', 'videoTimeMs', 'rating', 'color', 'size', 'durationMs',
             'mode', 'x', 'y', 'visibility', 'clientRequestId', 'authorUid', 'authorName',
-            'authorPublicId', 'authorGroupIds', 'status', 'createdAt', 'updatedAt'
+            'authorPublicId', 'authorGroupIds', 'authorRank', 'anonymous', 'status', 'createdAt', 'updatedAt'
           ])
           && data.schemaVersion == 1
           && data.text is string
@@ -457,19 +609,25 @@ service cloud.firestore {
             || (data.mode == 'fixed' && data.x is int && data.x >= 0 && data.x <= 10000
               && data.y is int && data.y >= 0 && data.y <= 10000))
           && (data.visibility == 'public' || data.visibility == 'private')
+          && (!data.keys().hasAny(['anonymous']) || data.anonymous is bool)
+          && (data.get('anonymous', false) == false || data.visibility == 'public')
           && data.clientRequestId == commentId
           && commentId.matches('^[A-Za-z0-9_-]{8,80}$')
           && (!data.keys().hasAny(['authorUid']) || data.authorUid is string)
           && data.authorName is string
           && data.authorName.size() > 0
           && data.authorName.size() <= 64
-          && data.authorPublicId is string
-          && data.authorPublicId.matches('^[A-Za-z0-9]{10}$')
+          && (data.authorPublicId == null || (data.authorPublicId is string
+            && data.authorPublicId.matches('^[A-Za-z0-9]{10}$')))
           && data.authorGroupIds is list
           && data.authorGroupIds.size() <= 20
-          && data.authorGroupIds == (isActiveCommentMember()
-            ? get(/databases/$(database)/documents/replays/$(videoId)/commentMembers/$(request.auth.uid)).data.groupIds
-            : [])
+          && data.authorGroupIds == (data.get('anonymous', false) == true
+            ? []
+            : (isActiveCommentMember()
+              ? get(/databases/$(database)/documents/replays/$(videoId)/commentMembers/$(request.auth.uid)).data.groupIds
+              : []))
+          && (!data.keys().hasAny(['authorRank']) || data.authorRank == null
+            || (data.authorRank is string && data.authorRank.size() > 0 && data.authorRank.size() <= 32))
           && data.status == 'published'
           && data.createdAt is timestamp
           && data.updatedAt is timestamp;
@@ -516,13 +674,17 @@ service cloud.firestore {
       }
 
       match /commentAuthors/{commentId} {
-        // Ownership records contain the internal Firebase UID and are never
-        // readable by app clients. Comment rules may still consult them.
-        allow get, list, update, delete: if false;
+        // A signed-in author may read only their own ownership records so the
+        // UI can retain edit/delete controls for anonymous comments. Other
+        // clients cannot use this collection to identify an anonymous author.
+        allow get, list: if isGoogleUser()
+          && (resource.data.uid == request.auth.uid || isDatabaseAdmin());
+        allow update, delete: if false;
         allow create: if isGoogleUser()
           && hasValidCommentAuthor(request.resource.data)
           && existsAfter(commentPath(commentId))
-          && getAfter(commentPath(commentId)).data.authorPublicId == request.resource.data.publicId
+          && (getAfter(commentPath(commentId)).data.get('anonymous', false) == true
+            || getAfter(commentPath(commentId)).data.authorPublicId == request.resource.data.publicId)
           && !getAfter(commentPath(commentId)).data.keys().hasAny(['authorUid'])
           && (
             (request.resource.data.uid == request.auth.uid
@@ -557,17 +719,30 @@ service cloud.firestore {
         allow create: if isGoogleUser()
           && canWriteCommunityComments()
           && hasValidComment(request.resource.data, commentId)
+          && request.resource.data.anonymous is bool
           && !request.resource.data.keys().hasAny(['authorUid'])
           && exists(/databases/$(database)/documents/communityProfiles/$(request.auth.uid))
-          && request.resource.data.authorPublicId
-            == get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.publicId
-          && request.resource.data.authorName
-            == (get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.accountName is string
-              ? get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.accountName
-              : get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.publicId)
+          && (
+            (request.resource.data.anonymous == true
+              && request.resource.data.visibility == 'public'
+              && request.resource.data.authorName == 'Anonymous'
+              && request.resource.data.authorPublicId == null
+              && request.resource.data.authorGroupIds == []
+              && request.resource.data.get('authorRank', null) == null)
+            ||
+            (request.resource.data.anonymous == false
+              && request.resource.data.authorPublicId
+                == get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.publicId
+              && request.resource.data.authorName
+                == (get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.accountName is string
+                  ? get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.accountName
+                  : get(/databases/$(database)/documents/communityProfiles/$(request.auth.uid)).data.publicId)
+              && request.resource.data.get('authorRank', null) == currentProfileRank())
+          )
           && existsAfter(commentAuthorPath(commentId))
           && getAfter(commentAuthorPath(commentId)).data.uid == request.auth.uid
-          && getAfter(commentAuthorPath(commentId)).data.publicId == request.resource.data.authorPublicId
+          && (request.resource.data.anonymous == true
+            || getAfter(commentAuthorPath(commentId)).data.publicId == request.resource.data.authorPublicId)
           && request.resource.data.createdAt == request.time
           && request.resource.data.updatedAt == request.time
           && consumesCommentQuota(request.auth.uid, videoId, commentId);
@@ -578,11 +753,13 @@ service cloud.firestore {
             && request.resource.data.authorPublicId == resource.data.authorPublicId
             && request.resource.data.authorName == resource.data.authorName
             && request.resource.data.authorGroupIds == resource.data.authorGroupIds
+            && request.resource.data.get('authorRank', null) == resource.data.get('authorRank', null)
+            && request.resource.data.get('anonymous', false) == resource.data.get('anonymous', false)
             && request.resource.data.createdAt == resource.data.createdAt
             && request.resource.data.updatedAt == request.time
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'text', 'videoTimeMs', 'rating', 'color', 'size', 'durationMs',
-              'mode', 'x', 'y', 'visibility', 'clientRequestId', 'updatedAt'
+              'mode', 'x', 'y', 'visibility', 'anonymous', 'clientRequestId', 'updatedAt'
             ]))
           ||
           (resource.data.status == 'published'
