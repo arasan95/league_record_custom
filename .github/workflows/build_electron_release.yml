@@ -2,7 +2,7 @@ name: Build Electron Release Artifacts
 
 on:
   push:
-    tags: ["electron-v*"]
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       version:
@@ -45,14 +45,14 @@ jobs:
         run: |
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
             $version = "${{ inputs.version }}"
-            $tag = "electron-v$version"
+            $tag = "v$version"
           } else {
             $tag = "${{ github.ref_name }}"
-            if (-not $tag.StartsWith("electron-v")) {
-              Write-Error "Electron release tags must start with electron-v. got: $tag"
+            if (-not $tag.StartsWith("v")) {
+              Write-Error "Electron release tags must start with v. got: $tag"
               exit 1
             }
-            $version = $tag.Substring("electron-v".Length)
+            $version = $tag.Substring(1)
           }
 
           if ($version -notmatch '^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$') {
