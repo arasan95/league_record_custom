@@ -2,6 +2,8 @@
 
 [English](readme.md) | [日本語](README_ja.md)
 
+[Official website](https://leaguerecord.web.app/) · [Features](https://leaguerecord.web.app/features.html) · [Release notes](https://leaguerecord.web.app/releases.html) · [Pre-release](https://leaguerecord.web.app/preview.html)
+
 **Note**: This project is a customized version based on [LeagueRecord](https://github.com/FFFFFFFXXXXXXX/league_record).
 This project is a customized clone of LeagueRecord, based on [v2.1.1](https://github.com/FFFFFFFXXXXXXX/league_record/releases/tag/v2.1.1).
 All modifications and new features have been built upon this version.
@@ -22,7 +24,7 @@ The following changes have been implemented in this version:
 
 ## Download
 
-**[Download LeagueRecord Setup (latest)](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_x64-setup.exe)**
+**[Download the latest LeagueRecord release](https://leaguerecord.web.app/)**
 
 or browse all versions: [GitHub Releases](https://github.com/arasan95/league_record_custom/releases)
 

@@ -212,10 +212,201 @@ function isWin(metadata) {
   return false;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function isTftMetadata(metadata) {
+  const queueName = String(metadata?.queue?.name || "").toUpperCase();
+  if (queueName.includes("TFT") || queueName.includes("TEAMFIGHT TACTICS")) return true;
+  return (metadata?.participants || []).some((participant) => (
+    Number.isFinite(participant?.placement)
+    || Array.isArray(participant?.traits)
+    || Array.isArray(participant?.units)
+  ));
+}
+
+function normalizeAssetHint(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function cachedImageUrlByHints(cacheRoots, category, hints) {
+  const normalizedHints = hints.map(normalizeAssetHint).filter(Boolean);
+  if (normalizedHints.length === 0) return "";
+  const roots = Array.isArray(cacheRoots) ? cacheRoots : [cacheRoots];
+  for (const cacheRoot of roots) {
+    if (!cacheRoot) continue;
+    for (const directory of [
+      path.join(cacheRoot, category),
+      path.join(cacheRoot, "img_cache", category),
+    ]) {
+      try {
+        const filenames = fs.readdirSync(directory);
+        const filename = filenames.find((candidate) => {
+          const normalizedCandidate = normalizeAssetHint(candidate);
+          return normalizedHints.some((hint) => (
+            normalizedCandidate.includes(hint) || hint.includes(normalizedCandidate.replace(/png$/, ""))
+          ));
+        });
+        if (filename) return localFileUrl(path.join(directory, filename));
+      } catch {}
+    }
+  }
+  return "";
+}
+
+function resolveTftTraitStyle(tierCurrent, tierTotal) {
+  if (tierCurrent <= 0) return "inactive";
+  if (tierTotal === 1 && tierCurrent === 1) return "unique";
+  if (tierTotal === 2) return tierCurrent >= 2 ? "gold" : "bronze";
+  if (tierTotal === 3) return tierCurrent >= 3 ? "gold" : tierCurrent === 2 ? "silver" : "bronze";
+  if (tierTotal === 4) return tierCurrent >= 4 ? "prismatic" : tierCurrent === 3 ? "gold" : tierCurrent === 2 ? "silver" : "bronze";
+  if (tierTotal >= 5) return tierCurrent >= 5 ? "prismatic" : tierCurrent === 4 ? "gold" : tierCurrent >= 2 ? "silver" : "bronze";
+  return "bronze";
+}
+
+function resolveTftUnitCost(rarity) {
+  if (rarity === 0) return 1;
+  if (rarity === 1) return 2;
+  if (rarity === 2) return 3;
+  if (rarity === 3 || rarity === 4) return 4;
+  if (rarity >= 5) return 5;
+  return 1;
+}
+
+function tftAssetUrl(cacheRoot, category, primaryName, extraHints = []) {
+  const exactCandidates = [
+    `${String(primaryName || "").toLowerCase()}.png`,
+    String(primaryName || ""),
+  ];
+  for (const candidate of exactCandidates) {
+    const exact = cachedImageUrl(cacheRoot, category, candidate);
+    if (exact) return exact;
+  }
+  return cachedImageUrlByHints(cacheRoot, category, [primaryName, ...extraHints]);
+}
+
+function generateTftThumbnailHtml(metadata, appPath, cacheRoot, options = {}) {
+  const self = findSelfParticipant(metadata) || {};
+  const placement = Math.max(1, Math.min(8, Number(self.placement) || 8));
+  const placementClass = placement === 1 ? "first" : placement <= 4 ? "top-four" : "bottom-four";
+  const traits = (Array.isArray(self.traits) ? [...self.traits] : [])
+    .filter((trait) => Number(trait?.tierCurrent) > 0)
+    .sort((a, b) => Number(b.tierCurrent) - Number(a.tierCurrent) || Number(b.numUnits) - Number(a.numUnits))
+    .slice(0, 7);
+  const units = (Array.isArray(self.units) ? self.units : []).slice(0, 10);
+
+  const traitsHtml = traits.length > 0
+    ? traits.map((trait) => {
+        const name = String(trait.name || "").replace(/^TFT\d+_/, "");
+        const iconUrl = tftAssetUrl(cacheRoot, "tft_trait", trait.name, [name]);
+        const style = resolveTftTraitStyle(Number(trait.tierCurrent), Number(trait.tierTotal));
+        return `<div class="tft-trait ${style}">
+          <div class="tft-trait-icon">${iconUrl ? `<img src="${iconUrl}" alt="">` : escapeHtml(name.slice(0, 2))}</div>
+          <div><strong>${Number(trait.numUnits) || 0}</strong><span>${escapeHtml(name)}</span></div>
+        </div>`;
+      }).join("")
+    : '<div class="empty-state">No active traits</div>';
+
+  const unitsHtml = units.length > 0
+    ? units.map((unit) => {
+        const characterId = String(unit.characterId || "");
+        const name = String(unit.name || characterId).replace(/^TFT\d+_/, "");
+        const iconUrl = tftAssetUrl(cacheRoot, "tft_unit", characterId, [name, `${characterId}_square`]);
+        const tier = Math.max(1, Math.min(3, Number(unit.tier) || 1));
+        const cost = resolveTftUnitCost(Number(unit.rarity));
+        const items = (Array.isArray(unit.itemNames) ? unit.itemNames : []).slice(0, 3);
+        const itemsHtml = items.map((itemName) => {
+          const cleanName = String(itemName).replace(/^TFT\d+_Item_/, "").replace(/^TFT_Item_/, "");
+          const itemUrl = tftAssetUrl(cacheRoot, "tft_item", itemName, [cleanName]);
+          return itemUrl
+            ? `<img src="${itemUrl}" alt="${escapeHtml(cleanName)}">`
+            : `<span title="${escapeHtml(cleanName)}"></span>`;
+        }).join("");
+        return `<div class="tft-unit cost-${cost}">
+          <div class="unit-portrait">
+            ${iconUrl ? `<img src="${iconUrl}" alt="${escapeHtml(name)}">` : `<div class="unit-fallback">${escapeHtml(name.slice(0, 2))}</div>`}
+            <div class="unit-stars tier-${tier}">${"★".repeat(tier)}</div>
+            <div class="unit-items">${itemsHtml}</div>
+          </div>
+          <div class="unit-name">${escapeHtml(name)}</div>
+        </div>`;
+      }).join("")
+    : '<div class="empty-state units-empty">No unit data</div>';
+
+  const eliminated = Number(self.playersEliminated) || 0;
+  const fontPath = path.join(appPath, "src", "css", "BeaufortW01-Bold.ttf").replace(/\\/g, "/");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @font-face { font-family: 'Beaufort'; src: url('lr-file:///${fontPath}') format('truetype'); }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { width: 1280px; height: 720px; overflow: hidden; color: #f8fafc; background: #090a12; font-family: 'Beaufort', Inter, sans-serif; }
+    .tft-thumbnail {
+      width: 100%; height: 100%; padding: 36px 42px 32px; position: relative; overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 6%, rgba(124, 58, 237, .38), transparent 34%),
+        radial-gradient(circle at 88% 85%, rgba(8, 145, 178, .25), transparent 32%),
+        linear-gradient(145deg, #171329 0%, #0b1020 52%, #070911 100%);
+    }
+    .tft-thumbnail::before { content: ""; position: absolute; inset: 18px; border: 2px solid rgba(216, 180, 254, .25); border-radius: 24px; pointer-events: none; }
+    .header { display: flex; align-items: stretch; gap: 24px; height: 144px; position: relative; z-index: 1; }
+    .placement { width: 232px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 100px; font-weight: 900; line-height: 1; background: rgba(15, 23, 42, .86); border: 3px solid currentColor; box-shadow: 0 12px 30px rgba(0,0,0,.45); }
+    .placement.first { color: #fbbf24; }.placement.top-four { color: #60a5fa; }.placement.bottom-four { color: #fb7185; }
+    .match-meta { flex: 1; padding: 22px 28px; border-radius: 18px; background: rgba(15, 23, 42, .74); border: 1px solid rgba(255,255,255,.13); }
+    .eyebrow { color: #c4b5fd; font-size: 25px; letter-spacing: .18em; }
+    h1 { margin-top: 5px; font-size: 52px; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .meta-row { display: flex; gap: 28px; margin-top: 8px; color: #a5b4fc; font: 700 22px Inter, sans-serif; }
+    .traits { min-height: 96px; margin-top: 20px; display: flex; align-items: stretch; gap: 11px; position: relative; z-index: 1; }
+    .tft-trait { min-width: 145px; flex: 1; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: rgba(15,23,42,.8); border: 2px solid #64748b; }
+    .tft-trait-icon { width: 48px; height: 48px; flex: 0 0 48px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: #111827; font: 800 16px Inter, sans-serif; }
+    .tft-trait-icon img { width: 100%; height: 100%; object-fit: contain; filter: brightness(1.35); }
+    .tft-trait strong { display: block; font: 900 25px Inter, sans-serif; }.tft-trait span { display: block; max-width: 83px; overflow: hidden; color: #cbd5e1; font: 700 13px Inter, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+    .tft-trait.bronze { border-color: #b77952; color: #d6a074; }.tft-trait.silver { border-color: #cbd5e1; color: #e2e8f0; }.tft-trait.gold { border-color: #fbbf24; color: #fde68a; }
+    .tft-trait.prismatic { border-color: #e879f9; color: #f0abfc; box-shadow: 0 0 18px rgba(232,121,249,.3); }.tft-trait.unique { border-color: #22d3ee; color: #67e8f9; }
+    .units { height: 374px; margin-top: 18px; display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(2, 1fr); gap: 12px; position: relative; z-index: 1; }
+    .tft-unit { min-width: 0; padding: 7px; border-radius: 14px; background: rgba(15,23,42,.9); border: 3px solid #64748b; box-shadow: 0 8px 20px rgba(0,0,0,.42); }
+    .tft-unit.cost-1 { border-color: #94a3b8; }.tft-unit.cost-2 { border-color: #22c55e; }.tft-unit.cost-3 { border-color: #3b82f6; }.tft-unit.cost-4 { border-color: #a855f7; }.tft-unit.cost-5 { border-color: #f59e0b; }
+    .unit-portrait { height: 132px; position: relative; overflow: hidden; border-radius: 9px; background: #111827; }
+    .unit-portrait > img,.unit-fallback { width: 100%; height: 100%; object-fit: cover; }.unit-fallback { display: grid; place-items: center; color: #94a3b8; font-size: 38px; }
+    .unit-stars { position: absolute; top: 4px; left: 7px; color: #e2e8f0; font: 900 21px/1 Inter, sans-serif; text-shadow: 0 2px 4px #000; }.unit-stars.tier-3 { color: #facc15; }
+    .unit-items { position: absolute; right: 5px; bottom: 5px; display: flex; gap: 3px; }.unit-items img,.unit-items span { width: 31px; height: 31px; border: 2px solid #e2e8f0; border-radius: 5px; background: #1e293b; object-fit: cover; }
+    .unit-name { padding: 7px 4px 1px; overflow: hidden; color: #e2e8f0; font: 800 17px/1 Inter, sans-serif; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+    .empty-state { display: grid; place-items: center; width: 100%; color: #64748b; font: 700 22px Inter, sans-serif; }.units-empty { grid-column: 1 / -1; grid-row: 1 / -1; }
+  </style>
+</head>
+<body>
+  <main class="tft-thumbnail" data-thumbnail-mode="tft">
+    <header class="header">
+      <div class="placement ${placementClass}">#${placement}</div>
+      <div class="match-meta">
+        <div class="eyebrow">TEAMFIGHT TACTICS</div>
+        <h1>FINAL COMPOSITION</h1>
+        ${eliminated > 0 ? `<div class="meta-row"><span>${eliminated} ELIMINATED</span></div>` : ""}
+      </div>
+    </header>
+    <section class="traits">${traitsHtml}</section>
+    <section class="units">${unitsHtml}</section>
+  </main>
+</body>
+</html>`;
+}
+
 /**
  * Generate the thumbnail HTML with actual game data.
  */
 function generateThumbnailHtml(metadata, appPath, cacheRoot, options = {}) {
+  if (isTftMetadata(metadata)) {
+    return generateTftThumbnailHtml(metadata, appPath, cacheRoot, options);
+  }
   const selfStats = getSelfStats(metadata);
   const kills = selfStats?.kills ?? 0;
   const deaths = selfStats?.deaths ?? 0;

@@ -1,6 +1,14 @@
 import type { LoadedReplayShare } from "../replay_share";
 import { uiText } from "../ui_locale";
 
+export const PLAY_OWNED_YOUTUBE_REPLAY_EVENT = "league-record-play-owned-youtube-replay";
+
+export function requestOwnedYouTubeReplay(youtubeVideoId: string): void {
+    window.dispatchEvent(new CustomEvent(PLAY_OWNED_YOUTUBE_REPLAY_EVENT, {
+        detail: { youtubeVideoId },
+    }));
+}
+
 export function updateYouTubeReplayStatus(message: string, isError = false): void {
     const status = document.querySelector<HTMLElement>("#youtube-replay-status");
     if (!status) return;
@@ -65,19 +73,14 @@ export function bindYouTubeReplaySidebar(input: {
         }
     };
 
-    replayButton.addEventListener("click", () => setReplayMode(true));
-    document.querySelectorAll<HTMLElement>("#server-nav .server-icon:not(#nav-youtube-replay)").forEach((button) => {
-        button.addEventListener("click", () => setReplayMode(false));
-    });
-
-    const submit = async () => {
+    const loadAndPlay = async (value: string, fromOwnedUploads = false) => {
         updateYouTubeReplayStatus(uiText("Firestoreから試合データを取得しています…", "Loading match data from Firestore…"));
         summary.hidden = true;
         loadButton.disabled = true;
         loadButton.textContent = uiText("読み込んでいます…", "Loading…");
         try {
-            console.info("[youtube-replay] loading Firestore share", { url: urlInput.value.trim() });
-            const loaded = await input.loadReplay(urlInput.value);
+            console.info("[youtube-replay] loading Firestore share", { url: value, fromOwnedUploads });
+            const loaded = await input.loadReplay(value);
             console.info("[youtube-replay] share loaded", { videoId: loaded.youtubeVideoId });
             summaryTitle.textContent = "";
             summaryId.textContent = "";
@@ -95,6 +98,26 @@ export function bindYouTubeReplaySidebar(input: {
             loadButton.disabled = false;
             loadButton.textContent = uiText("試合データを読み込む", "Load Match Data");
         }
+    };
+
+    replayButton.addEventListener("click", () => setReplayMode(true));
+    document.querySelectorAll<HTMLElement>("#server-nav .server-icon:not(#nav-youtube-replay)").forEach((button) => {
+        button.addEventListener("click", () => setReplayMode(false));
+    });
+
+    window.addEventListener(PLAY_OWNED_YOUTUBE_REPLAY_EVENT, (event) => {
+        const youtubeVideoId = (event as CustomEvent<{ youtubeVideoId?: string }>).detail?.youtubeVideoId?.trim();
+        if (!youtubeVideoId) return;
+        setReplayMode(true);
+        selectTab("owned");
+        void (async () => {
+            await refreshOwned();
+            await loadAndPlay(youtubeVideoId, true);
+        })();
+    });
+
+    const submit = async () => {
+        await loadAndPlay(urlInput.value);
     };
 
     loadButton.addEventListener("click", () => void submit());

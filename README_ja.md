@@ -2,6 +2,8 @@
 
 [English](readme.md) | [日本語](README_ja.md)
 
+[公式Webサイト](https://leaguerecord.web.app/ja/) · [機能紹介](https://leaguerecord.web.app/ja/features.html) · [リリースノート](https://leaguerecord.web.app/ja/releases.html) · [プレリリース](https://leaguerecord.web.app/ja/preview.html)
+
 **注意**: 本プロジェクトは [LeagueRecord](https://github.com/FFFFFFFXXXXXXX/league_record) をベースにしたカスタムバージョンです。
 [v2.1.1](https://github.com/FFFFFFFXXXXXXX/league_record/releases/tag/v2.1.1) を基にしており、すべての機能追加や変更はこのバージョン上に構築されています。
 
@@ -21,7 +23,7 @@
 
 ## ダウンロード
 
-**[LeagueRecordをダウンロード（インストーラー版）](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_x64-setup.exe)**
+**[LeagueRecordの最新版をダウンロード](https://leaguerecord.web.app/ja/)**
 
 すべてのバージョンを見る: [GitHub Releases](https://github.com/arasan95/league_record_custom/releases)
 

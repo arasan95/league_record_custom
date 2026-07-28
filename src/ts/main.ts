@@ -47,9 +47,21 @@ import {
     showDeleteWithConfirm,
 } from "./main_video_management_usecase";
 
-// Explicit registration guards against bundler tree-shaking of the side‑effect import.
+// With Bun's isolated linker, the marker package and the application can resolve
+// separate Video.js module instances. Registering its class directly would then
+// make Video.js mistake the class for a basic function plugin and call it without
+// `new`. This adapter creates one instance and replaces the player method with
+// the usual instance getter, matching Video.js's advanced-plugin behavior.
 if (!videojs.getPlugin("markers")) {
-  videojs.registerPlugin("markers", MarkersPlugin);
+    videojs.registerPlugin("markers", function markerPluginAdapter(this: Player, settings?: Settings) {
+        if (!settings) throw new Error("Marker settings are required during initialization.");
+        const instance = new MarkersPlugin(this, settings);
+        Object.defineProperty(this, "markers", {
+            configurable: true,
+            value: () => instance,
+        });
+        return instance;
+    });
 }
 
 // initDebug();
@@ -897,8 +909,6 @@ const keyboardHandlers = createKeyboardHandlers({
     updateClipBtnState,
 });
 
-console.log(MarkersPlugin);
-
 await main();
 async function main() {
     const startupStartedAt = perfNowMs();
@@ -1653,18 +1663,18 @@ function addYouTubeReplayHistoryCard(
     item.querySelector(".sidebar-actions")?.remove();
     decorateYouTubeReplayCard(item, loaded);
     item.dataset.sharedReplayId = loaded.youtubeVideoId;
-    addYouTubeReplayOpenAction(item, loaded.youtubeVideoId);
+    const replayActions = addYouTubeReplayOpenAction(item, loaded.youtubeVideoId);
     const removeButton = document.createElement("button");
     removeButton.type = "button";
-    removeButton.className = "youtube-replay-remove";
+    removeButton.className = "replay-action delete youtube-replay-remove";
     removeButton.title = uiText("この履歴を削除", "Remove from history");
     removeButton.setAttribute("aria-label", uiText("この履歴を削除", "Remove from history"));
-    removeButton.textContent = "✕";
+    removeButton.textContent = "\u2716";
     removeButton.addEventListener("click", (event) => {
         event.stopPropagation();
         removeYouTubeReplayHistoryItem(loaded.youtubeVideoId);
     });
-    item.append(removeButton);
+    replayActions.append(removeButton);
     if (append) history.append(item);
     else history.prepend(item);
     if (persist) rememberYouTubeReplay(loaded.youtubeVideoId);
@@ -1725,13 +1735,13 @@ async function loadYouTubePublishedDates(videoIds: string[]): Promise<Record<str
     return Object.assign({}, ...results);
 }
 
-function addYouTubeReplayOpenAction(item: HTMLElement, youtubeVideoId: string): void {
+function addYouTubeReplayOpenAction(item: HTMLElement, youtubeVideoId: string): HTMLDivElement {
     const actions = document.createElement("div");
     actions.className = "sidebar-actions youtube-replay-actions";
 
     const openButton = document.createElement("button");
     openButton.type = "button";
-    openButton.className = "replay-action youtube-replay-open";
+    openButton.className = "replay-action share youtube-replay-open";
     openButton.title = uiText("YouTubeページを規定ブラウザで開く", "Open this video on YouTube");
     openButton.setAttribute("aria-label", uiText("YouTubeページを規定ブラウザで開く", "Open this video on YouTube"));
     openButton.textContent = "↗";
@@ -1745,6 +1755,7 @@ function addYouTubeReplayOpenAction(item: HTMLElement, youtubeVideoId: string): 
     });
     actions.append(openButton);
     item.append(actions);
+    return actions;
 }
 
 async function restoreYouTubeReplayHistory(): Promise<void> {

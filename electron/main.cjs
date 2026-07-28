@@ -27,6 +27,7 @@ const { fileURLToPath, pathToFileURL } = require("node:url");
 const zlib = require("node:zlib");
 const LcuWebSocket = require("ws");
 const { createYouTubeService } = require("./youtube/service.cjs");
+const { readAppVersion } = require("./app-version.cjs");
 const useDevServer = process.env.LR_ELECTRON_DEV === "1";
 const isDevExecutable = path.basename(process.execPath).toLowerCase() === "leaguerecorddev.exe";
 const isDev = useDevServer || isDevExecutable || !app.isPackaged;
@@ -37,6 +38,7 @@ const APP_PROTOCOL = "leaguerecord";
 const ELECTRON_RELEASE_TAG_PREFIX = "electron-v";
 const TOOLTIP_DB_REMOTE_URL = "https://raw.githubusercontent.com/arasan95/league_record_custom/main/src-tauri/resources/tooltip_data.db";
 const sourceRoot = path.resolve(__dirname, "..");
+const appVersionRoot = isDev ? sourceRoot : app.getAppPath();
 const appFile = (...segments) => path.join(isDev ? sourceRoot : app.getAppPath(), ...segments);
 let activeLogFile = "";
 let tooltipSqlPromise = null;
@@ -634,7 +636,9 @@ function getAutoUpdater() {
 }
 
 async function checkAppUpdate() {
-  if (!app.isPackaged) return null;
+  // The branded LeagueRecordDev.exe is considered "packaged" by Electron even
+  // though it runs directly from the source tree and has no app-update.yml.
+  if (isDev) return null;
   const updater = getAutoUpdater();
   const result = await updater.checkForUpdates();
   const info = result?.updateInfo;
@@ -3110,7 +3114,7 @@ class GameMonitor {
     ws.addEventListener("error", () => {
       if (this.ws === ws) this.ws = null;
       try {
-        ws.close();
+        ws.terminate();
       } catch {}
       this.scheduleWebSocketReconnect();
     });
@@ -3810,7 +3814,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      webSecurity: !useDevServer,
+      webSecurity: true,
       backgroundThrottling: false,
     },
   });
@@ -3990,7 +3994,8 @@ function createWindow() {
   };
   const assertCachePathDoesNotEscapeThroughLinks = async (target) => {
     const root = getAppLocalDataPath();
-    const rootReal = await fs.realpath(root).catch(() => path.resolve(root));
+    await fs.mkdir(root, { recursive: true });
+    const rootReal = await fs.realpath(root);
     let existingAncestor = target;
     while (!fsNode.existsSync(existingAncestor)) {
       const parent = path.dirname(existingAncestor);
@@ -4092,7 +4097,7 @@ function createWindow() {
     await fs.writeFile(fullPath, content);
     return null;
   });
-  safeHandle("lr:app:getVersion", () => app.getVersion());
+  safeHandle("lr:app:getVersion", () => readAppVersion(appVersionRoot, app.getVersion()));
   safeHandle("lr:updater:check", () => checkAppUpdate());
   safeHandle("lr:updater:downloadAndInstall", (_e, update) => downloadAndInstallAppUpdate(update));
   safeHandle("lr:process:relaunch", () => {
@@ -4153,10 +4158,40 @@ function toFsPathFromRequestUrl(requestUrl) {
       // lr-file://d:/path -> hostname=d, pathname=/path
       return `${u.hostname.toUpperCase()}:${decoded}`;
     }
+    if (u.hostname) {
+      return `\\\\${u.hostname}${decoded.replace(/\//g, "\\")}`;
+    }
     // /C:/Users/... -> C:/Users/...
     if (/^\/[a-zA-Z]:\//.test(decoded)) return decoded.slice(1);
   }
   return decoded;
+}
+
+function isPathWithinRoot(candidate, root) {
+  const normalize = (value) => {
+    const resolved = path.resolve(value);
+    return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+  };
+  const resolvedCandidate = normalize(candidate);
+  const resolvedRoot = normalize(root);
+  return resolvedCandidate === resolvedRoot
+    || resolvedCandidate.startsWith(`${resolvedRoot}${path.sep}`);
+}
+
+async function isAllowedLrFilePath(candidate) {
+  const candidateReal = await fs.realpath(candidate);
+  const settings = await readSettings();
+  const roots = [
+    getAppLocalDataPath(),
+    app.getPath("userData"),
+    settings.recordingsFolder,
+    settings.clipsFolder,
+  ].filter((root) => typeof root === "string" && path.isAbsolute(root));
+  for (const root of roots) {
+    const rootReal = await fs.realpath(root).catch(() => null);
+    if (rootReal && isPathWithinRoot(candidateReal, rootReal)) return true;
+  }
+  return false;
 }
 
 appendBootLog(`main loaded packaged=${app.isPackaged} appPath=${app.getAppPath()}`);
@@ -4197,14 +4232,21 @@ app.whenReady().then(() => {
     });
   }).then(() => {
   protocol.registerFileProtocol("lr-file", (request, callback) => {
-    try {
-      const fsPath = toFsPathFromRequestUrl(request.url);
-      void writeLog("protocol", `lr-file ${fsPath}`);
-      callback({ path: fsPath });
-    } catch (error) {
-      void writeLog("protocol", `lr-file failed ${String(error)}`);
-      callback({ error: -2 });
-    }
+    void (async () => {
+      try {
+        const fsPath = toFsPathFromRequestUrl(request.url);
+        if (!await isAllowedLrFilePath(fsPath)) {
+          await writeLog("protocol", `lr-file rejected ${fsPath}`);
+          callback({ error: -10 });
+          return;
+        }
+        await writeLog("protocol", `lr-file ${fsPath}`);
+        callback({ path: fsPath });
+      } catch (error) {
+        void writeLog("protocol", `lr-file failed ${String(error)}`);
+        callback({ error: -2 });
+      }
+    })();
   });
   createWindow();
   });

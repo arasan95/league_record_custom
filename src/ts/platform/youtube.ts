@@ -29,7 +29,7 @@ export type YouTubeUploadJob = {
     youtubeVideoId?: string | null;
     youtubeUrl?: string | null;
     error?: string | null;
-    thumbnailStatus?: "pending" | "succeeded" | "failed";
+    thumbnailStatus?: "pending" | "succeeded" | "failed" | "skipped";
     thumbnailError?: string | null;
     processingStatus?: string;
     processingPercent?: number;
@@ -59,7 +59,7 @@ export function getYouTubeFirebaseIdToken(): Promise<string> {
     return invoke("youtube_get_firebase_id_token");
 }
 
-export function startYouTubeUpload(videoId: string, metadata: { title: string; description: string; madeForKids: boolean; privacyStatus: "private" | "unlisted" | "public"; policyAccepted: boolean; communityGuidelinesConfirmed: boolean }, thumbnail: { metadata: unknown; isClip: boolean; customThumbnailPath?: string | null }): Promise<YouTubeUploadJob> {
+export function startYouTubeUpload(videoId: string, metadata: { title: string; description: string; madeForKids: boolean; privacyStatus: "private" | "unlisted" | "public"; policyAccepted: boolean; communityGuidelinesConfirmed: boolean }, thumbnail: { metadata: unknown; isClip: boolean; customThumbnailPath?: string | null; skip?: boolean }): Promise<YouTubeUploadJob> {
     return invoke("youtube_start_upload", { videoId, metadata, thumbnail });
 }
 
