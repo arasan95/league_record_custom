@@ -319,11 +319,18 @@ FunctionEnd
   SetDetailsView show
   CreateDirectory "$INSTDIR\resources"
 
+  # Keep the large recording runtime only when its essential files are all
+  # present. Older/failed installs can leave a partial libobs directory behind;
+  # checking only for any file would preserve that broken state forever.
   ${If} $lrInstallChoice == "update"
-  ${AndIf} ${FileExists} "$INSTDIR\resources\libobs\*.*"
+  ${AndIf} ${FileExists} "$INSTDIR\resources\libobs\extprocess_recorder.exe"
+  ${AndIf} ${FileExists} "$INSTDIR\resources\libobs\obs.dll"
+  ${AndIf} ${FileExists} "$INSTDIR\resources\libobs\obs-plugins\64bit\win-capture.dll"
+  ${AndIf} ${FileExists} "$INSTDIR\resources\libobs\data\libobs\default.effect"
     DetailPrint "$lrTextKeepRuntime"
   ${Else}
     DetailPrint "$lrTextInstallRuntime"
+    RMDir /r "$INSTDIR\resources\libobs"
     SetOutPath "$INSTDIR\resources\libobs"
     File /r "${PROJECT_DIR}\src-tauri\target\libobs\*.*"
   ${EndIf}
