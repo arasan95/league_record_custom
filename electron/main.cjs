@@ -1497,6 +1497,7 @@ async function getGameflowPhaseSafe() {
 
 function resolveExtRecorderPath() {
   const candidates = [
+    resolveAppAsset("libobs", `extprocess_recorder-${app.getVersion()}.exe`),
     resolveAppAsset("libobs", "extprocess_recorder.exe"),
     path.join(process.cwd(), "src-tauri", "target", "debug", "libobs", "extprocess_recorder.exe"),
     path.join(process.cwd(), "src-tauri", "target", "libobs", "extprocess_recorder.exe"),
