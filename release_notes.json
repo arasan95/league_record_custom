@@ -1,17 +1,17 @@
 {
     "notes": [
         "[日本語]",
-        "1.2.8 の主な変更点:",
-        "- Windowsインストーラーのレイアウトを改善し、不要なヘッダー画像を削除しました",
-        "- 録画ランタイムがWindowsにロックされていてもインストールと更新が完了するよう修正しました",
-        "- アンインストール後や失敗途中の残存データを正しく判定するよう修正しました",
-        "- Electron版の自動アップデート配布に対応しました",
+        "1.2.9 の主な変更点:",
+        "- アプリ内の更新情報にHTMLタグが文字として表示される問題を修正しました",
+        "- 更新情報を読みやすいプレーンテキストで表示するようにしました",
+        "- Webサイトの更新履歴をGitHub Releasesから自動取得するよう改善しました",
+        "- Webサイトの追加予定機能に最新のプレリリース内容を自動表示するよう改善しました",
         "",
         "[English]",
-        "Highlights in 1.2.8:",
-        "- Improved the Windows installer layout and removed the unnecessary header image",
-        "- Fixed installation and updates when Windows keeps the recording runtime locked",
-        "- Fixed detection of remnants from uninstalls or incomplete installations",
-        "- Enabled Electron auto-update distribution"
+        "Highlights in 1.2.9:",
+        "- Fixed HTML tags being shown as text in the in-app update notes",
+        "- Improved update notes by converting them to readable plain text",
+        "- Updated the website to load release history automatically from GitHub Releases",
+        "- Updated the website to show the latest pre-release notes under planned features"
     ]
 }
