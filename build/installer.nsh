@@ -9,9 +9,29 @@
 !define LR_GWL_STYLE -16
 !define LR_PBS_MARQUEE 0x00000008
 !define LR_INSTALL_COMPLETE_MARKER ".league-record-install-complete"
-!define MUI_HEADERIMAGE_BITMAP_STRETCH AspectFitHeight
 !define MUI_WELCOMEFINISHPAGE_BITMAP_STRETCH AspectFitHeight
 !define MUI_UNWELCOMEFINISHPAGE_BITMAP_STRETCH AspectFitHeight
+!define MUI_HEADER_TRANSPARENT_TEXT
+!define MUI_CUSTOMFUNCTION_GUIINIT lrInstallerGuiInit
+
+Function lrInstallerGuiInit
+  # Remove the Modern UI logo and its white header panel. The title/subtitle
+  # controls use transparent backgrounds and blend into the normal dialog.
+  Push $0
+  GetDlgItem $0 $HWNDPARENT 1046
+  ${If} $0 != 0
+    ShowWindow $0 ${SW_HIDE}
+  ${EndIf}
+  GetDlgItem $0 $HWNDPARENT 1039
+  ${If} $0 != 0
+    ShowWindow $0 ${SW_HIDE}
+  ${EndIf}
+  GetDlgItem $0 $HWNDPARENT 1034
+  ${If} $0 != 0
+    ShowWindow $0 ${SW_HIDE}
+  ${EndIf}
+  Pop $0
+FunctionEnd
 
 # Always install for the signed-in Windows user. The stock assisted installer
 # otherwise shows a current-user/all-users page.
