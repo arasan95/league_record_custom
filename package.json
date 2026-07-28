@@ -15,9 +15,9 @@
   ],
   "scripts": {
     "dev": "bun run --watch --port 1420 src/index.html",
-    "electron:dev": "node scripts/dev-electron.cjs",
+    "electron:dev": "node scripts/dev-electron.cjs --watch-main",
     "electron:dev:watch": "node scripts/dev-electron.cjs --watch-main",
-    "electron:start": "node scripts/start-electron.cjs",
+    "electron:start": "bun run build && node scripts/start-electron.cjs",
     "electron:build": "bun run build && node scripts/build-electron.cjs nsis",
     "electron:build:portable": "bun run build && node scripts/build-electron.cjs portable",
     "logs:path": "node scripts/print-latest-log.cjs",
@@ -27,9 +27,10 @@
     "build": "rm -rf dist && bun build --minify --target browser --outdir dist src/index.html",
     "preview": "bun dist/index.html",
     "check:responsibility": "node ci/check-responsibility-coverage.mjs",
-    "test:security:metadata": "bun test tests/replay_share_security.test.ts",
-    "test:security:rules": "firebase emulators:exec --only firestore --project demo-leaguerecord \"bun test --timeout 30000 tests/firestore.rules.test.ts\"",
+    "test:security:metadata": "bun test tests/replay_share_security.test.ts tests/firestore_retention_privacy.test.ts",
+    "test:security:rules": "firebase emulators:exec --only firestore --project demo-leaguerecord \"bun test --timeout 30000 tests/firestore.rules.test.ts tests/firestore_retention.test.ts\"",
     "test:security": "bun run test:security:metadata && bun run test:security:rules",
+    "db:prune": "bun scripts/prune-firestore-retention.ts",
     "test:youtube-defaults": "bun test tests/youtube_upload_defaults.test.ts",
     "test:youtube-oauth": "bun test tests/youtube_oauth_desktop_client.test.ts",
     "backend:replay:dev": "firebase emulators:exec --only firestore --project leaguerecord \"bun backend/replay-share-server.ts\"",
@@ -111,6 +112,7 @@
     ],
     "win": {
       "icon": "app-icon.ico",
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",
@@ -124,7 +126,7 @@
       {
         "provider": "github",
         "owner": "arasan95",
-        "repo": "League_Record_custom",
+        "repo": "league_record_custom",
         "releaseType": "release"
       }
     ],

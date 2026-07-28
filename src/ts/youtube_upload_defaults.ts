@@ -50,6 +50,63 @@ function shortPatch(version: string | undefined): string {
     return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : String(version || "Unknown");
 }
 
+function isTftMetadata(metadata: GameMetadata): boolean {
+    const queueName = String(metadata.queue?.name || "").toUpperCase();
+    if (queueName.includes("TFT") || queueName.includes("TEAMFIGHT TACTICS")) return true;
+    return metadata.participants.some((participant) => (
+        Number.isFinite(participant.placement)
+        || Array.isArray(participant.traits)
+        || Array.isArray(participant.units)
+    ));
+}
+
+function cleanTftName(value: string): string {
+    return String(value || "")
+        .replace(/^TFT\d+_Item_/, "")
+        .replace(/^TFT_Item_/, "")
+        .replace(/^TFT\d+_/, "")
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .trim();
+}
+
+function buildTftUploadDefaults(metadata: GameMetadata): YouTubeUploadDefaults {
+    const self = metadata.participants.find((participant) => participant.participantId === metadata.participantId)
+        ?? metadata.participants[0]
+        ?? null;
+    const placement = Math.max(1, Math.min(8, Number(self?.placement) || 8));
+    const traits = (Array.isArray(self?.traits) ? [...self.traits] : [])
+        .filter((trait) => trait.tierCurrent > 0)
+        .sort((left, right) => right.tierCurrent - left.tierCurrent || right.numUnits - left.numUnits);
+    const units = (Array.isArray(self?.units) ? self.units : []).slice(0, 10);
+    const primaryTrait = traits[0];
+    const patch = shortPatch(metadata.gameVersion);
+    const titleParts = [
+        `TFT #${placement}`,
+        primaryTrait ? `${cleanTftName(primaryTrait.name)} ${primaryTrait.numUnits}` : "Final Composition",
+        patch !== "Unknown" ? `Patch ${patch}` : "",
+    ].filter(Boolean);
+    const traitLine = traits.length > 0
+        ? traits.slice(0, 7).map((trait) => `${cleanTftName(trait.name)} (${trait.numUnits})`).join(" / ")
+        : "No trait data";
+    const unitLine = units.length > 0
+        ? units.map((unit) => `${cleanTftName(unit.name || unit.characterId)}${unit.tier > 1 ? ` ${"★".repeat(Math.min(3, unit.tier))}` : ""}`).join(" / ")
+        : "No unit data";
+    const description = [
+        "Teamfight Tactics match recorded with LeagueRecord.",
+        `Placement: #${placement}`,
+        `Traits: ${traitLine}`,
+        `Final Composition: ${unitLine}`,
+        "",
+        "LeagueRecord Electron",
+        APP_HOMEPAGE_URL,
+        "#TeamfightTactics #TFT #LeagueRecord",
+    ].join("\n").slice(0, 5000);
+    return {
+        title: titleParts.join(" | ").slice(0, 100),
+        description,
+    };
+}
+
 function formatChapterTime(totalSeconds: number): string {
     const seconds = Math.max(0, Math.floor(totalSeconds));
     const hours = Math.floor(seconds / 3600);
@@ -105,6 +162,9 @@ export async function buildYouTubeUploadDefaults(
     resolveChampionName: ChampionNameResolver,
     options: { isClip?: boolean } = {},
 ): Promise<YouTubeUploadDefaults> {
+    if (isTftMetadata(metadata)) {
+        return buildTftUploadDefaults(metadata);
+    }
     const self = metadata.participants.find((participant) => participant.participantId === metadata.participantId) ?? null;
     if (!self) {
         return {

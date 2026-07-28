@@ -564,13 +564,16 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
     const { filePath, stat } = await resolveVideo(videoId);
     const data = validateMetadata(metadata, filePath);
     const controller = new AbortController();
-    activeJob = { state: "thumbnail_preparing", sourceVideoId: videoId, fileName: path.basename(filePath), totalBytes: stat.size, sentBytes: 0, youtubeVideoId: null, youtubeUrl: null, error: null, thumbnailStatus: "pending", thumbnailError: null, controller };
+    const skipThumbnail = Boolean(thumbnail?.skip);
+    activeJob = { state: skipThumbnail ? "preparing" : "thumbnail_preparing", sourceVideoId: videoId, fileName: path.basename(filePath), totalBytes: stat.size, sentBytes: 0, youtubeVideoId: null, youtubeUrl: null, error: null, thumbnailStatus: skipThumbnail ? "skipped" : "pending", thumbnailError: null, controller };
     publish();
     try {
-      const preparedThumbnail = await createThumbnail(thumbnail?.metadata, {
-        isClip: Boolean(thumbnail?.isClip),
-        customThumbnailPath: thumbnail?.customThumbnailPath,
-      });
+      const preparedThumbnail = skipThumbnail
+        ? null
+        : await createThumbnail(thumbnail?.metadata, {
+            isClip: Boolean(thumbnail?.isClip),
+            customThumbnailPath: thumbnail?.customThumbnailPath,
+          });
       activeJob.state = "preparing";
       publish();
       const accessToken = await getAccessToken();
@@ -614,16 +617,21 @@ function createYouTubeService({ app, shell, safeStorage, fs, fsNode, getSettings
       activeJob.sentBytes = stat.size;
       activeJob.youtubeVideoId = result.id;
       activeJob.youtubeUrl = `https://youtu.be/${result.id}`;
-      activeJob.state = "thumbnail_uploading";
-      publish();
-      try {
-        await uploadThumbnailData(result.id, preparedThumbnail, accessToken, controller.signal);
-        activeJob.thumbnailStatus = "succeeded";
-      } catch (error) {
-        if (error?.name === "AbortError") throw error;
-        activeJob.thumbnailStatus = "failed";
-        activeJob.thumbnailError = error?.message || "サムネイルを設定できませんでした。";
-        await log(`youtube thumbnail warning video=${result.id} code=${error?.code || "unknown"}`);
+      if (preparedThumbnail) {
+        activeJob.state = "thumbnail_uploading";
+        publish();
+        try {
+          await uploadThumbnailData(result.id, preparedThumbnail, accessToken, controller.signal);
+          activeJob.thumbnailStatus = "succeeded";
+        } catch (error) {
+          if (error?.name === "AbortError") throw error;
+          activeJob.thumbnailStatus = "failed";
+          activeJob.thumbnailError = error?.message || "サムネイルを設定できませんでした。";
+          await log(`youtube thumbnail warning video=${result.id} code=${error?.code || "unknown"}`);
+        }
+      } else {
+        activeJob.thumbnailStatus = "skipped";
+        await log(`youtube thumbnail skipped video=${result.id}`);
       }
       activeJob.state = "processing";
       activeJob.processingStatus = "pending";
