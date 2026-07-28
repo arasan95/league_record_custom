@@ -1,17 +1,10 @@
 {
     "notes": [
-        "[日本語]",
-        "1.2.9 の主な変更点:",
-        "- アプリ内の更新情報にHTMLタグが文字として表示される問題を修正しました",
-        "- 更新情報を読みやすいプレーンテキストで表示するようにしました",
-        "- Webサイトの更新履歴をGitHub Releasesから自動取得するよう改善しました",
-        "- Webサイトの追加予定機能に最新のプレリリース内容を自動表示するよう改善しました",
-        "",
-        "[English]",
-        "Highlights in 1.2.9:",
-        "- Fixed HTML tags being shown as text in the in-app update notes",
-        "- Improved update notes by converting them to readable plain text",
-        "- Updated the website to load release history automatically from GitHub Releases",
-        "- Updated the website to show the latest pre-release notes under planned features"
+        "- GitHub Actions で Electron 用インストーラーをビルドできるようにしました",
+        "- Electron 版への移行により、音声出力先やタスクマネージャーで WebView2 ではなく LeagueRecord Electron として表示されるようになりました",
+        "- 共有動画にコメントできるコメント機能を追加しました",
+        "- YouTube への動画アップロード機能を追加しました",
+        "- YouTube 動画と試合データを共有できる動画共有機能を追加しました",
+        "- ユーザー間でコメントを共有できるコメント共有機能を追加しました"
     ]
 }
