@@ -9,6 +9,16 @@ on:
         description: "Electron version to build, for example 1.2.0"
         required: true
         type: string
+      draft:
+        description: "Create a draft release instead of publishing it immediately"
+        required: true
+        default: false
+        type: boolean
+      prerelease:
+        description: "Publish this version as a test build even without a semver prerelease suffix"
+        required: true
+        default: false
+        type: boolean
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -63,19 +73,17 @@ jobs:
           $pkg | ConvertTo-Json -Depth 100 | Set-Content $pkgPath -Encoding UTF8
           npm install --package-lock-only --ignore-scripts
 
-      - run: bun install --linker=isolated
+      # Hoist peer dependencies so Firebase Rules Unit Testing and test code
+      # share the same Firestore SDK instance.
+      - run: bun install --linker=hoisted
 
       - name: Verify release secrets
         shell: pwsh
         env:
-          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
           YOUTUBE_OAUTH_CLIENT_ID: ${{ secrets.YOUTUBE_OAUTH_CLIENT_ID }}
           YOUTUBE_OAUTH_CLIENT_SECRET: ${{ secrets.YOUTUBE_OAUTH_CLIENT_SECRET }}
         run: |
           $required = @(
-            "WINDOWS_CERTIFICATE_BASE64",
-            "WINDOWS_CERTIFICATE_PASSWORD",
             "YOUTUBE_OAUTH_CLIENT_ID",
             "YOUTUBE_OAUTH_CLIENT_SECRET"
           )
@@ -90,26 +98,8 @@ jobs:
         env:
           LEAGUE_RECORD_CARGO_TOOLCHAIN: "+nightly"
           LEAGUE_RECORD_CARGO_BINDEPS: "1"
-          CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
           YOUTUBE_OAUTH_CLIENT_ID: ${{ secrets.YOUTUBE_OAUTH_CLIENT_ID }}
           YOUTUBE_OAUTH_CLIENT_SECRET: ${{ secrets.YOUTUBE_OAUTH_CLIENT_SECRET }}
-
-      - name: Verify Windows signatures
-        shell: pwsh
-        run: |
-          $files = Get-ChildItem -Path "release-electron" -Filter "*.exe" -File -Recurse
-          if ($files.Count -eq 0) {
-            Write-Error "No signed Windows executables were produced."
-            exit 1
-          }
-          foreach ($file in $files) {
-            $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
-            if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-              Write-Error "Invalid Authenticode signature: $($file.Name) ($($signature.Status))"
-              exit 1
-            }
-          }
 
       - name: Stage Electron artifacts
         shell: pwsh
@@ -117,22 +107,39 @@ jobs:
           $stageDir = ".artifacts/electron"
           New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
 
-          $setup = Get-ChildItem -Path "release-electron" -Filter "LeagueRecordElectron-Setup-*.exe" -File |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
-          if ($null -eq $setup) {
-            Write-Error "Electron installer was not found in release-electron."
+          $version = "${{ steps.version.outputs.version }}"
+          $setupName = "LeagueRecordElectron-Setup-$version.exe"
+          $setupPath = Join-Path "release-electron" $setupName
+          $blockmapPath = "$setupPath.blockmap"
+          $updateMetadataPath = Join-Path "release-electron" "latest.yml"
+
+          if (-not (Test-Path -LiteralPath $setupPath)) {
+            Write-Error "Expected Electron installer was not found: $setupPath"
+            exit 1
+          }
+          if (-not (Test-Path -LiteralPath $blockmapPath)) {
+            Write-Error "Electron updater blockmap was not found: $blockmapPath"
+            exit 1
+          }
+          if (-not (Test-Path -LiteralPath $updateMetadataPath)) {
+            Write-Error "Electron updater metadata was not found: $updateMetadataPath"
             exit 1
           }
 
-          Copy-Item -Force -LiteralPath $setup.FullName -Destination (Join-Path $stageDir $setup.Name)
-
-          $blockmapPath = "$($setup.FullName).blockmap"
-          if (Test-Path -LiteralPath $blockmapPath) {
-            Copy-Item -Force -LiteralPath $blockmapPath -Destination (Join-Path $stageDir "$($setup.Name).blockmap")
-          } else {
-            Write-Warning "Blockmap was not found: $blockmapPath"
+          $updateMetadata = Get-Content -LiteralPath $updateMetadataPath -Raw -Encoding UTF8
+          $escapedVersion = [Regex]::Escape($version)
+          if ($updateMetadata -notmatch "(?m)^version:\s*['`"]?$escapedVersion['`"]?\s*$") {
+            Write-Error "latest.yml does not describe Electron version $version."
+            exit 1
           }
+          if (-not $updateMetadata.Contains($setupName)) {
+            Write-Error "latest.yml does not reference the expected installer: $setupName"
+            exit 1
+          }
+
+          Copy-Item -Force -LiteralPath $setupPath -Destination (Join-Path $stageDir $setupName)
+          Copy-Item -Force -LiteralPath $blockmapPath -Destination (Join-Path $stageDir "$setupName.blockmap")
+          Copy-Item -Force -LiteralPath $updateMetadataPath -Destination (Join-Path $stageDir "latest.yml")
 
       - name: Build Electron release body
         id: release_body
@@ -168,6 +175,42 @@ jobs:
           artifacts: "./.artifacts/electron/*"
           allowUpdates: true
           replacesArtifacts: true
-          draft: ${{ github.event_name == 'workflow_dispatch' }}
-          prerelease: true
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
+          prerelease: ${{ contains(steps.version.outputs.version, '-') || (github.event_name == 'workflow_dispatch' && inputs.prerelease) }}
+          makeLatest: ${{ (contains(steps.version.outputs.version, '-') || (github.event_name == 'workflow_dispatch' && inputs.prerelease)) && 'false' || 'true' }}
           body: ${{ steps.release_body.outputs.body }}
+
+      - name: Verify published Electron release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+          $version = "${{ steps.version.outputs.version }}"
+          $isPrerelease = "${{ contains(steps.version.outputs.version, '-') || (github.event_name == 'workflow_dispatch' && inputs.prerelease) }}" -eq "true"
+          $isDraft = "${{ github.event_name == 'workflow_dispatch' && inputs.draft }}" -eq "true"
+          $expectedAssets = @(
+            "LeagueRecordElectron-Setup-$version.exe",
+            "LeagueRecordElectron-Setup-$version.exe.blockmap",
+            "latest.yml"
+          )
+
+          $release = gh api "repos/${{ github.repository }}/releases/tags/$tag" | ConvertFrom-Json
+          $assetNames = @($release.assets | ForEach-Object { $_.name })
+          $missing = @($expectedAssets | Where-Object { $_ -notin $assetNames })
+          if ($missing.Count -gt 0) {
+            Write-Error "Published Electron release is missing updater assets: $($missing -join ', ')"
+            exit 1
+          }
+          if ([bool]$release.prerelease -ne $isPrerelease) {
+            Write-Error "Release prerelease state does not match version $version."
+            exit 1
+          }
+
+          if (-not $isDraft -and -not $isPrerelease) {
+            $latest = gh api "repos/${{ github.repository }}/releases/latest" | ConvertFrom-Json
+            if ($latest.tag_name -ne $tag) {
+              Write-Error "GitHub latest release is $($latest.tag_name), expected $tag."
+              exit 1
+            }
+          }

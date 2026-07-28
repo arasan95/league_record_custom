@@ -23,9 +23,29 @@ electron/youtube/official-client.generated.cjs
 .artifacts/
 .firebase/
 
+# Local test suite and maintainer-only working files.
+# Keep these files on the developer machine, but do not publish them.
+/tests/
+/local-notes/
+/ARCHITECTURE_AUDIT_PHASE1.md
+/ci/VT_TRIAGE_JA.md
+/assets/icons/share/x-logo.zip
+
 # Maintainer-only notes and compliance submission drafts.
 # Documentation is kept locally and is not published with the source repository.
 docs/
+
+# Secrets and machine-local environment files.
+.env
+.env.*
+!.env.example
+client_secret*.json
+firebase-adminsdk*.json
+firebase-service-account*.json
+service-account*.json
+*.p12
+*.pfx
+*.key
 
 # Editor directories and files
 .vscode/*

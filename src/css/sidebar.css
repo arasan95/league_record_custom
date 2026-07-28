@@ -456,34 +456,14 @@
 }
 
 .youtube-replay-remove {
-    position: absolute;
-    top: 7px;
-    right: 7px;
-    z-index: 20;
-    display: none;
-    width: 24px;
-    height: 24px;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid #555;
-    border-radius: 5px;
-    background: rgba(20, 20, 20, 0.94);
-    color: #bbb;
-    font-size: 14px;
-    line-height: 1;
+    border: 0;
     cursor: pointer;
-}
-
-#youtube-replay-history li:hover .youtube-replay-remove,
-#youtube-replay-history li:focus-within .youtube-replay-remove {
-    display: flex;
 }
 
 .youtube-replay-remove:hover,
 .youtube-replay-remove:focus-visible {
-    border-color: #d66;
-    color: #fff;
-    background: #8b2f2f;
+    color: red;
+    background: rgba(0, 0, 0, 0.5);
     outline: none;
 }
 
@@ -1109,10 +1089,13 @@
 }
 
 #youtube-replay-history .youtube-replay-actions {
-    right: 38px;
+    top: 5px;
+    right: 5px;
+    display: none;
+    gap: 8px;
 }
 
-.favorite, .share, .rename, .delete, .delete-video-only, .replay-action {
+.favorite, .share, .rename, .delete, .delete-video-only, .replay-action, .youtube-owned-play {
     font-size: 16px;
     color: #666;
     transition: color 0.2s;
@@ -1127,15 +1110,42 @@
 }
 
 .youtube-replay-actions .replay-action {
+    appearance: none;
+    box-sizing: border-box;
+    min-width: 20px;
+    width: auto;
+    height: 25px;
+    margin: 0;
     border: 0;
-    font: inherit;
+    border-radius: 3px;
+    padding: 0 4px;
+    color: #666;
+    background: rgba(0, 0, 0, 0.5);
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1;
     cursor: pointer;
 }
 
 .youtube-replay-open:hover,
 .youtube-replay-open:focus-visible {
-    color: #f5f5f5;
-    background: rgba(80, 80, 80, 0.8);
+    color: #7dd3fc;
+    background: rgba(0, 0, 0, 0.5);
+    outline: none;
+}
+
+.youtube-owned-play {
+    border: 0;
+    color: #666;
+    font: 700 10px/1 Inter, sans-serif;
+    cursor: pointer;
+}
+
+.youtube-owned-play:hover,
+.youtube-owned-play:focus-visible {
+    color: #ff85bd;
+    background: rgba(0, 0, 0, 0.5);
     outline: none;
 }
 

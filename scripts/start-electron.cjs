@@ -6,7 +6,11 @@ const electronBin = require("electron");
 const root = path.resolve(__dirname, "..");
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
-env.LR_ELECTRON_DEV = "1";
+if (process.argv.includes("--dev-server")) {
+  env.LR_ELECTRON_DEV = "1";
+} else {
+  delete env.LR_ELECTRON_DEV;
+}
 
 function findRcedit(projectDir) {
   const fallback = path.join(projectDir, "node_modules", "electron-winstaller", "vendor", "rcedit.exe");

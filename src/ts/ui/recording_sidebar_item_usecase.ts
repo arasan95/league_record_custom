@@ -48,6 +48,7 @@ import {
 import { getText } from "../i18n";
 import { isFavorite, toVideoName } from "../util";
 import { getShortQueueLabel } from "./queue_helpers";
+import { requestOwnedYouTubeReplay } from "./youtube_replay_sidebar_usecase";
 import {
     calcCsPerMin,
     createClipIconElement,
@@ -119,28 +120,64 @@ function createYouTubeUploadBadge(): SVGSVGElement {
     return badge;
 }
 
+function createOwnedYouTubeReplayButton(youtubeVideoId: string): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "youtube-owned-play";
+    button.dataset.youtubeVideoId = youtubeVideoId;
+    const title = uiText(
+        "共有プレイヤーの「自分の投稿」で再生",
+        'Play from "My Uploads" in the shared player',
+    );
+    button.title = title;
+    button.setAttribute("aria-label", title);
+    button.textContent = "YT";
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        requestOwnedYouTubeReplay(youtubeVideoId);
+    });
+    return button;
+}
+
+function syncYouTubeUploadControls(item: HTMLElement): void {
+    const sourceVideoId = item.dataset.videoId || "";
+    const uploaded = sourceVideoId ? findYouTubeUploadForSource(sourceVideoId) : null;
+    let container = item.querySelector<HTMLElement>(".sidebar-badges");
+    const badge = item.querySelector<HTMLElement>(".sidebar-youtube-badge");
+    const playButton = item.querySelector<HTMLButtonElement>(".youtube-owned-play");
+    if (!uploaded) {
+        badge?.remove();
+        playButton?.remove();
+        return;
+    }
+    if (!container) {
+        container = document.createElement("div");
+        container.className = "sidebar-badges sidebar-upload-badges";
+        item.querySelector(".sidebar-actions")?.before(container);
+    }
+    if (!badge) {
+        container.append(createYouTubeUploadBadge());
+    } else {
+        const title = uiText("YouTubeへアップロード済み", "Uploaded to YouTube");
+        badge.setAttribute("aria-label", title);
+        badge.title = title;
+    }
+    if (!playButton || playButton.dataset.youtubeVideoId !== uploaded.youtubeVideoId) {
+        playButton?.remove();
+        item.querySelector(".sidebar-actions")?.prepend(createOwnedYouTubeReplayButton(uploaded.youtubeVideoId));
+    } else {
+        const title = uiText(
+            "共有プレイヤーの「自分の投稿」で再生",
+            'Play from "My Uploads" in the shared player',
+        );
+        playButton.title = title;
+        playButton.setAttribute("aria-label", title);
+    }
+}
+
 function refreshYouTubeUploadBadges(): void {
     document.querySelectorAll<HTMLElement>("li[data-video-id]").forEach((item) => {
-        const sourceVideoId = item.dataset.videoId || "";
-        const uploaded = Boolean(sourceVideoId && findYouTubeUploadForSource(sourceVideoId));
-        let container = item.querySelector<HTMLElement>(".sidebar-badges");
-        const badge = item.querySelector<HTMLElement>(".sidebar-youtube-badge");
-        if (!uploaded) {
-            badge?.remove();
-            return;
-        }
-        if (!container) {
-            container = document.createElement("div");
-            container.className = "sidebar-badges sidebar-upload-badges";
-            item.querySelector(".sidebar-actions")?.before(container);
-        }
-        if (!badge) {
-            container.append(createYouTubeUploadBadge());
-        } else {
-            const title = uiText("YouTubeへアップロード済み", "Uploaded to YouTube");
-            badge.setAttribute("aria-label", title);
-            badge.title = title;
-        }
+        syncYouTubeUploadControls(item);
     });
 }
 
@@ -847,10 +884,12 @@ async function showShareModal(recording: Recording): Promise<void> {
         previewThumbnail.type = "button";
         previewThumbnail.textContent = tr("サムネイルをプレビュー", "Preview Thumbnail");
         let customThumbnailPath: string | null = null;
+        let skipThumbnail = false;
         const thumbnailPicker = document.createElement("div");
         thumbnailPicker.style.display = "flex";
         thumbnailPicker.style.gap = "8px";
         thumbnailPicker.style.alignItems = "center";
+        thumbnailPicker.style.flexWrap = "wrap";
         const thumbnailPathDisplay = document.createElement("input");
         thumbnailPathDisplay.className = "recording-thumbnail-path";
         thumbnailPathDisplay.readOnly = true;
@@ -866,8 +905,10 @@ async function showShareModal(recording: Recording): Promise<void> {
         browseThumbnail.onclick = async () => {
             const selected = await chooseYouTubeThumbnail();
             if (!selected) return;
+            skipThumbnail = false;
             customThumbnailPath = selected;
             thumbnailPathDisplay.value = selected;
+            previewThumbnail.disabled = false;
             thumbnailPreviewImage.hidden = true;
             previewThumbnail.textContent = tr("サムネイルをプレビュー", "Preview Thumbnail");
         };
@@ -876,12 +917,30 @@ async function showShareModal(recording: Recording): Promise<void> {
         clearThumbnail.className = "recording-share-option";
         clearThumbnail.textContent = tr("自動生成に戻す", "Use Automatic Thumbnail");
         clearThumbnail.onclick = () => {
+            skipThumbnail = false;
             customThumbnailPath = null;
             thumbnailPathDisplay.value = "";
+            thumbnailPathDisplay.placeholder = tr("自動生成サムネイルを使用", "Use automatically generated thumbnail");
+            previewThumbnail.disabled = false;
             thumbnailPreviewImage.hidden = true;
             previewThumbnail.textContent = tr("サムネイルをプレビュー", "Preview Thumbnail");
         };
-        thumbnailPicker.append(thumbnailPathDisplay, browseThumbnail, clearThumbnail);
+        const noThumbnail = document.createElement("button");
+        noThumbnail.type = "button";
+        noThumbnail.className = "recording-share-option recording-thumbnail-none";
+        noThumbnail.textContent = tr("サムネイルなし", "No Thumbnail");
+        noThumbnail.onclick = () => {
+            skipThumbnail = true;
+            customThumbnailPath = null;
+            thumbnailPathDisplay.value = tr("サムネイルを設定しません", "No thumbnail will be applied");
+            previewThumbnail.disabled = true;
+            thumbnailPreviewImage.hidden = true;
+            status.textContent = tr(
+                "サムネイルなしでYouTubeへアップロードします。",
+                "The video will be uploaded without applying a thumbnail.",
+            );
+        };
+        thumbnailPicker.append(thumbnailPathDisplay, browseThumbnail, clearThumbnail, noThumbnail);
         const thumbnailPreviewImage = document.createElement("img");
         thumbnailPreviewImage.alt = tr("YouTubeサムネイルのプレビュー", "YouTube thumbnail preview");
         thumbnailPreviewImage.hidden = true;
@@ -1048,6 +1107,7 @@ async function showShareModal(recording: Recording): Promise<void> {
         const finishCompletedUpload = async (job: YouTubeUploadJob) => {
             completedJob = job;
             const thumbnailFailed = job.thumbnailStatus === "failed";
+            const thumbnailSkipped = job.thumbnailStatus === "skipped";
             if (thumbnailFailed) {
                 thumbnailState = "failed";
                 retryThumbnail.style.display = "";
@@ -1061,6 +1121,11 @@ async function showShareModal(recording: Recording): Promise<void> {
                             "動画のアップロードと試合データ登録は完了しました。サムネイルは設定できませんでした。",
                             "The video upload and match-data publishing completed, but the thumbnail could not be applied.",
                         )
+                        : thumbnailSkipped
+                        ? tr(
+                            "YouTubeへのアップロードと試合データ登録が完了しました。サムネイルは設定していません。",
+                            "YouTube upload and match-data publishing completed without a thumbnail.",
+                        )
                         : tr(
                             "YouTubeへのアップロード、サムネイル設定、試合データ登録が完了しました。",
                             "YouTube upload, thumbnail setup, and match-data publishing completed.",
@@ -1073,6 +1138,16 @@ async function showShareModal(recording: Recording): Promise<void> {
                 ? tr(
                     "動画のアップロードは完了しましたが、サムネイルは設定できませんでした。試合データは登録していません。",
                     "The video upload completed, but the thumbnail could not be applied. Match data was not published.",
+                )
+                : thumbnailSkipped && job.processingStatus === "pending"
+                ? tr(
+                    "サムネイルなしで動画をアップロードしました。YouTube側では動画処理が引き続き保留中です。",
+                    "The video was uploaded without a thumbnail. YouTube is still processing the video.",
+                )
+                : thumbnailSkipped
+                ? tr(
+                    "サムネイルなしでYouTubeへのアップロードが完了しました。試合データは登録していません。",
+                    "YouTube upload completed without a thumbnail. Match data was not published.",
                 )
                 : job.processingStatus === "pending"
                 ? tr(
@@ -1114,7 +1189,9 @@ async function showShareModal(recording: Recording): Promise<void> {
                 uploadedVideoId.hidden = false;
                 rememberYouTubeUpload(videoId, job.youtubeVideoId);
                 completedJob = job;
-                if (job.state === "failed" || job.thumbnailStatus === "failed") retryThumbnail.style.display = "";
+                if (job.thumbnailStatus === "failed" || (job.state === "failed" && job.thumbnailStatus !== "skipped")) {
+                    retryThumbnail.style.display = "";
+                }
             }
             if (job.state === "completed" && job.youtubeUrl) {
                 openVideo.style.display = "";
@@ -1190,6 +1267,7 @@ async function showShareModal(recording: Recording): Promise<void> {
                     metadata: recording.metadata,
                     isClip: isClipUpload,
                     customThumbnailPath,
+                    skip: skipThumbnail,
                 })
                     .then(showJob)
                     .catch((error) => {
@@ -1917,14 +1995,7 @@ export function createRecordingSidebarItem(input: {
         li.append(...displayContent);
     }
     li.append(actionsDiv);
-    if (findYouTubeUploadForSource(recording.videoId)) {
-        let badgeContainer = li.querySelector<HTMLElement>(".sidebar-badges");
-        if (!badgeContainer) {
-            badgeContainer = createEl("div", {}, { class: "sidebar-badges sidebar-upload-badges" });
-            actionsDiv.before(badgeContainer);
-        }
-        if (!badgeContainer.querySelector(".sidebar-youtube-badge")) badgeContainer.append(createYouTubeUploadBadge());
-    }
+    syncYouTubeUploadControls(li);
     scheduleImageLoadForItem?.(li);
     return li;
 }

@@ -23,11 +23,28 @@ export function convertFileSrc(filePath: string): string {
         return (window as any).__TAURI_INTERNALS__.convertFileSrc(filePath);
     }
     if (getBridge()) {
-        return toFileUrl(filePath);
+        return toLrFileUrl(filePath);
     }
+    return toLrFileUrl(filePath);
+}
+
+function toLrFileUrl(filePath: string): string {
     const normalized = filePath.replace(/\\/g, "/");
+    if (normalized.startsWith("//")) {
+        const withoutPrefix = normalized.slice(2);
+        const slashIndex = withoutPrefix.indexOf("/");
+        if (slashIndex === -1) return `lr-file://${encodeURIComponent(withoutPrefix)}/`;
+        const host = withoutPrefix.slice(0, slashIndex);
+        const rest = withoutPrefix.slice(slashIndex + 1);
+        return `lr-file://${encodeURIComponent(host)}/${encodePathSegments(rest)}`;
+    }
+    if (/^[a-zA-Z]:\//.test(normalized)) {
+        const drive = normalized.slice(0, 2);
+        const rest = normalized.slice(3);
+        return `lr-file:///${drive}/${encodePathSegments(rest)}`;
+    }
     const trimmed = normalized.replace(/^\/+/, "");
-    return `lr-file:///${encodeURI(trimmed)}`;
+    return `lr-file:///${encodePathSegments(trimmed)}`;
 }
 
 function encodePathSegments(path: string): string {
@@ -35,23 +52,4 @@ function encodePathSegments(path: string): string {
         .split("/")
         .map((part) => encodeURIComponent(part))
         .join("/");
-}
-
-function toFileUrl(filePath: string): string {
-    const normalized = filePath.replace(/\\/g, "/");
-    if (/^\/\//.test(normalized)) {
-        const withoutPrefix = normalized.slice(2);
-        const slashIndex = withoutPrefix.indexOf("/");
-        if (slashIndex === -1) return `file://${encodeURIComponent(withoutPrefix)}`;
-        const host = withoutPrefix.slice(0, slashIndex);
-        const path = withoutPrefix.slice(slashIndex + 1);
-        return `file://${host}/${encodePathSegments(path)}`;
-    }
-    if (/^[a-zA-Z]:\//.test(normalized)) {
-        const drive = normalized.slice(0, 2);
-        const rest = normalized.slice(3);
-        return `file:///${drive}/${encodePathSegments(rest)}`;
-    }
-    const absolutePath = normalized.startsWith("/") ? normalized : `/${normalized}`;
-    return `file://${encodePathSegments(absolutePath)}`;
 }

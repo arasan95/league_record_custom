@@ -67,7 +67,7 @@ let electronRestartTimer = null;
 let shuttingDown = false;
 
 function startElectron() {
-  const child = spawnChild("node", ["scripts/start-electron.cjs"]);
+  const child = spawnChild("node", ["scripts/start-electron.cjs", "--dev-server"]);
   electron = child;
   child.on("exit", (code) => {
     if (!shuttingDown && electron === child && code !== null) {
@@ -99,6 +99,7 @@ function watchElectronMain() {
   const watchTargets = [
     path.join(root, "electron"),
     path.join(root, "scripts", "start-electron.cjs"),
+    path.join(root, "package.json"),
   ];
   for (const target of watchTargets) {
     try {
@@ -137,8 +138,6 @@ waitForServer(devUrl)
     if (watchElectronMainEnabled) {
       console.log("Electron main-process auto-restart is enabled.");
       watchElectronMain();
-    } else {
-      console.log("Electron main-process auto-restart is disabled. Use electron:dev:watch to enable it.");
     }
     startElectron();
   })
