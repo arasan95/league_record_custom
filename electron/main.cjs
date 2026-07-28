@@ -584,11 +584,50 @@ function compareAppVersions(left, right) {
   return 0;
 }
 
+function decodeReleaseNoteEntities(value) {
+  const named = {
+    amp: "&",
+    apos: "'",
+    gt: ">",
+    lt: "<",
+    nbsp: " ",
+    quot: '"',
+  };
+  return String(value).replace(/&(#(?:x[0-9a-f]+|\d+)|[a-z]+);/gi, (match, entity) => {
+    if (entity[0] !== "#") return named[entity.toLowerCase()] ?? match;
+    const hexadecimal = entity[1]?.toLowerCase() === "x";
+    const codePoint = Number.parseInt(entity.slice(hexadecimal ? 2 : 1), hexadecimal ? 16 : 10);
+    if (!Number.isFinite(codePoint) || codePoint < 0 || codePoint > 0x10ffff) return match;
+    try {
+      return String.fromCodePoint(codePoint);
+    } catch {
+      return match;
+    }
+  });
+}
+
+function releaseNoteToPlainText(value) {
+  const source = String(value ?? "");
+  const text = /<\/?[a-z][\s\S]*>/i.test(source)
+    ? source
+      .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+      .replace(/<\s*li(?:\s[^>]*)?>/gi, "- ")
+      .replace(/<\s*\/\s*(?:p|li|ul|ol|div|h[1-6])\s*>/gi, "\n")
+      .replace(/<[^>]*>/g, "")
+    : source;
+  return decodeReleaseNoteEntities(text)
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function normalizeReleaseNotes(value) {
-  if (typeof value === "string") return value;
+  if (typeof value === "string") return releaseNoteToPlainText(value);
   if (Array.isArray(value)) {
     return value
-      .map((entry) => typeof entry?.note === "string" ? entry.note : "")
+      .map((entry) => typeof entry?.note === "string" ? releaseNoteToPlainText(entry.note) : "")
       .filter(Boolean)
       .join("\n\n");
   }
