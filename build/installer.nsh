@@ -8,6 +8,7 @@
 !define LR_PBM_SETMARQUEE 0x040A
 !define LR_GWL_STYLE -16
 !define LR_PBS_MARQUEE 0x00000008
+!define LR_INSTALL_COMPLETE_MARKER ".league-record-install-complete"
 !define MUI_HEADERIMAGE_BITMAP_STRETCH AspectFitHeight
 !define MUI_WELCOMEFINISHPAGE_BITMAP_STRETCH AspectFitHeight
 !define MUI_UNWELCOMEFINISHPAGE_BITMAP_STRETCH AspectFitHeight
@@ -55,30 +56,6 @@
         ${EndIf}
     ${EndIf}
 
-  lrCheckRecorderAgain:
-    ${nsProcess::FindProcess} "extprocess_recorder.exe" $R0
-    ${If} $R0 == 0
-      DetailPrint "$lrTextClosingRecorder"
-      ${nsProcess::CloseProcess} "extprocess_recorder.exe" $R0
-      Sleep 500
-      ${nsProcess::FindProcess} "extprocess_recorder.exe" $R0
-      ${If} $R0 == 0
-        ${nsProcess::KillProcess} "extprocess_recorder.exe" $R0
-        Sleep 800
-        ${nsProcess::FindProcess} "extprocess_recorder.exe" $R0
-      ${EndIf}
-    ${EndIf}
-    ${If} $R0 == 0
-      ${If} ${Silent}
-        Quit
-      ${Else}
-        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION \
-          "$lrTextCannotCloseRecorder" \
-          /SD IDCANCEL IDRETRY lrCheckRecorderAgain
-        Quit
-      ${EndIf}
-    ${EndIf}
-
     SetDetailsPrint both
     SetDetailsView show
     Call lrPrepareExistingInstall
@@ -98,9 +75,7 @@ Var lrExistingInstallPrepared
 Var lrProgressBar
 Var lrTextRunning
 Var lrTextCannotClose
-Var lrTextCannotCloseRecorder
 Var lrTextClosing
-Var lrTextClosingRecorder
 Var lrTextChooseTitle
 Var lrTextInstallTitle
 Var lrTextCurrentUser
@@ -132,9 +107,7 @@ Function lrLoadLocalizedText
   ${If} $LANGUAGE == 1041
     StrCpy $lrTextRunning "LeagueRecord が起動しています。$\r$\n$\r$\n［OK］を押すと安全に終了してインストールを続行します。"
     StrCpy $lrTextCannotClose "LeagueRecord を終了できませんでした。$\r$\nタスク マネージャーから終了して［再試行］を押してください。"
-    StrCpy $lrTextCannotCloseRecorder "録画用のバックグラウンドプロセスを終了できませんでした。$\r$\nタスク マネージャーから extprocess_recorder.exe を終了して［再試行］を押してください。"
     StrCpy $lrTextClosing "1/5  LeagueRecord を終了しています..."
-    StrCpy $lrTextClosingRecorder "1/5  録画用のバックグラウンドプロセスを終了しています..."
     StrCpy $lrTextChooseTitle "インストール方法の選択"
     StrCpy $lrTextInstallTitle "LeagueRecord のインストール"
     StrCpy $lrTextCurrentUser "現在のユーザー"
@@ -162,9 +135,7 @@ Function lrLoadLocalizedText
   ${Else}
     StrCpy $lrTextRunning "LeagueRecord is running.$\r$\n$\r$\nClick OK to close it safely and continue."
     StrCpy $lrTextCannotClose "LeagueRecord could not be closed.$\r$\nClose it from Task Manager, then click Retry."
-    StrCpy $lrTextCannotCloseRecorder "The recording background process could not be closed.$\r$\nEnd extprocess_recorder.exe in Task Manager, then click Retry."
     StrCpy $lrTextClosing "1/5  Closing LeagueRecord..."
-    StrCpy $lrTextClosingRecorder "1/5  Closing the recording background process..."
     StrCpy $lrTextChooseTitle "Choose how to install"
     StrCpy $lrTextInstallTitle "Install LeagueRecord"
     StrCpy $lrTextCurrentUser "Current user"
@@ -334,8 +305,20 @@ FunctionEnd
 
   ReadRegStr $lrExistingUserInstallDir HKCU "${INSTALL_REGISTRY_KEY}" InstallLocation
   ${If} $lrExistingUserInstallDir != ""
+  ${AndIf} ${FileExists} "$lrExistingUserInstallDir\LeagueRecordElectron.exe"
+  ${AndIf} ${FileExists} "$lrExistingUserInstallDir\Uninstall LeagueRecordElectron.exe"
+  ${AndIf} ${FileExists} "$lrExistingUserInstallDir\resources\${LR_INSTALL_COMPLETE_MARKER}"
     StrCpy $lrHasExistingUserInstall "1"
     StrCpy $lrInstallChoice "update"
+  ${Else}
+    # A registry entry alone can survive a cancelled/failed uninstall. Only a
+    # fully completed installation should offer Update/Reinstall.
+    StrCpy $lrExistingUserInstallDir ""
+    DeleteRegKey HKCU "${UNINSTALL_REGISTRY_KEY}"
+    !ifdef UNINSTALL_REGISTRY_KEY_2
+      DeleteRegKey HKCU "${UNINSTALL_REGISTRY_KEY_2}"
+    !endif
+    DeleteRegKey HKCU "${INSTALL_REGISTRY_KEY}"
   ${EndIf}
   ReadRegStr $lrLegacyMachineInstallDir HKLM "${INSTALL_REGISTRY_KEY}" InstallLocation
 
@@ -353,7 +336,7 @@ FunctionEnd
   # present. Older/failed installs can leave a partial libobs directory behind;
   # checking only for any file would preserve that broken state forever.
   ${If} $lrInstallChoice == "update"
-  ${AndIf} ${FileExists} "$INSTDIR\resources\libobs\extprocess_recorder.exe"
+  ${AndIf} ${FileExists} "$INSTDIR\resources\libobs\extprocess_recorder-${VERSION}.exe"
   ${AndIf} ${FileExists} "$INSTDIR\resources\libobs\obs.dll"
   ${AndIf} ${FileExists} "$INSTDIR\resources\libobs\obs-plugins\64bit\win-capture.dll"
   ${AndIf} ${FileExists} "$INSTDIR\resources\libobs\data\libobs\default.effect"
@@ -362,7 +345,13 @@ FunctionEnd
     DetailPrint "$lrTextInstallRuntime"
     RMDir /r "$INSTDIR\resources\libobs"
     SetOutPath "$INSTDIR\resources\libobs"
-    File /r "${PROJECT_DIR}\src-tauri\target\libobs\*.*"
+    # A recently executed recorder can remain image-locked by the Windows
+    # System process even after it exits. Install each app version under a new
+    # filename so repair/update never needs to overwrite that locked image.
+    File /r /x "extprocess_recorder.exe" "${PROJECT_DIR}\src-tauri\target\libobs\*.*"
+    ${IfNot} ${FileExists} "$INSTDIR\resources\libobs\extprocess_recorder-${VERSION}.exe"
+      File /oname=extprocess_recorder-${VERSION}.exe "${PROJECT_DIR}\src-tauri\target\libobs\extprocess_recorder.exe"
+    ${EndIf}
   ${EndIf}
 
   ${If} $lrInstallChoice == "update"
@@ -375,6 +364,9 @@ FunctionEnd
   ${EndIf}
 
   DetailPrint "$lrTextFinalize"
+  FileOpen $0 "$INSTDIR\resources\${LR_INSTALL_COMPLETE_MARKER}" w
+  FileWrite $0 "${VERSION}"
+  FileClose $0
   SetOutPath "$INSTDIR"
   ${If} $lrProgressBar != ""
     SendMessage $lrProgressBar ${LR_PBM_SETMARQUEE} 0 0
