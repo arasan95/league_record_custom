@@ -74,8 +74,9 @@ jobs:
           npm install --package-lock-only --ignore-scripts
 
       # Hoist peer dependencies so Firebase Rules Unit Testing and test code
-      # share the same Firestore SDK instance.
-      - run: bun install --linker=hoisted
+      # share the same Firestore SDK instance. Optional Firebase CLI dependencies
+      # such as re2 are not required to build the Electron installer.
+      - run: bun install --linker=hoisted --omit optional
 
       - name: Verify release secrets
         shell: pwsh
