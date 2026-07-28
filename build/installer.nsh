@@ -22,6 +22,7 @@
 # PowerShell check treats every process under $INSTDIR as the app and older
 # releases could report a false "cannot be closed" error.
 !macro customCheckAppRunning
+  !ifndef BUILD_UNINSTALLER
   lrCheckAppAgain:
     ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
     ${If} $R0 == 0
@@ -54,7 +55,6 @@
         ${EndIf}
     ${EndIf}
 
-  !ifndef BUILD_UNINSTALLER
     SetDetailsPrint both
     SetDetailsView show
     Call lrPrepareExistingInstall
@@ -101,7 +101,9 @@ Var lrTextInstallTooltip
 Var lrTextFinalize
 
 Function lrLoadLocalizedText
-  ${If} $LANGUAGE == ${LANG_JAPANESE}
+  # Use the Windows language ID directly. During electron-builder's temporary
+  # uninstaller compile, the named MUI language constants are not defined yet.
+  ${If} $LANGUAGE == 1041
     StrCpy $lrTextRunning "LeagueRecord が起動しています。$\r$\n$\r$\n［OK］を押すと安全に終了してインストールを続行します。"
     StrCpy $lrTextCannotClose "LeagueRecord を終了できませんでした。$\r$\nタスク マネージャーから終了して［再試行］を押してください。"
     StrCpy $lrTextClosing "1/5  LeagueRecord を終了しています..."
