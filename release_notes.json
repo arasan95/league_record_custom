@@ -1,17 +1,17 @@
 {
     "notes": [
         "[日本語]",
-        "1.2.7 の主な変更点:",
-        "- 共有動画にコメントできるコメント機能を追加しました",
-        "- YouTube への動画アップロード機能を追加しました",
-        "- YouTube 動画と試合データを共有できる動画共有機能を追加しました",
-        "- ユーザー間でコメントを共有できるコメント共有機能を追加しました",
+        "1.2.8 の主な変更点:",
+        "- Windowsインストーラーのレイアウトを改善し、不要なヘッダー画像を削除しました",
+        "- 録画ランタイムがWindowsにロックされていてもインストールと更新が完了するよう修正しました",
+        "- アンインストール後や失敗途中の残存データを正しく判定するよう修正しました",
+        "- Electron版の自動アップデート配布に対応しました",
         "",
         "[English]",
-        "Highlights in 1.2.7:",
-        "- Added comments for shared videos",
-        "- Added YouTube video uploads",
-        "- Added video sharing with YouTube videos and match data",
-        "- Added comment sharing between users"
+        "Highlights in 1.2.8:",
+        "- Improved the Windows installer layout and removed the unnecessary header image",
+        "- Fixed installation and updates when Windows keeps the recording runtime locked",
+        "- Fixed detection of remnants from uninstalls or incomplete installations",
+        "- Enabled Electron auto-update distribution"
     ]
 }
