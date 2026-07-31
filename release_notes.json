@@ -1,10 +1,11 @@
 {
     "notes": [
-        "- GitHub Actions で Electron 用インストーラーをビルドできるようにしました",
-        "- Electron 版への移行により、音声出力先やタスクマネージャーで WebView2 ではなく LeagueRecord Electron として表示されるようになりました",
-        "- 共有動画にコメントできるコメント機能を追加しました",
-        "- YouTube への動画アップロード機能を追加しました",
-        "- YouTube 動画と試合データを共有できる動画共有機能を追加しました",
-        "- ユーザー間でコメントを共有できるコメント共有機能を追加しました"
+        "[日本語]",
+        "主な変更点:",
+        "- プレイヤーのランクを取得できない不具合を修正しました",
+        "",
+        "[English]",
+        "Highlights:",
+        "- Fixed an issue where player ranks could not be retrieved"
     ]
 }
