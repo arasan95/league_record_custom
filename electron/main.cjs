@@ -2604,9 +2604,11 @@ function playersEqual(a, b) {
   return pa.gameName === pb.gameName && pa.tagLine === pb.tagLine;
 }
 
-function normalizeParticipant(participant, identities) {
+function normalizeParticipant(participant, identities, participantMetadata = new Map()) {
   const participantId = Number(participant?.participantId ?? participant?.participant_id ?? 0);
   const identity = identities.find((pi) => Number(pi?.participantId ?? pi?.participant_id ?? 0) === participantId);
+  const identityPlayer = identity?.player ? normalizePlayer(identity.player) : null;
+  const metadata = participantMetadata.get(participantId);
   const p = {
     participantId,
     teamId: Number(participant?.teamId ?? participant?.team_id ?? 0),
@@ -2616,11 +2618,12 @@ function normalizeParticipant(participant, identities) {
     stats: { ...defaultStats(), ...(participant?.stats ?? {}) },
     lane: String(participant?.timeline?.lane ?? "NONE"),
     role: String(participant?.timeline?.role ?? "NONE"),
-    summonerName: identity?.player ? `${normalizePlayer(identity.player).gameName}#${normalizePlayer(identity.player).tagLine}` : "Unknown",
+    summonerName: identityPlayer ? `${identityPlayer.gameName}#${identityPlayer.tagLine}` : "Unknown",
+    summonerId: identityPlayer?.summonerId ?? null,
     laneScore: 0,
     champLevel: participant?.champLevel ?? participant?.champ_level ?? 0,
-    summonerLevel: null,
-    rank: "Unranked",
+    summonerLevel: metadata?.summonerLevel ?? null,
+    rank: metadata?.rank ?? "Unranked",
   };
   for (const key of ["placement", "playersEliminated", "level", "traits", "units", "companion"]) {
     if (participant?.[key] !== undefined) p[key] = participant[key];
@@ -2975,6 +2978,42 @@ function formatLinkedRank(entry) {
   return `${tier}${division && division !== "NA" ? ` ${division}` : ""}`.slice(0, 32);
 }
 
+function soloRankFromStats(stats) {
+  const queueMap = stats?.queueMap && typeof stats.queueMap === "object" ? stats.queueMap : {};
+  const fromQueueMap = formatLinkedRank(queueMap.RANKED_SOLO_5x5);
+  if (fromQueueMap !== "UNRANKED") return fromQueueMap;
+
+  const queues = Array.isArray(stats?.queues) ? stats.queues : [];
+  const soloQueue = queues.find((entry) => String(entry?.queueType ?? entry?.queue_type ?? "").toUpperCase() === "RANKED_SOLO_5X5");
+  return formatLinkedRank(soloQueue);
+}
+
+async function fetchParticipantMetadata(identities) {
+  const entries = await Promise.all((identities ?? []).map(async (identity) => {
+    const participantId = Number(identity?.participantId ?? identity?.participant_id ?? 0);
+    const summonerId = normalizePlayer(identity?.player).summonerId;
+    if (!participantId || !summonerId) return [participantId, null];
+
+    try {
+      const summoner = await lcuRequest("GET", `/lol-summoner/v1/summoners/${summonerId}`);
+      const puuid = String(summoner?.puuid ?? summoner?.puuId ?? "").trim();
+      const summonerLevel = Number(summoner?.summonerLevel ?? summoner?.summoner_level ?? 0);
+      const rankedStats = puuid
+        ? await lcuRequest("GET", `/lol-ranked/v1/ranked-stats/${encodeURIComponent(puuid)}`).catch(() => null)
+        : null;
+      const rank = soloRankFromStats(rankedStats);
+      return [participantId, {
+        summonerLevel: Number.isFinite(summonerLevel) && summonerLevel > 0 ? summonerLevel : null,
+        rank: rank === "UNRANKED" ? "Unranked" : rank,
+      }];
+    } catch (error) {
+      await writeLog("metadata", `participant metadata unavailable participantId=${participantId}: ${String(error?.message || error)}`);
+      return [participantId, null];
+    }
+  }));
+  return new Map(entries.filter(([participantId, metadata]) => participantId && metadata));
+}
+
 async function getCurrentLolAccountForLink() {
   let summoner;
   try {
@@ -3020,6 +3059,7 @@ async function processRecordingMetadata(current, syntheticItemEvents = []) {
   const queue = await lcuRequest("GET", `/lol-game-queues/v1/queues/${Number(game.queueId ?? game.queue_id ?? 0)}`).catch(() => null);
   const identities = game.participantIdentities ?? game.participant_identities ?? [];
   const participantsRaw = game.participants ?? [];
+  const participantMetadata = await fetchParticipantMetadata(identities);
   const participantIdentity = identities.find((pi) => playersEqual(pi.player, player));
   const participantId = Number(participantIdentity?.participantId ?? participantIdentity?.participant_id ?? 0);
   const selfParticipant = participantsRaw.find((p) => Number(p.participantId ?? p.participant_id ?? 0) === participantId) ?? participantsRaw[0] ?? {};
@@ -3043,7 +3083,7 @@ async function processRecordingMetadata(current, syntheticItemEvents = []) {
       championName: "Unknown",
       stats: { ...defaultStats(), ...(selfParticipant.stats ?? {}) },
       participantId,
-      participants: participantsRaw.map((p) => normalizeParticipant(p, identities)),
+      participants: participantsRaw.map((p) => normalizeParticipant(p, identities, participantMetadata)),
       teams: game.teams ?? [],
       events,
       goldTimeline: buildGoldTimeline(timeline),
