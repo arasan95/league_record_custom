@@ -2,10 +2,10 @@
     "notes": [
         "[日本語]",
         "主な変更点:",
-        "- プレイヤーのランクを取得できない不具合を修正しました",
+        "- スコアボードで同一アイテムを複数購入した際、一部のアイテムが表示されない不具合を修正しました",
         "",
         "[English]",
         "Highlights:",
-        "- Fixed an issue where player ranks could not be retrieved"
+        "- Fixed an issue where some items were missing from the scoreboard after purchasing multiple copies of the same item"
     ]
 }

@@ -2174,8 +2174,22 @@ class RecorderController {
 
       for (const [id, count] of currCounts.entries()) {
         const before = prevCounts.get(id) ?? 0;
+        // An inventory can contain multiple copies of the same item.  Do not
+        // use `find()` for every copy: it always returns the first copy and
+        // assigns every generated event the same slot.  Those events are then
+        // indistinguishable from duplicates when metadata is merged.
+        const unmatchedPrevious = previous.filter((item) => item.itemId === id);
+        const addedItems = [];
+        for (const item of current.filter((candidate) => candidate.itemId === id)) {
+          const existingIndex = unmatchedPrevious.findIndex((previousItem) => previousItem.slot === item.slot);
+          if (existingIndex === -1) {
+            addedItems.push(item);
+          } else {
+            unmatchedPrevious.splice(existingIndex, 1);
+          }
+        }
         for (let i = 0; i < count - before; i += 1) {
-          const item = current.find((candidate) => candidate.itemId === id) ?? { itemId: id, slot: null };
+          const item = addedItems[i] ?? current.filter((candidate) => candidate.itemId === id)[before + i] ?? { itemId: id, slot: null };
           this.syntheticItemEvents.push({
             ItemPurchased: {
               participant_id: 0,
@@ -2191,8 +2205,18 @@ class RecorderController {
       }
       for (const [id, count] of prevCounts.entries()) {
         const after = currCounts.get(id) ?? 0;
+        const unmatchedCurrent = current.filter((item) => item.itemId === id);
+        const removedItems = [];
+        for (const item of previous.filter((candidate) => candidate.itemId === id)) {
+          const existingIndex = unmatchedCurrent.findIndex((currentItem) => currentItem.slot === item.slot);
+          if (existingIndex === -1) {
+            removedItems.push(item);
+          } else {
+            unmatchedCurrent.splice(existingIndex, 1);
+          }
+        }
         for (let i = 0; i < count - after; i += 1) {
-          const item = previous.find((candidate) => candidate.itemId === id) ?? { itemId: id, slot: null };
+          const item = removedItems[i] ?? previous.filter((candidate) => candidate.itemId === id)[after + i] ?? { itemId: id, slot: null };
           this.syntheticItemEvents.push({
             ItemSold: {
               participant_id: 0,
