@@ -46,6 +46,9 @@ pub async fn download_image(
     {
         return Err("Invalid path parameters".to_string());
     }
+    if !is_allowed_image_download_url(&url) {
+        return Err("Image download URL is not allowed".to_string());
+    }
 
     let app_dir = app_handle.path().app_local_data_dir().map_err(|e| e.to_string())?;
     let img_cache = app_dir.join("img_cache");
@@ -122,6 +125,20 @@ fn is_safe_path_segment(segment: &str) -> bool {
         && segment
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
+}
+
+fn is_allowed_image_download_url(url: &str) -> bool {
+    let Ok(parsed) = reqwest::Url::parse(url) else {
+        return false;
+    };
+    if parsed.scheme() != "https" {
+        return false;
+    }
+
+    matches!(
+        parsed.host_str(),
+        Some("ddragon.leagueoflegends.com" | "raw.communitydragon.org")
+    )
 }
 
 static LCU_WAD_ENTRIES_CACHE: OnceLock<Mutex<std::collections::HashMap<PathBuf, Arc<Vec<WadEntry>>>>> = OnceLock::new();

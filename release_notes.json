@@ -2,10 +2,10 @@
     "notes": [
         "[日本語]",
         "主な変更点:",
-        "- スコアボードで同一アイテムを複数購入した際、一部のアイテムが表示されない不具合を修正しました",
+        "- スコアボードのアイテム表示に関する不具合を修正しました",
         "",
         "[English]",
         "Highlights:",
-        "- Fixed an issue where some items were missing from the scoreboard after purchasing multiple copies of the same item"
+        "- Fixed an issue with item display on the scoreboard"
     ]
 }

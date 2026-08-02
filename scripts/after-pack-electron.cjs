@@ -90,19 +90,23 @@ module.exports = async function afterPack(context) {
     Uint8Array,
   });
   const packagedOAuth = generatedModule.exports;
-  if (
+  const youtubeDisabled = packagedOAuth?.disabled === true
+    && packagedOAuth?.clientId === ""
+    && packagedOAuth?.clientSecret === ""
+    && packagedOAuth?.publicClient === false;
+  if (!youtubeDisabled && (
     typeof packagedOAuth?.clientId !== "string"
     || !packagedOAuth.clientId.endsWith(".apps.googleusercontent.com")
     || typeof packagedOAuth?.clientSecret !== "string"
     || packagedOAuth.clientSecret.length === 0
     || packagedOAuth.publicClient !== true
-  ) {
+  )) {
     throw new Error("The generated official Desktop OAuth client module is invalid");
   }
-  if (
+  if (!youtubeDisabled && (
     generatedOAuthSource.includes(packagedOAuth.clientId)
     || generatedOAuthSource.includes(packagedOAuth.clientSecret)
-  ) {
+  )) {
     throw new Error("The generated official Desktop OAuth client module contains a plaintext credential value");
   }
 

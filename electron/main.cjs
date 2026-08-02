@@ -44,6 +44,7 @@ let activeLogFile = "";
 let tooltipSqlPromise = null;
 const tooltipLocaleJsonCache = new Map();
 let championLookupPromise = null;
+let championCacheRefreshInFlight = false;
 let appTray = null;
 let recorderController = null;
 let gameMonitor = null;
@@ -1934,6 +1935,7 @@ class RecorderController {
     this.playerNameToPid = new Map();
     this.pidToChampionId = new Map();
     this.playerInventory = new Map();
+    this.livePlayerPidByKey = new Map();
     this.syntheticItemEvents = [];
     this.lastLiveGameData = null;
     this.lastLiveEventId = 0;
@@ -1992,6 +1994,7 @@ class RecorderController {
     this.playerNameToPid = new Map();
     this.pidToChampionId = new Map();
     this.playerInventory = new Map();
+    this.livePlayerPidByKey = new Map();
     this.syntheticItemEvents = [];
     this.lastLiveGameData = null;
     this.lastLiveEventId = 0;
@@ -2068,6 +2071,7 @@ class RecorderController {
     if (isManualStop) broadcastAppEvent("ManualRecordingStopped", null);
     broadcastAppEvent("RecordingsChanged", null);
     broadcastAppEvent("RecordingFinished", [stripKnownExt(current.outputPath), Boolean(isManualStop)]);
+    void appendHonorReceivedMetadata(current.outputPath, current.gameId);
     return true;
   }
 
@@ -2084,8 +2088,9 @@ class RecorderController {
           if (!pid) continue;
           const championId = Number(p?.championId ?? 0);
           if (championId) pidToChampionId.set(pid, championId);
-          const summoner = normalizeIdentityKey(p?.summonerName ?? p?.gameName);
-          if (summoner) next.set(`team:${teamId}|summoner:${summoner}`, pid);
+          for (const summoner of identityAliases(p?.summonerName ?? p?.gameName)) {
+            if (summoner) next.set(`team:${teamId}|summoner:${summoner}`, pid);
+          }
           const riot1 = normalizeIdentityKey(p?.riotId);
           if (riot1) next.set(`team:${teamId}|riot:${riot1}`, pid);
           const riotName = normalizeIdentityKey(p?.riotIdGameName);
@@ -2154,14 +2159,20 @@ class RecorderController {
         }, 0);
       }
 
-      const itemEvent = buildSyntheticItemEventFromLiveEvent(event, players, gameTimeMs);
+      const itemEvent = buildSyntheticItemEventFromLiveEvent(event, players, gameTimeMs, (player) => this.resolveLivePlayerPidStable(player));
       if (!itemEvent) continue;
       this.syntheticItemEvents.push(itemEvent);
       standardItemEvents += 1;
     }
 
-    for (const [playerIndex, player] of players.entries()) {
-      const key = `idx:${playerIndex}|${buildLivePlayerFallbackKey(player)}`;
+    for (const player of players) {
+      // `allPlayers` can be reordered by the Live Client API. The cache must
+      // follow the player identity, not the transient array index; otherwise
+      // an unchanged inventory is emitted again as a new purchase batch. The
+      // real-time PID is the most stable identity and also survives Neeko
+      // disguises, which change `championName` mid-game.
+      const pid = this.resolveLivePlayerPidStable(player);
+      const key = pid > 0 ? `pid:${pid}` : buildLivePlayerFallbackKey(player);
       const previous = this.playerInventory.get(key) ?? [];
       const current = Array.isArray(player?.items)
         ? player.items.map(normalizeLiveItem).filter((item) => item.itemId > 0)
@@ -2195,7 +2206,7 @@ class RecorderController {
               participant_id: 0,
               item_id: id,
               slot: item.slot,
-              shopper_name: buildTaggedShopperName(player),
+              shopper_name: buildTaggedShopperName(player, pid),
               shopper_team: teamIdFromLivePlayer(player?.team),
               shopper_champion: String(player?.championName ?? ""),
             },
@@ -2222,7 +2233,7 @@ class RecorderController {
               participant_id: 0,
               item_id: id,
               slot: item.slot,
-              shopper_name: buildTaggedShopperName(player),
+              shopper_name: buildTaggedShopperName(player, pid),
               shopper_team: teamIdFromLivePlayer(player?.team),
               shopper_champion: String(player?.championName ?? ""),
             },
@@ -2239,21 +2250,62 @@ class RecorderController {
     }
   }
 
+  resolveLivePlayerPid(player) {
+    const teamId = teamIdFromLivePlayer(player?.team);
+    const summoners = identityAliases(player?.summonerName);
+    const riotId = normalizeIdentityKey(player?.riotId?.riotId ?? player?.riotId ?? "");
+    return summoners.map((summoner) => (
+      this.playerNameToPid.get(`team:${teamId}|summoner:${summoner}`)
+      ?? this.playerNameToPid.get(`summoner:${summoner}`)
+    )).find(Boolean)
+      ?? this.playerNameToPid.get(`team:${teamId}|riot:${riotId}`)
+      ?? this.playerNameToPid.get(`riot:${riotId}`)
+      ?? 0;
+  }
+
+  // Once a live player is resolved to a participant ID, keep trusting it for
+  // the rest of the game. A transient Live Client response that momentarily
+  // drops the summoner name must not bounce the inventory cache between the
+  // pid-based and champion-based keys, which would re-emit the whole
+  // inventory as a fresh purchase batch.
+  resolveLivePlayerPidStable(player) {
+    const teamId = teamIdFromLivePlayer(player?.team);
+    const summoners = identityAliases(player?.summonerName);
+    for (const summoner of summoners) {
+      if (!summoner) continue;
+      const cached = this.livePlayerPidByKey.get(`summoner:${teamId}|${summoner}`);
+      if (cached) return cached;
+    }
+    const riotId = normalizeIdentityKey(player?.riotId?.riotId ?? player?.riotId ?? "");
+    if (riotId) {
+      const cached = this.livePlayerPidByKey.get(`riot:${teamId}|${riotId}`);
+      if (cached) return cached;
+    }
+    const pid = this.resolveLivePlayerPid(player);
+    if (pid) {
+      for (const summoner of summoners) {
+        if (summoner) this.livePlayerPidByKey.set(`summoner:${teamId}|${summoner}`, pid);
+      }
+      if (riotId) this.livePlayerPidByKey.set(`riot:${teamId}|${riotId}`, pid);
+    }
+    return pid;
+  }
+
   updateParticipantMapFromLiveData(players) {
     for (const player of players) {
       const teamId = teamIdFromLivePlayer(player?.team);
-      const summoner = normalizeIdentityKey(player?.summonerName);
-      const riotId = normalizeIdentityKey(player?.riotId?.riotId ?? player?.riotId ?? "");
-      const pid = this.playerNameToPid.get(`team:${teamId}|summoner:${summoner}`)
-        ?? this.playerNameToPid.get(`summoner:${summoner}`)
-        ?? this.playerNameToPid.get(`team:${teamId}|riot:${riotId}`)
-        ?? this.playerNameToPid.get(`riot:${riotId}`);
+      const summoners = identityAliases(player?.summonerName);
+      const pid = this.resolveLivePlayerPid(player);
       if (!pid) continue;
-      if (summoner) {
+      if (summoners.some(Boolean)) {
         this.playerNameToPid.set(String(player?.summonerName ?? ""), pid);
-        this.playerNameToPid.set(`summoner:${summoner}`, pid);
-        this.playerNameToPid.set(`team:${teamId}|summoner:${summoner}`, pid);
+        for (const summoner of summoners) {
+          if (!summoner) continue;
+          this.playerNameToPid.set(`summoner:${summoner}`, pid);
+          this.playerNameToPid.set(`team:${teamId}|summoner:${summoner}`, pid);
+        }
       }
+      const riotId = normalizeIdentityKey(player?.riotId?.riotId ?? player?.riotId ?? "");
       if (riotId) {
         this.playerNameToPid.set(`riot:${riotId}`, pid);
         this.playerNameToPid.set(`team:${teamId}|riot:${riotId}`, pid);
@@ -2351,6 +2403,12 @@ function normalizeIdentityKey(raw) {
   return String(raw ?? "").trim().toLowerCase();
 }
 
+function identityAliases(raw) {
+  const full = normalizeIdentityKey(raw);
+  const base = normalizeIdentityKey(String(raw ?? "").split("#")[0]);
+  return base && base !== full ? [full, base] : [full];
+}
+
 function normalizeChampionKey(raw) {
   return String(raw ?? "")
     .replace(/\uFFFD/g, "")
@@ -2372,32 +2430,127 @@ async function fetchJsonWithTimeout(url, timeoutMs = 5000) {
   }
 }
 
+// Champion names/IDs are stable for long stretches, so keep a local cache and
+// never block metadata finalization on Data Dragon. The cache is refreshed in
+// the background at most once per day and the in-memory maps are swapped
+// atomically so concurrent resolution never observes a torn state.
+const CHAMPION_CACHE_REFRESH_MS = 24 * 60 * 60 * 1000;
+
+function getChampionCachePath() {
+  return path.join(app.getPath("userData"), "champion_cache.json");
+}
+
+function addChampionToLookup(lookup, entry) {
+  const championId = Number(entry?.key ?? 0);
+  if (!championId) return;
+  for (const value of [entry?.id, entry?.name]) {
+    const key = normalizeChampionKey(value);
+    if (!key) continue;
+    // Data Dragon also lists alternate-mode variants such as Jade_Garen
+    // (60086). Match-v5 uses the canonical ID (86), which is the smaller
+    // ID for the same localized champion name.
+    const existingId = lookup.nameToId.get(key);
+    if (!existingId || championId < existingId) lookup.nameToId.set(key, championId);
+  }
+  if (!lookup.idToName.has(championId)) {
+    lookup.idToName.set(championId, String(entry?.name ?? entry?.id ?? ""));
+  }
+}
+
+async function fetchChampionLookupFromNetwork() {
+  const lookup = { nameToId: new Map(), idToName: new Map() };
+  const versions = await fetchJsonWithTimeout("https://ddragon.leagueoflegends.com/api/versions.json", 5000);
+  const version = Array.isArray(versions) ? versions[0] : "latest";
+  const [ja, en] = await Promise.all([
+    fetchJsonWithTimeout(`https://ddragon.leagueoflegends.com/cdn/${version}/data/ja_JP/champion.json`, 5000),
+    fetchJsonWithTimeout(`https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`, 5000),
+  ]);
+  for (const entry of Object.values(ja?.data ?? {})) addChampionToLookup(lookup, entry);
+  for (const entry of Object.values(en?.data ?? {})) addChampionToLookup(lookup, entry);
+  if (lookup.nameToId.size === 0) throw new Error("empty champion data");
+  return lookup;
+}
+
+async function saveChampionLookupCache(lookup, cachePath) {
+  try {
+    await fs.mkdir(path.dirname(cachePath), { recursive: true });
+    const payload = JSON.stringify({
+      refreshedAt: Date.now(),
+      nameToId: Object.fromEntries(lookup.nameToId),
+      idToName: Object.fromEntries(lookup.idToName),
+    });
+    const tmpPath = `${cachePath}.tmp`;
+    await fs.writeFile(tmpPath, payload, "utf8");
+    await fs.rename(tmpPath, cachePath);
+  } catch (error) {
+    await writeLog("metadata", `champion lookup cache save failed: ${String(error?.message || error)}`);
+  }
+}
+
+async function loadChampionLookupCache(lookup, cachePath) {
+  try {
+    const raw = await fs.readFile(cachePath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.nameToId === "object" && typeof parsed.idToName === "object") {
+      for (const [key, value] of Object.entries(parsed.nameToId)) {
+        const id = Number(value);
+        if (Number.isInteger(id) && id > 0) lookup.nameToId.set(key, id);
+      }
+      for (const [key, value] of Object.entries(parsed.idToName)) {
+        const id = Number(key);
+        if (Number.isInteger(id) && id > 0 && value) lookup.idToName.set(id, String(value));
+      }
+    }
+    if (lookup.nameToId.size > 0) {
+      await writeLog(
+        "metadata",
+        `champion lookup loaded from cache names=${lookup.nameToId.size} ageMs=${Date.now() - Number(parsed?.refreshedAt ?? 0)}`,
+      );
+      return Number(parsed?.refreshedAt ?? 0);
+    }
+  } catch {}
+  return 0;
+}
+
+async function refreshChampionLookupInBackground(lookup, cachePath) {
+  if (championCacheRefreshInFlight) return;
+  championCacheRefreshInFlight = true;
+  try {
+    const fresh = await fetchChampionLookupFromNetwork();
+    // Swap the map references atomically so in-flight reads stay consistent.
+    lookup.nameToId = fresh.nameToId;
+    lookup.idToName = fresh.idToName;
+    await saveChampionLookupCache(lookup, cachePath);
+    await writeLog("metadata", `champion lookup refreshed names=${lookup.nameToId.size}`);
+  } catch (error) {
+    await writeLog("metadata", `champion lookup refresh failed: ${String(error?.message || error)}`);
+  } finally {
+    championCacheRefreshInFlight = false;
+  }
+}
+
 async function loadChampionLookup() {
   if (championLookupPromise) return championLookupPromise;
   championLookupPromise = (async () => {
-    const nameToId = new Map();
-    const addChampion = (entry) => {
-      const championId = Number(entry?.key ?? 0);
-      if (!championId) return;
-      for (const value of [entry?.id, entry?.name]) {
-        const key = normalizeChampionKey(value);
-        if (key) nameToId.set(key, championId);
+    const lookup = { nameToId: new Map(), idToName: new Map() };
+    const cachePath = getChampionCachePath();
+    const refreshedAt = await loadChampionLookupCache(lookup, cachePath);
+    if (lookup.nameToId.size > 0) {
+      if (Date.now() - refreshedAt >= CHAMPION_CACHE_REFRESH_MS) {
+        void refreshChampionLookupInBackground(lookup, cachePath);
       }
-    };
-    try {
-      const versions = await fetchJsonWithTimeout("https://ddragon.leagueoflegends.com/api/versions.json", 5000);
-      const version = Array.isArray(versions) ? versions[0] : "latest";
-      const [ja, en] = await Promise.all([
-        fetchJsonWithTimeout(`https://ddragon.leagueoflegends.com/cdn/${version}/data/ja_JP/champion.json`, 5000),
-        fetchJsonWithTimeout(`https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`, 5000),
-      ]);
-      for (const entry of Object.values(ja?.data ?? {})) addChampion(entry);
-      for (const entry of Object.values(en?.data ?? {})) addChampion(entry);
-      await writeLog("metadata", `champion lookup loaded names=${nameToId.size}`);
-    } catch (error) {
-      await writeLog("metadata", `champion lookup load failed: ${String(error?.message || error)}`);
+      return lookup;
     }
-    return { nameToId };
+    try {
+      const fresh = await fetchChampionLookupFromNetwork();
+      lookup.nameToId = fresh.nameToId;
+      lookup.idToName = fresh.idToName;
+      await saveChampionLookupCache(lookup, cachePath);
+      await writeLog("metadata", `champion lookup loaded from network names=${lookup.nameToId.size}`);
+    } catch (error) {
+      await writeLog("metadata", `champion lookup unavailable (no cache and network failed): ${String(error?.message || error)}`);
+    }
+    return lookup;
   })();
   return championLookupPromise;
 }
@@ -2514,10 +2667,11 @@ function resolveLivePlayerByName(players, rawName) {
   }) ?? null;
 }
 
-function eventPlayerPayload(player, rawName) {
+function eventPlayerPayload(player, rawName, resolvePid) {
   if (player) {
+    const pid = typeof resolvePid === "function" ? resolvePid(player) : 0;
     return {
-      shopper_name: buildTaggedShopperName(player),
+      shopper_name: buildTaggedShopperName(player, pid),
       shopper_team: teamIdFromLivePlayer(player?.team),
       shopper_champion: String(player?.championName ?? ""),
     };
@@ -2529,12 +2683,12 @@ function eventPlayerPayload(player, rawName) {
   };
 }
 
-function buildSyntheticItemEventFromLiveEvent(event, players, fallbackMs) {
+function buildSyntheticItemEventFromLiveEvent(event, players, fallbackMs, resolvePid) {
   const name = compactLiveEventName(event);
   const timestamp = normalizeLiveEventTimeMs(event, fallbackMs);
   const rawShopperName = normalizeLiveEventShopperName(event);
   const player = resolveLivePlayerByName(players, rawShopperName);
-  const payload = eventPlayerPayload(player, rawShopperName);
+  const payload = eventPlayerPayload(player, rawShopperName, resolvePid);
   const itemId = normalizeLiveEventItemId(event);
   const slot = normalizeLiveEventSlot(event);
 
@@ -2580,46 +2734,67 @@ function buildSyntheticItemEventFromLiveEvent(event, players, fallbackMs) {
   return null;
 }
 
-function buildTaggedShopperName(player) {
+function buildTaggedShopperName(player, pid) {
   const name = String(player?.summonerName ?? "");
   const team = teamIdFromLivePlayer(player?.team);
   const champion = String(player?.championName ?? "");
-  return `${name}#TEAM:${team}#CNAME:${champion}`;
+  const pidValue = Number(pid ?? 0);
+  const pidTag = Number.isInteger(pidValue) && pidValue >= 1 && pidValue <= 10 ? `#PID:${pidValue}` : "";
+  return `${name}${pidTag}__TEAM:${team}__CNAME:${champion}`;
+}
+
+function parsePidTag(raw) {
+  const value = String(raw ?? "");
+  const pidIndex = value.lastIndexOf("#PID:");
+  if (pidIndex < 0) return 0;
+  const pidStr = value.slice(pidIndex + "#PID:".length).split("__TEAM:")[0].split("#")[0];
+  const pid = Number(pidStr);
+  return Number.isInteger(pid) && pid >= 1 && pid <= 10 ? pid : 0;
 }
 
 function parseTaggedShopperName(raw) {
   const value = String(raw ?? "");
-  const cnameIndex = value.lastIndexOf("#CNAME:");
+  const cnameIndex = value.lastIndexOf("__CNAME:");
   const beforeChampion = cnameIndex >= 0 ? value.slice(0, cnameIndex) : value;
-  const championName = cnameIndex >= 0 ? value.slice(cnameIndex + "#CNAME:".length) : "";
-  const teamIndex = beforeChampion.lastIndexOf("#TEAM:");
+  const championName = cnameIndex >= 0 ? value.slice(cnameIndex + "__CNAME:".length) : "";
+  const teamIndex = beforeChampion.lastIndexOf("__TEAM:");
   if (teamIndex < 0) {
-    const plainName = value.split("#")[0] ?? value;
+    const pid = parsePidTag(value);
+    const summonerName = pid ? value.slice(0, value.lastIndexOf("#PID:")) : value;
+    const plainName = summonerName.split("#")[0] ?? summonerName;
     return {
-      summonerName: plainName,
+      summonerName,
+      pid,
       summonerKey: normalizeIdentityKey(plainName),
+      fullSummonerKey: normalizeIdentityKey(summonerName),
       teamId: 0,
       championName,
-      championKey: normalizeIdentityKey(championName),
+      championKey: normalizeChampionKey(championName) || normalizeIdentityKey(championName),
     };
   }
-  const summonerName = beforeChampion.slice(0, teamIndex);
-  const teamPart = beforeChampion.slice(teamIndex + "#TEAM:".length);
+  const rawSummonerName = beforeChampion.slice(0, teamIndex);
+  const teamPart = beforeChampion.slice(teamIndex + "__TEAM:".length);
+  const pid = parsePidTag(rawSummonerName);
+  const summonerName = pid ? rawSummonerName.slice(0, rawSummonerName.lastIndexOf("#PID:")) : rawSummonerName;
+  const plainName = summonerName.split("#")[0] ?? summonerName;
   return {
     summonerName,
-    summonerKey: normalizeIdentityKey(summonerName),
+    pid,
+    summonerKey: normalizeIdentityKey(plainName),
+    fullSummonerKey: normalizeIdentityKey(summonerName),
     teamId: Number(teamPart.split("#")[0] ?? 0),
     championName,
-    championKey: normalizeIdentityKey(championName),
+    championKey: normalizeChampionKey(championName) || normalizeIdentityKey(championName),
   };
 }
 
 function buildLivePlayerFallbackKey(player) {
   const team = teamIdFromLivePlayer(player?.team);
-  const summoner = normalizeIdentityKey(player?.summonerName);
-  const champion = normalizeIdentityKey(player?.championName);
-  const riot = normalizeIdentityKey(player?.riotId?.riotId);
-  return `fallback:${team}|${summoner}|${champion}|${riot}`;
+  const champion = normalizeChampionKey(player?.championName);
+  // Player names and Riot IDs can appear late or change representation in
+  // Live Client responses. Champion selection is fixed and unique per team.
+  if (champion) return `champion:${team}|${champion}`;
+  return `summoner:${team}|${normalizeIdentityKey(player?.summonerName)}`;
 }
 
 function playersEqual(a, b) {
@@ -2644,6 +2819,7 @@ function normalizeParticipant(participant, identities, participantMetadata = new
     role: String(participant?.timeline?.role ?? "NONE"),
     summonerName: identityPlayer ? `${identityPlayer.gameName}#${identityPlayer.tagLine}` : "Unknown",
     summonerId: identityPlayer?.summonerId ?? null,
+    honorReceived: false,
     laneScore: 0,
     champLevel: participant?.champLevel ?? participant?.champ_level ?? 0,
     summonerLevel: metadata?.summonerLevel ?? null,
@@ -2768,7 +2944,7 @@ function mergeItemEvents(baseEvents, extraEvents) {
   return out;
 }
 
-function resolveSyntheticItemEvents(extraEvents, participantsRaw, identities, championLookup = { nameToId: new Map() }) {
+function resolveSyntheticItemEvents(extraEvents, participantsRaw, identities, championLookup = { nameToId: new Map(), idToName: new Map() }) {
   const byTeamAndSummoner = new Map();
   const bySummoner = new Map();
   const byTeamAndChampion = new Map();
@@ -2785,19 +2961,34 @@ function resolveSyntheticItemEvents(extraEvents, participantsRaw, identities, ch
       teamParticipants.push(participantId);
       byTeamParticipants.set(teamId, teamParticipants);
     }
-    const championName = normalizeIdentityKey(p?.championName ?? p?.champion_name ?? "");
+    const rawChampName = p?.championName ?? p?.champion_name ?? "";
     const championId = Number(p?.championId ?? p?.champion_id ?? 0);
+    const lookupChampName = championLookup.idToName?.get(championId) ?? "";
+    const champNames = [rawChampName, lookupChampName].filter(Boolean);
+
+    for (const cname of champNames) {
+      const normKey = normalizeChampionKey(cname) || normalizeIdentityKey(cname);
+      if (normKey) {
+        byTeamAndChampion.set(`team:${teamId}|champion:${normKey}`, participantId);
+        byTeamAndChampion.set(`champion:${normKey}`, participantId);
+      }
+    }
+
     const identity = (identities ?? []).find((pi) => Number(pi?.participantId ?? pi?.participant_id ?? 0) === participantId);
     const player = identity?.player ?? {};
     const gameName = normalizeIdentityKey(player?.gameName ?? player?.game_name ?? "");
+    const tagLine = normalizeIdentityKey(player?.tagLine ?? player?.tag_line ?? "");
+    const fullRiotId = gameName && tagLine ? `${gameName}#${tagLine}` : gameName;
+
     if (gameName) {
       byTeamAndSummoner.set(`team:${teamId}|summoner:${gameName}`, participantId);
+      byTeamAndSummoner.set(`team:${teamId}|summoner:${fullRiotId}`, participantId);
       if (!bySummoner.has(gameName)) bySummoner.set(gameName, participantId);
+      if (!bySummoner.has(fullRiotId)) bySummoner.set(fullRiotId, participantId);
     }
-    if (championName) byTeamAndChampion.set(`team:${teamId}|champion:${championName}`, participantId);
     if (championId) {
-      byTeamAndChampion.set(`team:${teamId}|championId:${championId}`, participantId);
       byTeamAndChampionId.set(`team:${teamId}|championId:${championId}`, participantId);
+      byTeamAndChampionId.set(`championId:${championId}`, participantId);
     }
   }
 
@@ -2810,16 +3001,24 @@ function resolveSyntheticItemEvents(extraEvents, participantsRaw, identities, ch
     if (currentPid > 0) return event;
     const parsed = parseTaggedShopperName(payload.shopper_name ?? "");
     const name = parsed.summonerKey || normalizeIdentityKey(payload.shopper_name ?? "");
+    const fullName = parsed.fullSummonerKey || name;
     const teamId = Number(parsed.teamId || payload.shopper_team || 0);
     const championRaw = parsed.championName || String(payload.shopper_champion ?? "");
     const champion = normalizeChampionKey(championRaw) || parsed.championKey || normalizeIdentityKey(payload.shopper_champion ?? "");
     const championId = championLookup.nameToId?.get(champion) ?? 0;
-    const resolved = byTeamAndSummoner.get(`team:${teamId}|summoner:${name}`)
+
+    const resolved = (parsed.pid > 0 && participantIds.includes(parsed.pid) ? parsed.pid : null)
+      ?? (teamId ? byTeamAndSummoner.get(`team:${teamId}|summoner:${fullName}`) : null)
+      ?? (teamId ? byTeamAndSummoner.get(`team:${teamId}|summoner:${name}`) : null)
+      ?? bySummoner.get(fullName)
       ?? bySummoner.get(name)
-      ?? byTeamAndChampion.get(`team:${teamId}|champion:${champion}`)
-      ?? byTeamAndChampionId.get(`team:${teamId}|championId:${championId}`)
+      ?? (teamId ? byTeamAndChampion.get(`team:${teamId}|champion:${champion}`) : null)
+      ?? (teamId && championId ? byTeamAndChampionId.get(`team:${teamId}|championId:${championId}`) : null)
+      ?? byTeamAndChampion.get(`champion:${champion}`)
+      ?? (championId ? byTeamAndChampionId.get(`championId:${championId}`) : null)
       ?? resolveSingleParticipantFallback(teamId, byTeamParticipants, participantIds)
       ?? 0;
+
     if (!resolved) {
       void writeLog("metadata", `synthetic item unresolved kind=${kind} shopper=${String(payload.shopper_name ?? "")} team=${teamId} champion=${champion} championId=${championId} participants=${participantIds.length}`);
       return null;
@@ -2868,6 +3067,8 @@ function buildGoldTimeline(timeline) {
 }
 
 function resolveLiveParticipantId(shopperName, playerNameToPid) {
+  const embeddedPid = parsePidTag(shopperName);
+  if (embeddedPid > 0) return embeddedPid;
   const direct = playerNameToPid.get(shopperName);
   if (direct) return direct;
   const parsed = parseTaggedShopperName(shopperName);
@@ -3132,6 +3333,82 @@ async function processRecordingMetadataWithRetry(current, syntheticItemEvents = 
   }
   await writeLog("metadata", `failed to finalize metadata: ${String(lastError?.stack || lastError)}`);
   return null;
+}
+
+async function appendHonorReceivedMetadata(outputPath, gameId) {
+  if (!outputPath) return;
+  const metaPath = `${stripKnownExt(outputPath)}.json`;
+  const targetGameId = Number(gameId ?? 0);
+
+  for (let attempt = 1; attempt <= 10; attempt += 1) {
+    try {
+      const recognitions = await lcuRequest("GET", "/lol-honor-v2/v1/recognition").catch(() => null);
+      if (Array.isArray(recognitions) && recognitions.length > 0) {
+        const senderPuuids = new Set(
+          recognitions
+            .map((r) => String(r?.senderPuuid ?? r?.sender_puuid ?? "").trim())
+            .filter(Boolean)
+        );
+
+        if (senderPuuids.size > 0) {
+          const senderSummonerIds = new Set();
+          const [history, ballot] = await Promise.all([
+            lcuRequest("GET", "/lol-honor-v2/v1/recognition-history").catch(() => null),
+            lcuRequest("GET", "/lol-honor-v2/v1/ballot").catch(() => null),
+          ]);
+
+          if (Array.isArray(history)) {
+            for (const entry of history) {
+              const entryGameId = Number(entry?.gameId ?? entry?.game_id ?? 0);
+              const puuid = String(entry?.puuid ?? "").trim();
+              const summonerId = Number(entry?.summonerId ?? entry?.summoner_id ?? 0);
+              if ((!targetGameId || entryGameId === targetGameId) && senderPuuids.has(puuid) && summonerId) {
+                senderSummonerIds.add(summonerId);
+              }
+            }
+          }
+
+          const eligibleAllies = Array.isArray(ballot?.eligibleAllies ?? ballot?.eligible_allies)
+            ? (ballot.eligibleAllies ?? ballot.eligible_allies)
+            : [];
+          for (const ally of eligibleAllies) {
+            const puuid = String(ally?.puuid ?? "").trim();
+            const summonerId = Number(ally?.summonerId ?? ally?.summoner_id ?? 0);
+            if (senderPuuids.has(puuid) && summonerId) {
+              senderSummonerIds.add(summonerId);
+            }
+          }
+
+          const raw = await fs.readFile(metaPath, "utf8").catch(() => null);
+          if (raw) {
+            const data = JSON.parse(raw);
+            const root = data.Metadata ?? data.Deferred;
+            if (root && Array.isArray(root.participants)) {
+              let changed = false;
+              for (const p of root.participants) {
+                const sId = Number(p.summonerId ?? p.summoner_id ?? 0);
+                const pPuuid = String(p.puuid ?? p.player?.puuid ?? "").trim();
+                const received = (sId && senderSummonerIds.has(sId)) || (pPuuid && senderPuuids.has(pPuuid));
+                if (received && !p.honorReceived) {
+                  p.honorReceived = true;
+                  changed = true;
+                }
+              }
+              if (changed) {
+                await fs.writeFile(metaPath, JSON.stringify(data, null, 2), "utf8");
+                await writeLog("metadata", `appended honor metadata to ${metaPath}`);
+                broadcastAppEvent("MetadataChanged", [stripKnownExt(outputPath)]);
+                return;
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      await writeLog("metadata", `honor polling attempt ${attempt} failed: ${String(error?.message || error)}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
 }
 
 class GameMonitor {
@@ -3842,6 +4119,11 @@ function makeInvokeHandler(win) {
       }
       case "get_ffmpeg_runtime_info":
         return await detectFfmpegVersion(settings.ffmpegPath ?? null);
+      case "perf_log":
+        // The renderer enables its freeze probe in development. The native
+        // command is intentionally a no-op unless profiling is enabled, so
+        // mirror that behavior here instead of rejecting each probe sample.
+        return null;
       case "clear_cache":
         return clearCache();
       case "clear_cache_for_patch_update":

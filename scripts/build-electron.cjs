@@ -71,21 +71,93 @@ const env = {
   CSC_IDENTITY_AUTO_DISCOVERY: "false",
 };
 
-const { generatedModulePath } = prepareYouTubeClientId(root);
-ensureLibobsBundle();
-ensureTooltipRebuildTool();
+const outputDir = path.join(root, "release-electron");
+const unpackedDir = path.join(outputDir, "win-unpacked");
 
-const child = spawn("electron-builder", args, {
-  env,
-  shell: true,
-  stdio: "inherit",
-});
+const TRANSIENT_ERROR_PATTERN = /ENOENT|EBUSY|EPERM|ELOCKED|EACCES/;
 
-child.on("exit", (code, signal) => {
+function isUnpackedExeRunning() {
+  const exePath = path.join(unpackedDir, "LeagueRecordElectron.exe").toLowerCase();
+  try {
+    const { execSync } = require("node:child_process");
+    const output = execSync(
+      "powershell -NoProfile -Command \"Get-Process -Name LeagueRecordElectron -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path\"",
+      { encoding: "utf8" }
+    );
+    return output.split(/\r?\n/).some((line) => line.trim().toLowerCase() === exePath);
+  } catch {
+    return false;
+  }
+}
+
+function cleanUnpackedDirs() {
+  for (const dir of [unpackedDir, `${unpackedDir}.tmp`]) {
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+}
+
+function runElectronBuilder() {
+  return new Promise((resolve, reject) => {
+    const child = spawn("electron-builder", args, {
+      env,
+      shell: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+      process.stdout.write(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+      process.stderr.write(chunk);
+    });
+    child.on("error", reject);
+    child.on("close", (code, signal) => resolve({ code, signal, output }));
+  });
+}
+
+(async () => {
+  const maxAttempts = 3;
+  let exitCode = 1;
+  let signal = null;
+
+  if (isUnpackedExeRunning()) {
+    console.warn("LeagueRecordElectron is running from release-electron\\win-unpacked. Close it before building to avoid locked-file errors.");
+  }
+
+  const { generatedModulePath } = prepareYouTubeClientId(root);
+  ensureLibobsBundle();
+  ensureTooltipRebuildTool();
+  cleanUnpackedDirs();
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (attempt > 1) {
+      console.warn(`\nelectron-builder failed; cleaning unpacked output and retrying (attempt ${attempt}/${maxAttempts})...\n`);
+      cleanUnpackedDirs();
+    }
+    let result;
+    try {
+      result = await runElectronBuilder();
+    } catch (err) {
+      console.error(err);
+      break;
+    }
+    if (result.signal) {
+      signal = result.signal;
+      break;
+    }
+    exitCode = result.code ?? 1;
+    if (result.code === 0) break;
+    if (attempt >= maxAttempts || !TRANSIENT_ERROR_PATTERN.test(result.output)) break;
+  }
+
   fs.rmSync(generatedModulePath, { force: true });
   if (signal) {
     process.kill(process.pid, signal);
     return;
   }
-  process.exit(code ?? 1);
-});
+  process.exit(exitCode);
+})();

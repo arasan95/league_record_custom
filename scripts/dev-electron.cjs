@@ -95,6 +95,30 @@ function restartElectron(reason) {
   }, 200);
 }
 
+const watchedFileStates = new Map();
+
+function getFileState(filePath) {
+  try {
+    const stat = fs.statSync(filePath);
+    return stat.isFile() ? `${stat.mtimeMs}:${stat.size}` : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberFilesUnder(target) {
+  const stat = fs.statSync(target);
+  if (stat.isFile()) {
+    watchedFileStates.set(target, getFileState(target));
+    return;
+  }
+  for (const entry of fs.readdirSync(target, { withFileTypes: true })) {
+    const fullPath = path.join(target, entry.name);
+    if (entry.isDirectory()) rememberFilesUnder(fullPath);
+    else if (entry.isFile()) watchedFileStates.set(fullPath, getFileState(fullPath));
+  }
+}
+
 function watchElectronMain() {
   const watchTargets = [
     path.join(root, "electron"),
@@ -104,9 +128,19 @@ function watchElectronMain() {
   for (const target of watchTargets) {
     try {
       const stat = fs.statSync(target);
+      rememberFilesUnder(target);
       fs.watch(target, { recursive: stat.isDirectory() }, (_eventType, filename) => {
+        const changedPath = stat.isDirectory() && filename
+          ? path.resolve(target, String(filename))
+          : target;
         const changed = filename ? String(filename) : target;
         if (changed.includes("~") || changed.endsWith(".tmp")) return;
+        const previousState = watchedFileStates.get(changedPath);
+        const currentState = getFileState(changedPath);
+        // Windows can emit change notifications without modifying the file.
+        // Restarting the main process for those events aborts active recordings.
+        if (previousState === currentState || (previousState === undefined && currentState === null)) return;
+        watchedFileStates.set(changedPath, currentState);
         restartElectron(changed);
       });
     } catch (error) {
