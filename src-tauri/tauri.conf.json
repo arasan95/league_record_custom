@@ -27,9 +27,7 @@
                                                                      "$APPDATA/**/*.json",
                                                                      "$APPDATA/**/*.mp4",
                                                                      "$APPDATA/**/*.png",
-                                                                     "**/*.mp4",
-                                                                     "**/*.json",
-                                                                     "**/*.png"
+                                                                     "**/*.mp4"
                                                                  ],
                                                        "enable":  true
                                                    }

@@ -1,6 +1,7 @@
 import type { Recording } from "./bindings";
 import { invoke } from "./platform/core";
 import { beginSidebarImageRun, waitForSidebarImageRun } from "./ui/recording_sidebar_item_usecase";
+import { freezeProbeLog, isFreezeProbeEnabled, measureFreezeProbeSync } from "./freeze_probe";
 const PERF_LOG_ENABLED = false;
 
 type UiSidebarLike = {
@@ -30,7 +31,7 @@ function nextFrame(): Promise<void> {
 }
 
 async function sendPerfToBackend(line: string): Promise<void> {
-    if (!PERF_LOG_ENABLED) return;
+    if (!PERF_LOG_ENABLED && !isFreezeProbeEnabled()) return;
     try {
         await invoke("perf_log", { message: line });
     } catch {
@@ -68,15 +69,20 @@ export async function refreshSidebar(input: {
     const [recordings, recordingsSize] = await Promise.all([getRecordingsList(), getRecordingsSize()]);
     const dataFetchMs = perfNowMs() - dataFetchStarted;
     const renderStarted = perfNowMs();
-    ui.updateSideBar(
-        recordingsSize,
-        recordings,
-        setVideo,
-        toggleFavorite,
-        showRenameModal,
-        showDeleteModal,
-        handleDeleteVideoOnly,
-        forceUpdateIds,
+    measureFreezeProbeSync(
+        "sidebar:updateSideBar(sync-dom)",
+        () => ui.updateSideBar(
+            recordingsSize,
+            recordings,
+            setVideo,
+            toggleFavorite,
+            showRenameModal,
+            showDeleteModal,
+            handleDeleteVideoOnly,
+            forceUpdateIds,
+        ),
+        { recordings: recordings.length, forceUpdateIds: forceUpdateIds.length },
+        80,
     );
     const renderSyncMs = perfNowMs() - renderStarted;
 
@@ -98,6 +104,16 @@ export async function refreshSidebar(input: {
         const timedOut = imageStats.pendingItems > 0;
         const line = `[perf] sidebar_gui_complete total=${totalMs.toFixed(1)}ms data=${dataFetchMs.toFixed(1)}ms render_sync=${renderSyncMs.toFixed(1)}ms paint=${paintMs.toFixed(1)}ms images_wait=${imagesMs.toFixed(1)}ms img_items=${imageStats.totalItems} img_items_done=${imageStats.completedItems} img_items_pending=${imageStats.pendingItems} img_resolve_ms=${imageStats.resolveMs.toFixed(1)}ms img_dom_ms=${imageStats.domLoadMs.toFixed(1)}ms img_resolve_count=${imageStats.resolveCount} img_load_count=${imageStats.loadCount} img_error_count=${imageStats.errorCount} timed_out=${timedOut ? 1 : 0} force_ids=${forceUpdateIds.length} recordings=${recordings.length}`;
         if (PERF_LOG_ENABLED) console.log(line);
+        freezeProbeLog("sidebar:complete", {
+            totalMs: Number(totalMs.toFixed(1)),
+            dataMs: Number(dataFetchMs.toFixed(1)),
+            renderSyncMs: Number(renderSyncMs.toFixed(1)),
+            paintMs: Number(paintMs.toFixed(1)),
+            imagesWaitMs: Number(imagesMs.toFixed(1)),
+            imgItems: imageStats.totalItems,
+            imgPending: imageStats.pendingItems,
+            recordings: recordings.length,
+        }, renderSyncMs >= 80 || totalMs >= 500);
         await sendPerfToBackend(line);
 
         if (timedOut) {

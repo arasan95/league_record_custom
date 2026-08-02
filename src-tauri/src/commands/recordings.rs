@@ -532,10 +532,14 @@ pub async fn get_running_applications() -> Vec<String> {
 }
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub async fn save_scoreboard_cache(video_id: String, content: String) -> Result<(), String> {
+pub async fn save_scoreboard_cache(
+    video_id: String,
+    content: String,
+    state: State<'_, SettingsWrapper>,
+) -> Result<(), String> {
     use std::io::Write;
 
-    let video_path = PathBuf::from(&video_id);
+    let video_path = resolve_existing_video_base(&video_id, &state)?;
     let cache_path = video_path.with_extension("sb.json");
 
     let mut file = std::fs::File::create(&cache_path).map_err(|e| e.to_string())?;
@@ -545,8 +549,11 @@ pub async fn save_scoreboard_cache(video_id: String, content: String) -> Result<
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub async fn load_scoreboard_cache(video_id: String) -> Result<String, String> {
-    let video_path = PathBuf::from(&video_id);
+pub async fn load_scoreboard_cache(
+    video_id: String,
+    state: State<'_, SettingsWrapper>,
+) -> Result<String, String> {
+    let video_path = resolve_existing_video_base(&video_id, &state)?;
     let cache_path = video_path.with_extension("sb.json");
 
     if !cache_path.exists() {

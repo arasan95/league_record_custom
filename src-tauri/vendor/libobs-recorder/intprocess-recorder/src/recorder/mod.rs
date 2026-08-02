@@ -538,7 +538,9 @@ impl InpRecorder {
     /// resetting audio after initialisation crashes libobs
     fn reset_audio() -> Result<(), String> {
         let ai = libobs_sys::obs_audio_info {
-            samples_per_sec: 44100,
+            // Match the standard Windows/game audio rate to avoid an
+            // unnecessary resampling stage in the recording pipeline.
+            samples_per_sec: 48000,
             speakers: libobs_sys::speaker_layout_SPEAKERS_STEREO,
         };
         let ok = unsafe { libobs_sys::obs_reset_audio(&ai) };
