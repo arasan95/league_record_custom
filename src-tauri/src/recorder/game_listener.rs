@@ -36,6 +36,24 @@ fn normalize_identity_key(raw: &str) -> String {
     raw.trim().to_lowercase()
 }
 
+// The LCU and Live Client endpoints do not consistently include the Riot ID
+// tag in `summonerName`. Keep both forms so the participant mapping is already
+// available when the first inventory snapshot arrives.
+fn identity_aliases(raw: &str) -> Vec<String> {
+    let full = normalize_identity_key(raw);
+    let base = raw
+        .split('#')
+        .next()
+        .map(normalize_identity_key)
+        .unwrap_or_default();
+
+    if base.is_empty() || base == full {
+        vec![full]
+    } else {
+        vec![full, base]
+    }
+}
+
 fn team_id_str(team: &shaco::model::ingame::TeamId) -> &'static str {
     match team {
         shaco::model::ingame::TeamId::Chaos => "200",
@@ -74,13 +92,17 @@ fn build_synthetic_shopper_name(
     player_map: &HashMap<String, i32>,
 ) -> String {
     let team_intro = team_id_str(&player.team);
-    let summoner_key = normalize_identity_key(&player.summoner_name);
+    let summoner_keys = identity_aliases(&player.summoner_name);
     let riot_key = player.riot_id.riot_id.as_deref().map(normalize_identity_key);
 
-    let resolved_pid = player_map
-        .get(&format!("team:{}|summoner:{}", team_intro, summoner_key))
-        .copied()
-        .or_else(|| player_map.get(&format!("summoner:{}", summoner_key)).copied())
+    let resolved_pid = summoner_keys
+        .iter()
+        .find_map(|key| {
+            player_map
+                .get(&format!("team:{}|summoner:{}", team_intro, key))
+                .copied()
+                .or_else(|| player_map.get(&format!("summoner:{}", key)).copied())
+        })
         .or_else(|| {
             riot_key.as_ref().and_then(|key| {
                 player_map
@@ -393,13 +415,13 @@ impl GameListener {
                     if let Ok(mut map) = player_map.lock() {
                         for p in &data.all_players {
                             let team_intro = team_id_str(&p.team);
-                            let summoner_key = normalize_identity_key(&p.summoner_name);
-                            let scoped_summoner = format!("team:{}|summoner:{}", team_intro, summoner_key);
+                            let summoner_keys = identity_aliases(&p.summoner_name);
                             let riot_key = p.riot_id.riot_id.as_deref().map(normalize_identity_key);
-                            let mut resolved_pid = map
-                                .get(&scoped_summoner)
-                                .copied()
-                                .or_else(|| map.get(&format!("summoner:{}", summoner_key)).copied());
+                            let mut resolved_pid = summoner_keys.iter().find_map(|key| {
+                                map.get(&format!("team:{}|summoner:{}", team_intro, key))
+                                    .copied()
+                                    .or_else(|| map.get(&format!("summoner:{}", key)).copied())
+                            });
                             if resolved_pid.is_none() {
                                 if let Some(rkey) = &riot_key {
                                     resolved_pid = map
@@ -410,8 +432,10 @@ impl GameListener {
                             }
                             if let Some(pid) = resolved_pid {
                                 map.insert(p.summoner_name.clone(), pid);
-                                map.insert(format!("summoner:{}", summoner_key), pid);
-                                map.insert(scoped_summoner, pid);
+                                for key in summoner_keys {
+                                    map.insert(format!("summoner:{}", key), pid);
+                                    map.insert(format!("team:{}|summoner:{}", team_intro, key), pid);
+                                }
                                 if let Some(rkey) = riot_key {
                                     map.insert(format!("riot:{}", rkey), pid);
                                     map.insert(format!("team:{}|riot:{}", team_intro, rkey), pid);
@@ -439,7 +463,7 @@ impl GameListener {
                     }
 
                     // 2. Process Inventory Diffs (Synthetic Item Events)
-                    for (player_idx, player) in data.all_players.iter().enumerate() {
+                    for player in &data.all_players {
                         let name = player.summoner_name.clone();
                         let current_items = player.items.clone();
                         let synthetic_shopper_name = player_map
@@ -458,7 +482,10 @@ impl GameListener {
                         let inventory_key = if let Some(pid) = parse_pid_tag(&synthetic_shopper_name) {
                             format!("pid:{pid}")
                         } else {
-                            format!("idx:{player_idx}|{}", build_live_player_fallback_key(player))
+                            // `all_players` is not guaranteed to have a stable order.
+                            // Never use its index in the cache key, or an unchanged
+                            // inventory can be emitted as a second purchase batch.
+                            build_live_player_fallback_key(player)
                         };
                         let old_items = previous_inventory.entry(inventory_key).or_default();
 
@@ -886,13 +913,14 @@ impl GameListener {
                                                             .unwrap_or("")
                                                             .trim();
                                                         if !summoner_name.is_empty() {
-                                                            let summoner_key = normalize_identity_key(summoner_name);
                                                             map.insert(summoner_name.to_string(), pid32);
-                                                            map.insert(format!("summoner:{}", summoner_key), pid32);
-                                                            map.insert(
-                                                                format!("team:{}|summoner:{}", team_id, summoner_key),
-                                                                pid32,
-                                                            );
+                                                            for summoner_key in identity_aliases(summoner_name) {
+                                                                map.insert(format!("summoner:{}", summoner_key), pid32);
+                                                                map.insert(
+                                                                    format!("team:{}|summoner:{}", team_id, summoner_key),
+                                                                    pid32,
+                                                                );
+                                                            }
                                                         }
 
                                                         let riot_id_full = p

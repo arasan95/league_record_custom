@@ -43,6 +43,20 @@ function renderGeneratedModule(clientId, clientSecret) {
   ].join("\n");
 }
 
+function renderDisabledModule() {
+  return [
+    "\"use strict\";",
+    "// Generated for a local build without YouTube OAuth credentials.",
+    "module.exports = Object.freeze({",
+    "  clientId: \"\",",
+    "  clientSecret: \"\",",
+    "  publicClient: false,",
+    "  disabled: true,",
+    "});",
+    "",
+  ].join("\n");
+}
+
 function prepareYouTubeClientId(root, env = process.env) {
   const localPath = path.join(root, "electron", "youtube", "local-client-id.txt");
   const localSecretPath = path.join(root, "electron", "youtube", "local-client-secret.txt");
@@ -59,18 +73,11 @@ function prepareYouTubeClientId(root, env = process.env) {
   if (!clientSecret && fs.existsSync(localSecretPath)) {
     clientSecret = fs.readFileSync(localSecretPath, "utf8").trim();
   }
-  if (!isValidYouTubeClientId(clientId)) {
+  const hasClientId = isValidYouTubeClientId(clientId);
+  const hasClientSecret = isValidYouTubeClientSecret(clientSecret);
+  if (hasClientId !== hasClientSecret) {
     throw new Error(
-      "A valid desktop OAuth client ID is required for packaging. "
-      + "Set YOUTUBE_OAUTH_CLIENT_ID or create electron/youtube/local-client-id.txt. "
-      + "Use the Desktop app client from the same Google Cloud project.",
-    );
-  }
-  if (!isValidYouTubeClientSecret(clientSecret)) {
-    throw new Error(
-      "The Google Desktop OAuth client secret is required for packaging. "
-      + "Set YOUTUBE_OAUTH_CLIENT_SECRET or create electron/youtube/local-client-secret.txt. "
-      + "Never commit the value to source control.",
+      "Both YOUTUBE_OAUTH_CLIENT_ID and YOUTUBE_OAUTH_CLIENT_SECRET are required when enabling YouTube uploads.",
     );
   }
 
@@ -84,10 +91,10 @@ function prepareYouTubeClientId(root, env = process.env) {
   fs.rmSync(path.join(buildInputDir, "official-client.generated.cjs"), { force: true });
   fs.writeFileSync(
     generatedModulePath,
-    renderGeneratedModule(clientId, clientSecret),
+    hasClientId ? renderGeneratedModule(clientId, clientSecret) : renderDisabledModule(),
     { encoding: "utf8", mode: 0o600 },
   );
-  return { generatedModulePath };
+  return { generatedModulePath, youtubeEnabled: hasClientId };
 }
 
 module.exports = {
@@ -95,4 +102,5 @@ module.exports = {
   isValidYouTubeClientSecret,
   prepareYouTubeClientId,
   renderGeneratedModule,
+  renderDisabledModule,
 };

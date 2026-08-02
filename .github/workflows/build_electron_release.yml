@@ -172,7 +172,7 @@ jobs:
         with:
           tag: ${{ steps.version.outputs.tag }}
           commit: ${{ github.sha }}
-          name: LeagueRecord Electron v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
           artifacts: "./.artifacts/electron/*"
           allowUpdates: true
           replacesArtifacts: true
