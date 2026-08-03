@@ -3,9 +3,11 @@
         "[日本語]",
         "主な変更点:",
         "- スコアボードのアイテム表示に関する不具合を修正しました",
+        "- ゲーム中に録画開始のホットキーが機能しない不具合を修正しました",
         "",
         "[English]",
         "Highlights:",
-        "- Fixed an issue with item display on the scoreboard"
+        "- Fixed an issue with item display on the scoreboard",
+        "- Fixed an issue where the start-recording hotkey did not work during a game"
     ]
 }
