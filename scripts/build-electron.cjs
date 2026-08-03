@@ -64,6 +64,27 @@ function ensureTooltipRebuildTool() {
   }
 }
 
+function ensureHotkeyListener() {
+  const exeName = process.platform === "win32" ? "hotkey_listener.exe" : "hotkey_listener";
+  const toolPath = path.join(root, "src-tauri", "devtools", "target", "release", exeName);
+  if (fs.existsSync(toolPath)) return;
+
+  console.log("Preparing raw-input hotkey listener...");
+  const result = spawnSync("cargo", ["build", "--release", "--bin", "hotkey_listener", "--manifest-path", path.join(root, "src-tauri", "devtools", "Cargo.toml")], {
+    cwd: root,
+    shell: process.platform === "win32",
+    stdio: "inherit",
+    env: { ...process.env },
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`hotkey listener cargo build failed with exit code ${result.status}`);
+  }
+  if (!fs.existsSync(toolPath)) {
+    throw new Error(`hotkey listener was not created at ${toolPath}`);
+  }
+}
+
 const target = process.argv[2] || "nsis";
 const args = ["--win", target, "--x64", "--publish", "never"];
 const env = {
@@ -131,6 +152,7 @@ function runElectronBuilder() {
   const { generatedModulePath } = prepareYouTubeClientId(root);
   ensureLibobsBundle();
   ensureTooltipRebuildTool();
+  if (process.platform === "win32") ensureHotkeyListener();
   cleanUnpackedDirs();
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
