@@ -4,6 +4,23 @@ const path = require("node:path");
 const electronBin = require("electron");
 
 const root = path.resolve(__dirname, "..");
+
+function ensureHotkeyListener() {
+  const exeName = process.platform === "win32" ? "hotkey_listener.exe" : "hotkey_listener";
+  const toolPath = path.join(root, "src-tauri", "devtools", "target", "release", exeName);
+  if (fs.existsSync(toolPath)) return;
+  console.log("Preparing raw-input hotkey listener...");
+  const result = spawnSync("cargo", ["build", "--release", "--bin", "hotkey_listener", "--manifest-path", path.join(root, "src-tauri", "devtools", "Cargo.toml")], {
+    cwd: root,
+    shell: process.platform === "win32",
+    stdio: "inherit",
+    env: { ...process.env },
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`hotkey listener cargo build failed with exit code ${result.status}`);
+  }
+}
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
 if (process.argv.includes("--dev-server")) {
@@ -89,6 +106,8 @@ function getDevElectronBin() {
   fs.writeFileSync(stampPath, JSON.stringify(nextStamp, null, 2), "utf8");
   return devExe;
 }
+
+if (process.platform === "win32") ensureHotkeyListener();
 
 const child = spawn(getDevElectronBin(), ["electron/main.cjs"], {
   cwd: root,

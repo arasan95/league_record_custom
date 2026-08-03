@@ -108,6 +108,10 @@
       {
         "from": "src-tauri/devtools/target/release/rebuild_tooltip_cache.exe",
         "to": "devtools/rebuild_tooltip_cache.exe"
+      },
+      {
+        "from": "src-tauri/devtools/target/release/hotkey_listener.exe",
+        "to": "devtools/hotkey_listener.exe"
       }
     ],
     "win": {

@@ -50,6 +50,7 @@ let recorderController = null;
 let gameMonitor = null;
 let recordingHotkeysGameActive = false;
 let recordingHotkeySettings = null;
+let rawHotkeyListener = null;
 let currentMainWindow = null;
 let externalInstallerPending = false;
 let configuredAutoUpdater = null;
@@ -2077,7 +2078,11 @@ class RecorderController {
 
   async refreshParticipantMap() {
     try {
-      const session = await lcuRequest("GET", "/lol-gameflow/v1/session");
+      const [session, championLookup] = await Promise.all([
+        lcuRequest("GET", "/lol-gameflow/v1/session"),
+        loadChampionLookup(),
+      ]);
+      this.championNameToId = championLookup?.nameToId ?? this.championNameToId ?? new Map();
       const gameData = session?.gameData ?? {};
       const next = new Map();
       const pidToChampionId = new Map();
@@ -2087,8 +2092,15 @@ class RecorderController {
           const pid = Number(p?.participantId ?? 0);
           if (!pid) continue;
           const championId = Number(p?.championId ?? 0);
-          if (championId) pidToChampionId.set(pid, championId);
-          for (const summoner of identityAliases(p?.summonerName ?? p?.gameName)) {
+          if (championId) {
+            pidToChampionId.set(pid, championId);
+            next.set(`team:${teamId}|championId:${championId}`, pid);
+          }
+          // The session can report an empty `summonerName` for Riot ID
+          // accounts. Prefer a non-empty value so gameName is not shadowed.
+          const sessionSummoner = String(p?.summonerName ?? "").trim()
+            || String(p?.gameName ?? "").trim();
+          for (const summoner of identityAliases(sessionSummoner)) {
             if (summoner) next.set(`team:${teamId}|summoner:${summoner}`, pid);
           }
           const riot1 = normalizeIdentityKey(p?.riotId);
@@ -2253,14 +2265,26 @@ class RecorderController {
   resolveLivePlayerPid(player) {
     const teamId = teamIdFromLivePlayer(player?.team);
     const summoners = identityAliases(player?.summonerName);
-    const riotId = normalizeIdentityKey(player?.riotId?.riotId ?? player?.riotId ?? "");
-    return summoners.map((summoner) => (
+    const bySummoner = summoners.map((summoner) => (
       this.playerNameToPid.get(`team:${teamId}|summoner:${summoner}`)
       ?? this.playerNameToPid.get(`summoner:${summoner}`)
-    )).find(Boolean)
-      ?? this.playerNameToPid.get(`team:${teamId}|riot:${riotId}`)
-      ?? this.playerNameToPid.get(`riot:${riotId}`)
-      ?? 0;
+    )).find(Boolean);
+    if (bySummoner) return bySummoner;
+    const riotId = normalizeIdentityKey(player?.riotId?.riotId ?? player?.riotId ?? "");
+    const byRiot = this.playerNameToPid.get(`team:${teamId}|riot:${riotId}`)
+      ?? this.playerNameToPid.get(`riot:${riotId}`);
+    if (byRiot) return byRiot;
+    // Last resort: bots and matches where the session omits summoner names
+    // still have a stable champion. Map the Live Client champion name to its
+    // champion ID and match the roster entry for that team.
+    const championKey = normalizeChampionKey(player?.championName);
+    const championId = championKey ? (this.championNameToId?.get(championKey) ?? 0) : 0;
+    if (championId) {
+      const byChampion = this.playerNameToPid.get(`team:${teamId}|championId:${championId}`)
+        ?? this.playerNameToPid.get(`championId:${championId}`);
+      if (byChampion) return byChampion;
+    }
+    return 0;
   }
 
   // Once a live player is resolved to a participant ID, keep trusting it for
@@ -2791,10 +2815,14 @@ function parseTaggedShopperName(raw) {
 function buildLivePlayerFallbackKey(player) {
   const team = teamIdFromLivePlayer(player?.team);
   const champion = normalizeChampionKey(player?.championName);
-  // Player names and Riot IDs can appear late or change representation in
-  // Live Client responses. Champion selection is fixed and unique per team.
-  if (champion) return `champion:${team}|${champion}`;
-  return `summoner:${team}|${normalizeIdentityKey(player?.summonerName)}`;
+  // Include the summoner name so a disguised player (e.g. Neeko copying another
+  // champion's name) never shares a cache slot with the real player of that
+  // champion. Two different players writing to the same key make each tick
+  // diff against the other's inventory, which re-emits the whole inventory as
+  // mirrored purchase/sell batches.
+  const summoner = normalizeIdentityKey(player?.summonerName);
+  if (champion) return `champion:${team}|${champion}|${summoner}`;
+  return `summoner:${team}|${summoner}`;
 }
 
 function playersEqual(a, b) {
@@ -3677,6 +3705,93 @@ function normalizeAccelerator(value) {
   return normalized || null;
 }
 
+const PLAIN_FUNCTION_KEYS = new Set(["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]);
+
+function isPlainFunctionKeyAccelerator(value) {
+  const normalized = normalizeAccelerator(value);
+  return normalized !== null && PLAIN_FUNCTION_KEYS.has(normalized.toUpperCase());
+}
+
+function resolveRawHotkeyListenerPath() {
+  const exe = process.platform === "win32" ? "hotkey_listener.exe" : "hotkey_listener";
+  const candidates = [
+    path.join(process.resourcesPath || "", "devtools", exe),
+    path.join(process.resourcesPath || "", exe),
+    path.join(process.cwd(), "src-tauri", "devtools", "target", "release", exe),
+    path.join(process.cwd(), "src-tauri", "devtools", "target", "debug", exe),
+  ];
+  return candidates.find((candidate) => {
+    try {
+      return fsNode.statSync(candidate).isFile();
+    } catch {
+      return false;
+    }
+  }) ?? null;
+}
+
+function handleRawFunctionKey(keyName) {
+  if (!recordingHotkeysGameActive || !recordingHotkeySettings) return;
+  const settings = recordingHotkeySettings;
+  const start = normalizeAccelerator(settings.startRecordingHotkey);
+  const stop = normalizeAccelerator(settings.stopRecordingHotkey);
+  const upper = String(keyName).trim().toUpperCase();
+  if (start && start.toUpperCase() === upper) {
+    void writeLog("hotkey", `raw function key: start recording (${upper})`);
+    void recorderController?.manualStart();
+  } else if (stop && stop.toUpperCase() === upper) {
+    void writeLog("hotkey", `raw function key: stop recording (${upper})`);
+    void recorderController?.manualStop(true);
+  }
+}
+
+function startRawHotkeyListener() {
+  if (process.platform !== "win32") return;
+  if (rawHotkeyListener) return;
+  const exePath = resolveRawHotkeyListenerPath();
+  if (!exePath) {
+    void writeLog("hotkey", "raw-input hotkey listener not found; plain function-key hotkeys fall back to globalShortcut");
+    return;
+  }
+  let child;
+  try {
+    child = spawn(exePath, [], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    void writeLog("hotkey", `failed to spawn raw-input hotkey listener: ${String(error)}`);
+    return;
+  }
+  rawHotkeyListener = child;
+  let buffer = "";
+  child.stdout.on("data", (chunk) => {
+    buffer += String(chunk);
+    let newlineIndex;
+    while ((newlineIndex = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, newlineIndex).trim();
+      buffer = buffer.slice(newlineIndex + 1);
+      if (line === "READY") {
+        void writeLog("hotkey", "raw-input hotkey listener ready");
+      } else if (line.startsWith("KEY ")) {
+        handleRawFunctionKey(line.slice(4).trim());
+      }
+    }
+  });
+  child.stderr.on("data", (chunk) => {
+    const text = String(chunk).trim();
+    if (text) void writeLog("hotkey", `raw-input listener stderr: ${text}`);
+  });
+  child.on("exit", (code) => {
+    void writeLog("hotkey", `raw-input hotkey listener exited code=${code}`);
+    if (rawHotkeyListener === child) rawHotkeyListener = null;
+  });
+}
+
+function stopRawHotkeyListener() {
+  if (!rawHotkeyListener) return;
+  try {
+    rawHotkeyListener.kill();
+  } catch {}
+  rawHotkeyListener = null;
+}
+
 function syncRecordingHotkeys() {
   globalShortcut.unregisterAll();
   if (!recordingHotkeysGameActive || !recordingHotkeySettings) return;
@@ -3684,14 +3799,17 @@ function syncRecordingHotkeys() {
   const settings = recordingHotkeySettings;
   const start = normalizeAccelerator(settings.startRecordingHotkey);
   const stop = normalizeAccelerator(settings.stopRecordingHotkey);
-  if (start) {
+  // Plain F1-F12 hotkeys are handled by the raw-input listener, which works
+  // even while a game (or Riot Vanguard) holds the keyboard. Only fall back to
+  // globalShortcut for them when the listener is unavailable.
+  if (start && !(rawHotkeyListener && isPlainFunctionKeyAccelerator(start))) {
     const ok = globalShortcut.register(start, () => {
       if (!recordingHotkeysGameActive) return;
       void recorderController?.manualStart();
     });
     void writeLog("hotkey", `register start ${start}: ${ok}`);
   }
-  if (stop) {
+  if (stop && !(rawHotkeyListener && isPlainFunctionKeyAccelerator(stop))) {
     const ok = globalShortcut.register(stop, () => {
       if (!recordingHotkeysGameActive) return;
       void recorderController?.manualStop(true);
@@ -4634,6 +4752,7 @@ app.whenReady().then(() => {
       }
     })();
   });
+  startRawHotkeyListener();
   createWindow();
   });
 }).catch((error) => {
@@ -4647,6 +4766,7 @@ app.on("activate", () => {
 });
 app.on("before-quit", () => {
   globalShortcut.unregisterAll();
+  stopRawHotkeyListener();
   gameMonitor?.stop();
   void recorderController?.shutdown();
 });
