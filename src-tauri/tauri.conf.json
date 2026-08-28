@@ -68,8 +68,8 @@
                                     "comment":  "Auto-update enabled.",
                                     "pubkey":  "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERCQzZGOTU1QTUwOTJDQ0MKUldUTUxBbWxWZm5HMjRYMGxqdlNoaVVVRVJOblA5Y3hWSGl4N0dCYnd3Mlh4QmZmS01jbVFHR0oK",
                                     "endpoints":  [
-                                                      "https://github.com/arasan95/League_Record_custom/releases/latest/download/latest.json"
-                                                  ],
+                                                      "https://github.com/arasan95/league_record_custom/releases/latest/download/latest.json"
+                                                   ],
                                     "windows":  {
                                                     "installMode":  "passive"
                                                 }

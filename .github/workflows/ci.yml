@@ -7,6 +7,9 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     if: github.actor != 'dependabot[bot]'
@@ -14,7 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri"
       - name: Bundle FFmpeg for build
         shell: pwsh
         run: |
@@ -45,7 +53,7 @@ jobs:
             -Version $version `
             -SourceName "Chocolatey ffmpeg package" `
             -SourceUrl "https://community.chocolatey.org/packages/ffmpeg"
-      - run: bun install --linker=isolated
+      - run: bun install --frozen-lockfile --linker=isolated
       - name: Responsibility Coverage Check
         run: bun run check:responsibility
       - run: bun run --bun tauri build

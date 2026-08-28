@@ -41,6 +41,7 @@ const sourceRoot = path.resolve(__dirname, "..");
 const appVersionRoot = isDev ? sourceRoot : app.getAppPath();
 const appFile = (...segments) => path.join(isDev ? sourceRoot : app.getAppPath(), ...segments);
 let activeLogFile = "";
+let activeDevLogFile = "";
 let tooltipSqlPromise = null;
 const tooltipLocaleJsonCache = new Map();
 let championLookupPromise = null;
@@ -229,8 +230,10 @@ async function initLogging() {
   await fs.mkdir(logsDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   activeLogFile = path.join(logsDir, `session-${stamp}.log`);
+  activeDevLogFile = path.join(logsDir, `dev-${stamp}.log`);
   await fs.writeFile(activeLogFile, `[${nowIso()}] [main] logging initialized\n`, "utf8");
   await fs.writeFile(path.join(logsDir, "latest.log"), activeLogFile, "utf8");
+  void pruneOldLogsIfNeeded();
 }
 
 async function writeLog(scope, message) {
@@ -251,6 +254,93 @@ function safeJson(value) {
 
 function sleepMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Developer mode verbose logging (isolated to dev-*.log, 3 days / 50MB retention, with token masking)
+// P0-2: dev logs are written to a separate file so normal logs stay clean and secrets are masked.
+let cachedDeveloperMode = null;
+let developerModeCacheAt = 0;
+async function isDeveloperModeEnabled() {
+  const now = Date.now();
+  if (cachedDeveloperMode !== null && now - developerModeCacheAt < 2000) return cachedDeveloperMode;
+  try {
+    const s = await readSettings();
+    cachedDeveloperMode = Boolean(s.developerMode);
+    developerModeCacheAt = now;
+    return cachedDeveloperMode;
+  } catch {
+    return Boolean(cachedDeveloperMode);
+  }
+}
+function invalidateDeveloperModeCache() {
+  cachedDeveloperMode = null;
+  developerModeCacheAt = 0;
+}
+function sanitizeDevMessage(message) {
+  let s = String(message);
+  // Mask LCU remoting auth token and Riot Basic auth
+  s = s.replace(/riot:[^\s"'`]+/gi, "riot:***");
+  s = s.replace(/Basic\s+[A-Za-z0-9+/=]+/g, "Basic ***");
+  s = s.replace(/remoting-auth-token[^\s"'`]*\s*[:=]\s*[^\s"'`]+/gi, "remoting-auth-token=***");
+  s = s.replace(/(password["'\s:=]+)[^\s"'`]+/gi, "$1***");
+  s = s.replace(/(authorization["'\s:=]+)[^\s"'`]+/gi, "$1***");
+  // Mask lockfile-style "riot:<base64>" and raw lockfile password segment ":<port>:<password>:"
+  s = s.replace(/:[0-9]{2,5}:[A-Za-z0-9+/=_\-]{8,}/g, ":***");
+  return s;
+}
+async function writeDevLog(scope, message) {
+  if (!activeDevLogFile) return;
+  try {
+    if (!await isDeveloperModeEnabled()) return;
+  } catch { return; }
+  const sanitized = sanitizeDevMessage(message);
+  const line = `[${nowIso()}] [${scope}] ${sanitized}\n`;
+  try { await fs.appendFile(activeDevLogFile, line, "utf8"); } catch {}
+}
+async function collectSystemSnapshot() {
+  const snap = { at: nowIso(), platform: process.platform, arch: process.arch, electron: process.versions.electron || "", node: process.versions.node || "" };
+  try {
+    const mem = process.getSystemMemoryInfo ? process.getSystemMemoryInfo() : null;
+    if (mem) snap.memory = mem;
+    snap.cpuUsage = process.getCPUUsage ? process.getCPUUsage() : null;
+  } catch {}
+  try {
+    const { stdout } = await runCommand("wmic", ["OS", "get", "Caption,Version,BuildNumber", "/value"]).catch(() => ({ stdout: "" }));
+    if (stdout) snap.osCaption = stdout.trim().slice(0, 500);
+  } catch {}
+  return snap;
+}
+async function pruneOldLogsIfNeeded() {
+  if (!activeLogFile) return;
+  try {
+    const logsDir = path.join(app.getPath("userData"), "logs");
+    const entries = await fs.readdir(logsDir).catch(() => []);
+    const now = Date.now();
+    const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+    let totalSize = 0;
+    const files = [];
+    for (const name of entries) {
+      if (!/^session-.*\.log$/.test(name) && !/^dev-.*\.log$/.test(name)) continue;
+      const p = path.join(logsDir, name);
+      try {
+        const st = await fs.stat(p);
+        totalSize += st.size;
+        files.push({ path: p, mtime: st.mtimeMs, size: st.size });
+      } catch {}
+    }
+    files.sort((a, b) => a.mtime - b.mtime);
+    for (const f of files) {
+      if (now - f.mtime > threeDaysMs) {
+        try { await fs.rm(f.path, { force: true }); totalSize -= f.size; } catch {}
+      }
+    }
+    const maxTotal = 50 * 1024 * 1024;
+    for (const f of files) {
+      if (totalSize <= maxTotal) break;
+      if (!await fs.stat(f.path).then(() => true).catch(() => false)) continue;
+      try { await fs.rm(f.path, { force: true }); totalSize -= f.size; } catch {}
+    }
+  } catch {}
 }
 
 protocol.registerSchemesAsPrivileged([
@@ -404,6 +494,7 @@ async function writeSettings(settings) {
   const normalized = sanitizeSettings(settings);
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, JSON.stringify(normalized, null, 2), "utf8");
+  invalidateDeveloperModeCache();
 }
 
 async function ensureDir(dir) {
@@ -420,8 +511,21 @@ function sanitizeFileName(value) {
 
 function toAbsoluteRecordingId(settings, videoId) {
   if (!videoId) return videoId;
-  if (path.isAbsolute(videoId)) return stripKnownExt(videoId);
-  return stripKnownExt(path.join(settings.recordingsFolder, videoId));
+  const recordingsFolder = path.resolve(settings.recordingsFolder);
+  if (path.isAbsolute(videoId)) {
+    const normalized = path.normalize(stripKnownExt(videoId));
+    // P0-4: prevent path traversal outside recordingsFolder for absolute ids
+    if (!normalized.startsWith(recordingsFolder + path.sep) && normalized !== recordingsFolder) {
+      // Allow absolute paths only if they are inside recordingsFolder; otherwise clamp
+      return stripKnownExt(path.join(recordingsFolder, path.basename(normalized)));
+    }
+    return normalized;
+  }
+  const joined = path.normalize(stripKnownExt(path.join(recordingsFolder, videoId)));
+  if (!joined.startsWith(recordingsFolder + path.sep) && joined !== recordingsFolder) {
+    return stripKnownExt(path.join(recordingsFolder, path.basename(joined)));
+  }
+  return joined;
 }
 
 async function readMetadataFor(baseVideoId) {
@@ -1863,6 +1967,18 @@ async function buildRecorderSettings(settings, gameInfo) {
     : "";
   await writeLog("recording", `resolution input=${inputResolution.width}x${inputResolution.height}${logicalPart} ratio=${(inputResolution.width / inputResolution.height).toFixed(4)} output=${outputResolution.width}x${outputResolution.height} setting=${settings.outputResolution ?? "auto"}`);
   await writeLog("recording", `capture window title='${captureWindow.title}' class='${captureWindow.class}' process='${captureWindow.process}'`);
+  void writeDevLog("audio:dev", `audio_source=${settings.recordAudio ?? "SYSTEM"} tracks=${safeJson(settings.applicationAudioTracks ?? [])} framerate=${safeJson(settings.framerate)} quality=${settings.encodingQuality} output=${outputPath}`);
+  try {
+    if (await isDeveloperModeEnabled()) {
+      const snap = await collectSystemSnapshot();
+      void writeDevLog("dev-snapshot", `buildRecorderSettings snapshot window=${safeJson(captureWindow)} res=${safeJson(inputResolution)}->${safeJson(outputResolution)} audio=${safeJson(settings.recordAudio)} system=${safeJson(snap)}`);
+      // Best-effort WASAPI default format probe (may fail on some machines)
+      try {
+        const { stdout } = await runCommand("powershell", ["-NoProfile", "-Command", "Get-CimInstance Win32_SoundDevice | Select-Object -First 3 Name,Status | Format-List | Out-String"]).catch(() => ({ stdout: "" }));
+        if (stdout) void writeDevLog("audio:dev", `soundDevices ${stdout.slice(0, 800)}`);
+      } catch {}
+    }
+  } catch {}
   return {
     outputPath,
     ipcSettings: {
@@ -1933,7 +2049,9 @@ class ExtRecorder {
     this.child.stdout.on("data", (chunk) => this.onStdout(chunk));
     this.child.stderr.setEncoding("utf8");
     this.child.stderr.on("data", (chunk) => {
-      void writeLog("recorder", String(chunk).trimEnd());
+      const msg = String(chunk).trimEnd();
+      void writeLog("recorder", msg);
+      if (/audio|wasapi|aac|mixer|sample/i.test(msg)) void writeDevLog("audio:dev", `recorder stderr ${msg}`);
     });
     this.child.on("exit", (code) => {
       void writeLog("recorder", `process exited code=${code}`);
@@ -1957,6 +2075,7 @@ class ExtRecorder {
         if (waiter) waiter.resolve(response);
       } catch {
         void writeLog("recorder", line);
+        if (/audio|wasapi|aac|mixer|sample/i.test(line)) void writeDevLog("audio:dev", `recorder stdout ${line}`);
       }
     }
   }
@@ -2039,6 +2158,7 @@ class RecorderController {
   async startRecording({ manual = false, gameInfo = {} } = {}) {
     if (this.current) {
       await writeLog("recording", `start ignored; already recording ${this.current.outputPath}`);
+      void writeDevLog("recording:dev", `start ignored already recording current=${safeJson(this.current)} newInfo=${safeJson(gameInfo)}`);
       return false;
     }
     const settings = await readSettings();
@@ -2060,11 +2180,14 @@ class RecorderController {
       await writeLog("recording", `waiting for in-game allgamedata before recorder.startRecording minGameTime=${startDelaySec.toFixed(2)}`);
       const active = await waitForIngameActive(120, 500, startDelaySec);
       if (!active) {
+        void writeDevLog("recording:dev", `waitForIngameActive timeout gameId=${Number(info.gameId ?? 0)} delay=${startDelaySec} liveClientFailureTicks=${this.liveClientFailureTicks}`);
+        try { const snap = await collectSystemSnapshot(); void writeDevLog("dev-snapshot", `ingame timeout snapshot ${safeJson(snap)} info=${safeJson(info)}`); } catch {}
         await recorder.shutdown().catch(() => {});
         this.setStatus("idle");
         throw new Error("timed out waiting for in-game API");
       }
       await writeLog("recording", `in-game allgamedata ready gameTime=${active.gameTime.toFixed(3)} players=${active.players}`);
+      void writeDevLog("recording:dev", `ingame ready gameId=${Number(info.gameId ?? 0)} gameTime=${active.gameTime} players=${active.players}`);
     }
     this.recorder = recorder;
     this.stopping = false;
@@ -2400,6 +2523,9 @@ class RecorderController {
     if (added > 0 || liveEvents.length > 0 || this.captureTickCount === 1 || this.captureTickCount % 10 === 0) {
       const itemCount = players.reduce((total, player) => total + (Array.isArray(player?.items) ? player.items.length : 0), 0);
       await writeLog("recording", `live capture players=${players.length} items=${itemCount} rawEvents=${liveEvents.length} standardItemEvents=${standardItemEvents} added=${added} total=${this.syntheticItemEvents.length} gameTimeMs=${gameTimeMs}`);
+    }
+    if (this.captureTickCount % 30 === 0) {
+      void writeDevLog("perf:dev", `tick=${this.captureTickCount} gameTimeMs=${gameTimeMs} cpu=${safeJson(process.getCPUUsage ? process.getCPUUsage() : null)} mem=${safeJson(process.getSystemMemoryInfo ? process.getSystemMemoryInfo() : null)} failureTicks=${this.liveClientFailureTicks}`);
     }
   }
 
@@ -3701,7 +3827,11 @@ class GameMonitor {
     let session;
     try {
       session = await lcuRequest("GET", "/lol-gameflow/v1/session");
-    } catch {
+    } catch (error) {
+      void writeDevLog("game-monitor:dev", `tick lcu session failed err=${String(error)} inGameStartedFired=${this.inGameStartedFired} current=${Boolean(this.controller.current)} lastPhase=${this.lastPhase}`);
+      if (await isDeveloperModeEnabled()) {
+        try { const snap = await collectSystemSnapshot(); void writeDevLog("dev-snapshot", `tick failure snapshot ${safeJson(snap)}`); } catch {}
+      }
       setRecordingHotkeysGameActive(false);
       await this.checkMissingLeagueWindow();
       this.lastPhase = "";
@@ -3775,6 +3905,7 @@ class GameMonitor {
     }
     const gameflowActive = info.phase === "GameStart" || info.phase === "InProgress";
     setRecordingHotkeysGameActive(gameflowActive);
+    await writeDevLog("game-monitor:dev", `handleSession phase=${info.phase} gameId=${info.gameId} queue=${info.queueId} mode=${info.gameMode ?? ""} active=${gameflowActive} inGameStartedFired=${this.inGameStartedFired} seen=${this.seenGameIds.has(info.gameId)} current=${Boolean(this.controller.current)} source=${source}`);
 
     if (gameflowActive && info.gameId && !this.seenGameIds.has(info.gameId)) {
       broadcastAppEvent("GameDetected", null);
@@ -3790,10 +3921,13 @@ class GameMonitor {
         const settings = await readSettings();
         const allowed = isGameModeAllowed(settings, info.queueId, info.gameMode);
         await writeLog("game-monitor", `auto candidate gameId=${info.gameId} queue=${info.queueId} mode=${info.gameMode ?? ""} allowed=${allowed}`);
+        void writeDevLog("game-monitor:dev", `candidate detail gameId=${info.gameId} queue=${info.queueId} normalizedMode=${normalizeQueueMode(info.queueId, info.gameMode)} gameMode=${info.gameMode ?? ""} allowedModes=${safeJson(settings.gameModes)} allowed=${allowed} seenSize=${this.seenGameIds.size}`);
         this.seenGameIds.add(info.gameId);
         if (allowed) {
           const started = await this.controller.startRecording({ manual: false, gameInfo: { ...info, gameTime } }).catch((error) => {
             void writeLog("recording", `auto start failed: ${String(error?.stack || error)}`);
+            void writeDevLog("game-monitor:dev", `auto start failed gameId=${info.gameId} err=${String(error?.stack || error)} info=${safeJson(info)}`);
+            if (isDeveloperModeEnabled().then((v) => v && collectSystemSnapshot().then((snap) => writeDevLog("dev-snapshot", `auto start failure snapshot ${safeJson(snap)}`)))) {}
             return false;
           });
           this.ingameFailureTicks = 0;
@@ -3802,6 +3936,8 @@ class GameMonitor {
           await writeLog("game-monitor", `auto recording skipped by mode settings queue=${info.queueId} mode=${info.gameMode}`);
           this.startNonRecordedGameStartedPoll(info.gameId);
         }
+      } else {
+        void writeDevLog("game-monitor:dev", `skip candidate inner gameId falsy or dedup seen=${info.gameId ? this.seenGameIds.has(info.gameId) : "no gameId"} gameId=${info.gameId}`);
       }
     } else if (this.inGameStartedFired) {
       try {
