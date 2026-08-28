@@ -1418,6 +1418,89 @@ async function lcuRequest(method, endpoint, body) {
   });
 }
 
+function rankedQueueTypeForQueueId(queueId) {
+  const id = Number(queueId);
+  if (id === 420) return "RANKED_SOLO_5x5";
+  if (id === 440) return "RANKED_FLEX_SR";
+  return null;
+}
+
+function isTftQueueId(queueId) {
+  return [1090, 1100, 1110, 1130, 1160, 1220].includes(Number(queueId));
+}
+
+async function fetchCurrentLP(queueId) {
+  const queueType = rankedQueueTypeForQueueId(queueId);
+  if (!queueType) return null;
+  try {
+    const data = await lcuRequest("GET", "/lol-ranked/v1/current-ranked-stats");
+    const queues = Array.isArray(data?.queues) ? data.queues : [];
+    const qm = data?.queueMap && typeof data.queueMap === "object" ? data.queueMap : null;
+    if (qm && qm[queueType]) {
+      const entry = qm[queueType];
+      const lp = Number(entry.leaguePoints ?? entry.league_points ?? 0);
+      const tier = String(entry.tier ?? "").trim();
+      const division = String(entry.division ?? entry.rank ?? "").trim();
+      if (tier) return { queueType, tier, division, leaguePoints: lp };
+    }
+    for (const q of queues) {
+      if (String(q.queueType ?? q.queue_type ?? "").toUpperCase() === queueType) {
+        const lp = Number(q.leaguePoints ?? q.league_points ?? 0);
+        const tier = String(q.tier ?? "").trim();
+        const division = String(q.division ?? q.rank ?? "").trim();
+        if (tier) return { queueType, tier, division, leaguePoints: lp };
+      }
+    }
+    return null;
+  } catch (error) {
+    await writeLog("lp", `fetchCurrentLP failed queue=${queueId} ${String(error?.message || error)}`);
+    return null;
+  }
+}
+
+function rankScore(snapshot) {
+  const tierRaw = String(snapshot.tier ?? "").toUpperCase();
+  let tierIndex = null;
+  if (tierRaw === "IRON") tierIndex = 0;
+  else if (tierRaw === "BRONZE") tierIndex = 1;
+  else if (tierRaw === "SILVER") tierIndex = 2;
+  else if (tierRaw === "GOLD") tierIndex = 3;
+  else if (tierRaw === "PLATINUM") tierIndex = 4;
+  else if (tierRaw === "EMERALD") tierIndex = 5;
+  else if (tierRaw === "DIAMOND") tierIndex = 6;
+  else if (["MASTER", "GRANDMASTER", "CHALLENGER"].includes(tierRaw)) tierIndex = 7;
+  else return null;
+  const isApex = ["MASTER", "GRANDMASTER", "CHALLENGER"].includes(tierRaw);
+  let divisionIndex = null;
+  if (isApex) divisionIndex = 0;
+  else {
+    const divRaw = String(snapshot.division ?? "").toUpperCase();
+    if (divRaw === "IV") divisionIndex = 0;
+    else if (divRaw === "III") divisionIndex = 1;
+    else if (divRaw === "II") divisionIndex = 2;
+    else if (divRaw === "I") divisionIndex = 3;
+    else return null;
+  }
+  return tierIndex * 400 + divisionIndex * 100 + Number(snapshot.leaguePoints ?? 0);
+}
+
+function lpDiffFrom(endSnapshot, startSnapshot) {
+  if (!endSnapshot || !startSnapshot) return null;
+  if (endSnapshot.queueType !== startSnapshot.queueType) {
+    void writeLog("lp", `queue changed start=${startSnapshot.queueType} end=${endSnapshot.queueType}`);
+    return null;
+  }
+  const s = rankScore(startSnapshot);
+  const e = rankScore(endSnapshot);
+  if (s != null && e != null) return e - s;
+  if (String(endSnapshot.tier).toUpperCase() === String(startSnapshot.tier).toUpperCase()
+    && String(endSnapshot.division).toUpperCase() === String(startSnapshot.division).toUpperCase()) {
+    return Number(endSnapshot.leaguePoints ?? 0) - Number(startSnapshot.leaguePoints ?? 0);
+  }
+  void writeLog("lp", `could not calculate diff start=${safeJson(startSnapshot)} end=${safeJson(endSnapshot)}`);
+  return null;
+}
+
 async function ingameRequest(endpoint) {
   return await new Promise((resolve, reject) => {
     const req = https.request({
@@ -1945,6 +2028,7 @@ class RecorderController {
     this.liveGameEndStopRequested = false;
     this.liveClientFailureTicks = 0;
     this.lastLiveClientSuccessAt = 0;
+    this.startLp = null;
   }
 
   setStatus(status) {
@@ -1984,6 +2068,16 @@ class RecorderController {
     }
     this.recorder = recorder;
     this.stopping = false;
+    const queueIdForLp = Number(info.queueId ?? 0);
+    let startLp = null;
+    if (!isTftQueueId(queueIdForLp)) {
+      startLp = await fetchCurrentLP(queueIdForLp);
+      if (startLp) {
+        await writeLog("lp", `Fetched initial LP queue=${startLp.queueType} ${startLp.tier} ${startLp.division} ${startLp.leaguePoints} queueId=${queueIdForLp}`);
+      } else if (rankedQueueTypeForQueueId(queueIdForLp)) {
+        await writeLog("lp", `initial LP unavailable queueId=${queueIdForLp}`);
+      }
+    }
     this.current = {
       outputPath: built.outputPath,
       manual,
@@ -1991,7 +2085,10 @@ class RecorderController {
       platformId: String(info.platformId ?? "UNKNOWN"),
       ingameTimeRecStartOffset: Number(info.gameTime ?? 0),
       startedAt: Date.now(),
+      queueId: queueIdForLp,
+      startLp,
     };
+    this.startLp = startLp;
     this.playerNameToPid = new Map();
     this.pidToChampionId = new Map();
     this.playerInventory = new Map();
@@ -2014,6 +2111,7 @@ class RecorderController {
       await recorder.shutdown().catch(() => {});
       this.recorder = null;
       this.current = null;
+      this.startLp = null;
       this.setStatus("idle");
       throw error;
     });
@@ -2060,15 +2158,36 @@ class RecorderController {
     if (stopError || shutdownError) {
       await writeLog("recording", `recorder stop completed with errors stop=${String(stopError?.message || stopError || "ok")} shutdown=${String(shutdownError?.message || shutdownError || "ok")}`);
     }
-    const metadata = await processRecordingMetadataWithRetry(current, this.syntheticItemEvents);
-    if (metadata) {
+    const syntheticEventsForMetadata = [...this.syntheticItemEvents];
+    const metadata = await processRecordingMetadataWithRetry(current, syntheticEventsForMetadata);
+    if (metadata?.Metadata) {
+      const isTft = isTftQueueId(metadata.Metadata.queue?.id);
+      const startLp = current.startLp ?? this.startLp ?? null;
+      if (!isTft && startLp && rankedQueueTypeForQueueId(metadata.Metadata.queue?.id ?? current.queueId)) {
+        await writeLog("lp", `waiting 3s for ranked stats settlement queue=${metadata.Metadata.queue?.id}`);
+        await sleepMs(3000);
+        const endLp = await fetchCurrentLP(metadata.Metadata.queue.id);
+        const diff = lpDiffFrom(endLp, startLp);
+        if (diff != null) {
+          metadata.Metadata.lpDiff = diff;
+          await writeLog("lp", `LP Update start=${safeJson(startLp)} end=${safeJson(endLp)} diff=${diff}`);
+        } else {
+          await writeLog("lp", `LP diff unavailable start=${safeJson(startLp)} end=${safeJson(endLp)} queue=${metadata.Metadata.queue?.id}`);
+        }
+      } else if (!isTft && !startLp && rankedQueueTypeForQueueId(metadata.Metadata.queue?.id ?? current.queueId)) {
+        await writeLog("lp", `no start LP captured; lpDiff remains null queue=${metadata.Metadata.queue?.id}`);
+      }
+      await fs.writeFile(`${stripKnownExt(current.outputPath)}.json`, JSON.stringify(metadata, null, 2), "utf8");
+      broadcastAppEvent("MetadataChanged", [stripKnownExt(current.outputPath)]);
+    } else if (metadata) {
       await fs.writeFile(`${stripKnownExt(current.outputPath)}.json`, JSON.stringify(metadata, null, 2), "utf8");
       broadcastAppEvent("MetadataChanged", [stripKnownExt(current.outputPath)]);
     } else {
-      const fallback = await buildDeferredFallbackMetadata(current, this.syntheticItemEvents, this.lastLiveGameData, this.playerNameToPid, this.pidToChampionId);
+      const fallback = await buildDeferredFallbackMetadata(current, syntheticEventsForMetadata, this.lastLiveGameData, this.playerNameToPid, this.pidToChampionId);
       await fs.writeFile(`${stripKnownExt(current.outputPath)}.json`, JSON.stringify(fallback, null, 2), "utf8");
       broadcastAppEvent("MetadataChanged", [stripKnownExt(current.outputPath)]);
     }
+    this.startLp = null;
     if (isManualStop) broadcastAppEvent("ManualRecordingStopped", null);
     broadcastAppEvent("RecordingsChanged", null);
     broadcastAppEvent("RecordingFinished", [stripKnownExt(current.outputPath), Boolean(isManualStop)]);
@@ -2157,6 +2276,7 @@ class RecorderController {
     const beforeEventCount = this.syntheticItemEvents.length;
     const liveEvents = normalizeLiveEvents(data);
     let standardItemEvents = 0;
+    const liveEmittedInTick = new Set();
 
     for (const event of liveEvents) {
       const eventId = normalizeLiveEventId(event);
@@ -2175,6 +2295,11 @@ class RecorderController {
       if (!itemEvent) continue;
       this.syntheticItemEvents.push(itemEvent);
       standardItemEvents += 1;
+      const kind = Object.keys(itemEvent).find((k) => k !== "timestamp");
+      const p = itemEvent[kind] ?? {};
+      const pidForDedup = Number(p.participant_id ?? 0) || Number(p.shopper_name ? parsePidTag(p.shopper_name) : 0) || 0;
+      const key = `${pidForDedup}:${p.item_id ?? p.itemId ?? 0}:${gameTimeMs}`;
+      liveEmittedInTick.add(key);
     }
 
     for (const player of players) {
@@ -2184,11 +2309,23 @@ class RecorderController {
       // real-time PID is the most stable identity and also survives Neeko
       // disguises, which change `championName` mid-game.
       const pid = this.resolveLivePlayerPidStable(player);
-      const key = pid > 0 ? `pid:${pid}` : buildLivePlayerFallbackKey(player);
+      const fallbackKey = buildLivePlayerFallbackKey(player);
+      const pidKey = pid > 0 ? `pid:${pid}` : null;
+      if (pidKey && this.playerInventory.has(fallbackKey) && !this.playerInventory.has(pidKey)) {
+        this.playerInventory.set(pidKey, this.playerInventory.get(fallbackKey));
+        this.playerInventory.delete(fallbackKey);
+        await writeLog("recording", `migrated inventory fallback->pid pid=${pid} fallback=${fallbackKey}`);
+      }
+      const key = pidKey ?? fallbackKey;
+      const hasPrevious = this.playerInventory.has(key);
       const previous = this.playerInventory.get(key) ?? [];
       const current = Array.isArray(player?.items)
         ? player.items.map(normalizeLiveItem).filter((item) => item.itemId > 0)
         : [];
+      if (!hasPrevious) {
+        this.playerInventory.set(key, current);
+        continue;
+      }
 
       const prevCounts = new Map();
       const currCounts = new Map();
@@ -2213,6 +2350,8 @@ class RecorderController {
         }
         for (let i = 0; i < count - before; i += 1) {
           const item = addedItems[i] ?? current.filter((candidate) => candidate.itemId === id)[before + i] ?? { itemId: id, slot: null };
+          const dedupKey = `${pid}:${id}:${gameTimeMs}`;
+          if (liveEmittedInTick.has(dedupKey)) continue;
           this.syntheticItemEvents.push({
             ItemPurchased: {
               participant_id: 0,
@@ -2240,6 +2379,8 @@ class RecorderController {
         }
         for (let i = 0; i < count - after; i += 1) {
           const item = removedItems[i] ?? previous.filter((candidate) => candidate.itemId === id)[after + i] ?? { itemId: id, slot: null };
+          const dedupKey = `${pid}:${id}:${gameTimeMs}`;
+          if (liveEmittedInTick.has(dedupKey)) continue;
           this.syntheticItemEvents.push({
             ItemSold: {
               participant_id: 0,
