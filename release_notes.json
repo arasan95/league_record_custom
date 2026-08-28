@@ -2,12 +2,12 @@
     "notes": [
         "[日本語]",
         "主な変更点:",
-        "- スコアボードのアイテム表示に関する不具合を修正しました",
-        "- ゲーム中に録画開始のホットキーが機能しない不具合を修正しました",
+        "- アイテムが重複して表示される問題を修正しました",
+        "- サイドバーにランク戦のLPが表示されない問題を修正しました",
         "",
         "[English]",
         "Highlights:",
-        "- Fixed an issue with item display on the scoreboard",
-        "- Fixed an issue where the start-recording hotkey did not work during a game"
+        "- Fixed an issue where items were displayed duplicated",
+        "- Fixed an issue where LP for ranked games was not shown in the sidebar"
     ]
 }
