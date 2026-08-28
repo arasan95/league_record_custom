@@ -1,0 +1,26 @@
+# Linguist overrides to fix language statistics
+# Vendored OBS binaries/headers should not count toward language percentages
+src-tauri/vendor/** linguist-vendored
+src-tauri/gen/** linguist-generated=true linguist-vendored
+src-tauri/resources/tooltip_data.db linguist-vendored
+assets/icons/share/x-logo/__MACOSX/** linguist-vendored
+**/__MACOSX/** linguist-vendored
+src-tauri/vendor/libobs-recorder/.run/** linguist-vendored
+
+# Generated schemas
+src-tauri/gen/schemas/** linguist-generated=true
+
+# Lockfiles treated as data
+bun.lock linguist-vendored
+package-lock.json linguist-vendored
+**/Cargo.lock linguist-vendored
+
+# Binary assets
+*.dll linguist-vendored
+*.exe linguist-vendored
+*.lib linguist-vendored
+*.pdb linguist-vendored
+*.pak linguist-vendored
+*.effect linguist-vendored
+*.ico linguist-vendored
+*.bmp linguist-vendored

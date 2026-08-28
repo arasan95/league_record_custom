@@ -104,3 +104,57 @@ src-tauri/resources/tools/ffmpeg/ffprobe.exe
 src-tauri/resources/tools/ffmpeg/ffplay.exe
 src-tauri/resources/tools/ffmpeg/*.dll
 src-tauri/resources/tools/ffmpeg/ffmpeg-windows-x64.zip
+
+# Vendored OBS binaries - only 30.2.2 is used (NEWEST_VERSION in build-helper/src/lib.rs:7)
+# Keep libobs_30.2.2, ignore all other versions to avoid 700MB bloat
+src-tauri/vendor/libobs-recorder/build-helper/libobs_27.2.4/
+src-tauri/vendor/libobs-recorder/build-helper/libobs_28.0.3/
+src-tauri/vendor/libobs-recorder/build-helper/libobs_28.1.1/
+src-tauri/vendor/libobs-recorder/build-helper/libobs_29.0.0/
+src-tauri/vendor/libobs-recorder/build-helper/libobs_29.1.3/
+src-tauri/vendor/libobs-recorder/build-helper/libobs_30.0.2/
+src-tauri/vendor/libobs-recorder/build-helper/libobs_30.1.0/
+src-tauri/vendor/libobs-recorder/build-helper/libobs_30.1.1/
+src-tauri/vendor/libobs-recorder/build-helper/libobs_30.1.2/
+src-tauri/vendor/libobs-recorder/build-helper/libobs_31.0.1/
+src-tauri/vendor/libobs-recorder/build-helper/libobs_32.0.4/
+# libobs-sys headers/libs for unused versions
+src-tauri/vendor/libobs-recorder/libobs-sys/libobs_headers_27.2.4/
+src-tauri/vendor/libobs-recorder/libobs-sys/libobs_headers_28.0.3/
+src-tauri/vendor/libobs-recorder/libobs-sys/libobs_headers_28.1.1/
+src-tauri/vendor/libobs-recorder/libobs-sys/libobs_headers_29.0.0/
+src-tauri/vendor/libobs-recorder/libobs-sys/libobs_headers_29.1.3/
+src-tauri/vendor/libobs-recorder/libobs-sys/libobs_headers_30.0.2/
+src-tauri/vendor/libobs-recorder/libobs-sys/libobs_headers_30.1.0/
+src-tauri/vendor/libobs-recorder/libobs-sys/libobs_headers_30.1.1/
+src-tauri/vendor/libobs-recorder/libobs-sys/libobs_headers_30.1.2/
+src-tauri/vendor/libobs-recorder/libobs-sys/libobs_headers_31.0.1/
+src-tauri/vendor/libobs-recorder/libobs-sys/libobs_headers_32.0.4/
+src-tauri/vendor/libobs-recorder/libobs-sys/obs_27.2.4.lib
+src-tauri/vendor/libobs-recorder/libobs-sys/obs_28.0.3.lib
+src-tauri/vendor/libobs-recorder/libobs-sys/obs_28.1.1.lib
+src-tauri/vendor/libobs-recorder/libobs-sys/obs_29.0.0.lib
+src-tauri/vendor/libobs-recorder/libobs-sys/obs_29.1.3.lib
+src-tauri/vendor/libobs-recorder/libobs-sys/obs_30.0.2.lib
+src-tauri/vendor/libobs-recorder/libobs-sys/obs_30.1.0.lib
+src-tauri/vendor/libobs-recorder/libobs-sys/obs_30.1.1.lib
+src-tauri/vendor/libobs-recorder/libobs-sys/obs_30.1.2.lib
+src-tauri/vendor/libobs-recorder/libobs-sys/obs_31.0.1.lib
+src-tauri/vendor/libobs-recorder/libobs-sys/obs_32.0.4.lib
+
+# Generated Tauri schemas
+src-tauri/gen/
+
+# IDE run configs
+src-tauri/vendor/libobs-recorder/.run/
+
+# macOS metadata
+**/__MACOSX/
+**/._*
+
+# npm lockfile - project uses bun.lock
+package-lock.json
+league_record_types/package-lock.json
+
+# Disabled workflow
+.github/workflows/release.yml.disabled
