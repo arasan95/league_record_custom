@@ -1,9 +1,10 @@
+/* Intentionally separate font families: Beaufort for LoL headings (this file) vs Inter for UI body (assets/fonts/). Keep split. */
 @font-face {
     font-family: "BeaufortW01-Bold";
     src: url("BeaufortW01-Bold.ttf") format("truetype");
 }
 
-/* Local Inter Font Definitions */
+/* Local Inter Font Definitions - UI body font, intentionally separate from Beaufort heading font */
 @font-face {
     font-family: 'Inter';
     src: url('../assets/fonts/Inter-Regular.woff2') format('woff2');
@@ -28,6 +29,7 @@
 :root {
     --theme-color: #a1b0d8;
     --background-color: #000;
+    /* --sidebar-width etc. moved to variables.css for single source */
 }
 
 * {

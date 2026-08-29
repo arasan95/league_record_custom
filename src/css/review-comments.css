@@ -1,17 +1,8 @@
-:root {
-    --review-sidebar-width: 330px;
-}
-
-#container {
-    display: flex !important;
-    flex-flow: row nowrap !important;
-}
-
-/* Fixed flex bases avoid implicit grid columns when older three-column layout
-   rules are present in a cached or bundled stylesheet. */
+/* --review-sidebar-width is now defined in variables.css */
 #server-nav {
-    flex: 0 0 72px;
-    width: 72px;
+    /* Keep flex fallback for cached grid, but grid takes precedence when supported */
+    flex: 0 0 var(--server-nav-width, 72px);
+    width: var(--server-nav-width, 72px);
 }
 
 #sidebar {
@@ -24,8 +15,10 @@
     width: auto !important;
 }
 
+/* Let container grid handle layout; legacy flex override removed in favor of grid (see container.css :has rule) */
+
 #review-comments {
-    grid-area: auto;
+    grid-area: review;
     flex: 0 0 var(--review-sidebar-width);
     align-self: stretch;
     width: var(--review-sidebar-width);

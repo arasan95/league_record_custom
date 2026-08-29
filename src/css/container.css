@@ -1,10 +1,16 @@
 #container {
     display: grid;
-    grid-template-columns: [server-nav] 72px [sidebar] var(--sidebar-width, 325px) [main] 1fr;
+    grid-template-columns: [server-nav] var(--server-nav-width, 72px) [sidebar] var(--sidebar-width, 325px) [main] 1fr;
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "server-nav sidebar main";
     overflow: hidden;
     min-height: 0;
+}
+
+/* When review-comments is visible, extend grid to 4 columns instead of flex override */
+#container:has(#review-comments:not([hidden])) {
+    grid-template-columns: [server-nav] var(--server-nav-width, 72px) [sidebar] var(--sidebar-width, 325px) [main] 1fr [review] var(--review-sidebar-width, 330px);
+    grid-template-areas: "server-nav sidebar main review";
 }
 
 /* Structural Layout Areas */

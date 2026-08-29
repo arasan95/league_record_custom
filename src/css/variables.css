@@ -1,0 +1,14 @@
+/* Design tokens - single source for layout and theme.
+   Intentionally keeps two font families separate:
+   --font-heading (Beaufort, LoL-style titles) vs --font-body (Inter, UI text)
+   See base.css for @font-face definitions. */
+:root {
+  --theme-color: #a1b0d8;
+  --background-color: #000;
+  --sidebar-surface: #1a1d27;
+  --sidebar-width: 325px;
+  --server-nav-width: 72px;
+  --review-sidebar-width: 330px;
+  --font-heading: "BeaufortW01-Bold", serif;
+  --font-body: "Inter", sans-serif;
+}
