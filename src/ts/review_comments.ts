@@ -23,7 +23,7 @@ import type {
     CommunityModeration,
     CommunityWriteAccess,
 } from "./community_comments";
-import { UI_LANGUAGE_CHANGED_EVENT, uiText } from "./ui_locale";
+import { UI_LANGUAGE_CHANGED_EVENT, isJapaneseUi } from "./ui_locale";
 import { writeText } from "./platform/clipboard";
 import { buildReplayShareLink } from "./replay_deep_link";
 
@@ -356,13 +356,13 @@ export class ReviewCommentsController {
         const displayContent = document.querySelector<HTMLElement>("#community-display-content")!;
         sharingToggle.setAttribute("aria-expanded", String(!this.communitySharingCollapsed));
         sharingToggle.setAttribute("aria-label", this.communitySharingCollapsed
-            ? uiText("共有設定を展開", "Expand sharing settings")
-            : uiText("共有設定を格納", "Collapse sharing settings"));
+            ? (isJapaneseUi() ? "共有設定を展開" : "Expand sharing settings")
+            : (isJapaneseUi() ? "共有設定を格納" : "Collapse sharing settings"));
         sharingContent.hidden = this.communitySharingCollapsed;
         displayToggle.setAttribute("aria-expanded", String(!this.communityDisplayCollapsed));
         displayToggle.setAttribute("aria-label", this.communityDisplayCollapsed
-            ? uiText("表示オプションを展開", "Expand display options")
-            : uiText("表示オプションを格納", "Collapse display options"));
+            ? (isJapaneseUi() ? "表示オプションを展開" : "Expand display options")
+            : (isJapaneseUi() ? "表示オプションを格納" : "Collapse display options"));
         displayContent.hidden = this.communityDisplayCollapsed;
     }
 
@@ -411,10 +411,7 @@ export class ReviewCommentsController {
                 output.hidden = false;
                 document.querySelector<HTMLButtonElement>("#community-invite-link-copy")!.hidden = false;
                 await writeText(output.value);
-                document.querySelector<HTMLElement>("#community-comments-status")!.textContent = uiText(
-                    "招待リンクを発行してコピーしました。",
-                    "Invite link created and copied.",
-                );
+                document.querySelector<HTMLElement>("#community-comments-status")!.textContent = (isJapaneseUi() ? "招待リンクを発行してコピーしました。" : "Invite link created and copied.");
             });
         });
         document.querySelector<HTMLButtonElement>("#community-invite-link-copy")!.addEventListener("click", async () => {
@@ -422,10 +419,7 @@ export class ReviewCommentsController {
             if (!link) return;
             await this.runCommunityAction(async () => {
                 await writeText(link);
-                document.querySelector<HTMLElement>("#community-comments-status")!.textContent = uiText(
-                    "招待リンクをコピーしました。",
-                    "Invite link copied.",
-                );
+                document.querySelector<HTMLElement>("#community-comments-status")!.textContent = (isJapaneseUi() ? "招待リンクをコピーしました。" : "Invite link copied.");
             });
         });
         document.querySelector<HTMLButtonElement>("#community-invite-redeem")!.addEventListener("click", async () => {
@@ -457,7 +451,7 @@ export class ReviewCommentsController {
     private async runCommunityAction(action: () => Promise<void>): Promise<void> {
         const status = document.querySelector<HTMLElement>("#community-comments-status")!;
         try {
-            status.textContent = uiText("処理中…", "Working…");
+            status.textContent = (isJapaneseUi() ? "処理中…" : "Working…");
             await action();
         } catch (error) {
             status.textContent = error instanceof Error ? error.message : String(error);
@@ -491,7 +485,7 @@ export class ReviewCommentsController {
         anonymousLabel.hidden = false;
         const videoId = activeVideoId.slice("youtube:".length);
         const status = document.querySelector<HTMLElement>("#community-comments-status")!;
-        status.textContent = uiText("権限を確認中…", "Checking permissions…");
+        status.textContent = (isJapaneseUi() ? "権限を確認中…" : "Checking permissions…");
         try {
             try {
                 // Keep Firebase identity aligned with the account currently
@@ -513,18 +507,18 @@ export class ReviewCommentsController {
             document.querySelector<HTMLSelectElement>("#community-read-access")!.value = context.settings.readAccess;
             if (context.canRead && context.canWrite) {
                 status.textContent = context.isOwner
-                    ? uiText("所有者", "Owner")
-                    : context.isMember ? uiText("招待メンバー", "Invited member") : uiText("投稿可能", "Can post");
+                    ? (isJapaneseUi() ? "所有者" : "Owner")
+                    : context.isMember ? (isJapaneseUi() ? "招待メンバー" : "Invited member") : (isJapaneseUi() ? "投稿可能" : "Can post");
             } else if (context.canRead) {
                 status.textContent = context.moderation?.action === "comment_block"
-                    ? uiText("管理者によりコメント投稿が禁止されています", "Comment posting was disabled by an administrator")
+                    ? (isJapaneseUi() ? "管理者によりコメント投稿が禁止されています" : "Comment posting was disabled by an administrator")
                     : context.settings.writeAccess === "rank_verified" && !context.isRankVerified
-                    ? uiText("投稿にはLoLランク連携が必要です", "Link your LoL rank to post")
-                    : uiText("閲覧のみ", "View only");
+                    ? (isJapaneseUi() ? "投稿にはLoLランク連携が必要です" : "Link your LoL rank to post")
+                    : (isJapaneseUi() ? "閲覧のみ" : "View only");
             } else {
                 status.textContent = context.moderation?.action === "ban"
-                    ? uiText("管理者により共有コメント機能をBANされています", "This account is banned from shared comments")
-                    : uiText("招待が必要です", "Invitation required");
+                    ? (isJapaneseUi() ? "管理者により共有コメント機能をBANされています" : "This account is banned from shared comments")
+                    : (isJapaneseUi() ? "招待が必要です" : "Invitation required");
             }
             if (context.isAdmin) {
                 this.adminReportsUnsubscribe = await subscribeAdminCommentReports(
@@ -567,8 +561,8 @@ export class ReviewCommentsController {
         this.adminReports = reports;
         this.renderModerationPanel();
         if (newReports.length > 0 && typeof Notification !== "undefined" && Notification.permission === "granted") {
-            const notification = new Notification(uiText("共有コメントの新しい通報", "New shared-comment report"), {
-                body: uiText(`${newReports.length}件の未処理通報があります。`, `${newReports.length} report(s) need review.`),
+            const notification = new Notification((isJapaneseUi() ? "共有コメントの新しい通報" : "New shared-comment report"), {
+                body: (isJapaneseUi() ? `${newReports.length}件の未処理通報があります。` : `${newReports.length} report(s) need review.`),
             });
             notification.addEventListener("click", () => {
                 document.querySelector<HTMLButtonElement>("#community-report-toggle")?.click();
@@ -589,23 +583,23 @@ export class ReviewCommentsController {
             dialog.className = "community-action-dialog";
             dialog.setAttribute("role", "dialog");
             dialog.setAttribute("aria-modal", "true");
-            dialog.setAttribute("aria-label", uiText("共有コメントの操作", "Shared comment action"));
+            dialog.setAttribute("aria-label", (isJapaneseUi() ? "共有コメントの操作" : "Shared comment action"));
             const prompt = document.createElement("p");
             prompt.textContent = message;
             const input = options.input ? document.createElement("textarea") : null;
             if (input) {
                 input.rows = 4;
                 input.maxLength = 200;
-                input.placeholder = uiText("通報理由（任意・200文字まで）", "Reason (optional, up to 200 characters)");
+                input.placeholder = (isJapaneseUi() ? "通報理由（任意・200文字まで）" : "Reason (optional, up to 200 characters)");
             }
             const actions = document.createElement("div");
             actions.className = "community-action-dialog-actions";
             const cancel = document.createElement("button");
             cancel.type = "button";
-            cancel.textContent = uiText("キャンセル", "Cancel");
+            cancel.textContent = (isJapaneseUi() ? "キャンセル" : "Cancel");
             const confirm = document.createElement("button");
             confirm.type = "button";
-            confirm.textContent = options.confirmLabel ?? uiText("実行", "Continue");
+            confirm.textContent = options.confirmLabel ?? (isJapaneseUi() ? "実行" : "Continue");
             confirm.classList.toggle("danger", options.danger === true);
             actions.append(cancel, confirm);
             dialog.append(prompt);
@@ -634,33 +628,24 @@ export class ReviewCommentsController {
         const context = this.communityContext;
         if (!context || comment.source !== "community") return;
         const details = await this.openCommunityDialog(
-            uiText(
-                "この共有コメントを管理者へ通報します。理由を入力してください。",
-                "Report this shared comment to the administrator. Describe the reason.",
-            ),
-            { input: true, confirmLabel: uiText("通報する", "Report"), danger: true },
+            (isJapaneseUi() ? "この共有コメントを管理者へ通報します。理由を入力してください。" : "Report this shared comment to the administrator. Describe the reason."),
+            { input: true, confirmLabel: (isJapaneseUi() ? "通報する" : "Report"), danger: true },
         );
         if (details === null) return;
         await this.runCommunityAction(async () => {
             await reportCommunityComment(context.videoId, comment.id.replace(/^community:/u, ""), details);
-            document.querySelector<HTMLElement>("#community-comments-status")!.textContent = uiText(
-                "管理者へ通報しました。投稿者には通知されません。",
-                "Reported to the administrator. The author will not be notified.",
-            );
+            document.querySelector<HTMLElement>("#community-comments-status")!.textContent = (isJapaneseUi() ? "管理者へ通報しました。投稿者には通知されません。" : "Reported to the administrator. The author will not be notified.");
         });
     }
 
     private async blockCommentAuthor(comment: ReviewComment): Promise<void> {
         const key = comment.authorPublicId?.trim() ? `id:${comment.authorPublicId.trim()}` : "anonymous";
         const name = comment.anonymous
-            ? uiText("匿名コメント", "Anonymous comments")
-            : comment.authorName?.trim() || uiText("不明なユーザー", "Unknown user");
+            ? (isJapaneseUi() ? "匿名コメント" : "Anonymous comments")
+            : comment.authorName?.trim() || (isJapaneseUi() ? "不明なユーザー" : "Unknown user");
         const confirmed = await this.openCommunityDialog(
-            uiText(
-                `${name}をブロックしますか？この設定は自分の画面だけに適用されます。`,
-                `Block ${name}? This only affects your own display.`,
-            ),
-            { confirmLabel: uiText("ブロック", "Block"), danger: true },
+            (isJapaneseUi() ? `${name}をブロックしますか？この設定は自分の画面だけに適用されます。` : `Block ${name}? This only affects your own display.`),
+            { confirmLabel: (isJapaneseUi() ? "ブロック" : "Block"), danger: true },
         );
         if (confirmed === null) return;
         this.blockedCommunityAuthors.set(key, name);
@@ -709,7 +694,7 @@ export class ReviewCommentsController {
                 const button = this.createActionButton(label, label, className, () => {
                     void (async () => {
                         const confirmed = await this.openCommunityDialog(
-                            uiText(`${label}を実行しますか？`, `Apply "${label}"?`),
+                            (isJapaneseUi() ? `${label}を実行しますか？` : `Apply "${label}"?`),
                             { confirmLabel: label, danger: className.includes("danger") },
                         );
                         if (confirmed !== null) await this.runCommunityAction(action);
@@ -717,16 +702,16 @@ export class ReviewCommentsController {
                 });
                 actions.append(button);
             };
-            apply(uiText("コメント禁止", "Disable comments"), "danger", () => moderateReportedUser(report, "comment_block", null));
-            apply(uiText("3日BAN", "Ban 3 days"), "danger", () => moderateReportedUser(report, "ban", 3));
-            apply(uiText("無期限BAN", "Permanent ban"), "danger", () => moderateReportedUser(report, "ban", null));
-            apply(uiText("対応不要", "Dismiss"), "", () => resolveCommunityCommentReport(report.id));
+            apply((isJapaneseUi() ? "コメント禁止" : "Disable comments"), "danger", () => moderateReportedUser(report, "comment_block", null));
+            apply((isJapaneseUi() ? "3日BAN" : "Ban 3 days"), "danger", () => moderateReportedUser(report, "ban", 3));
+            apply((isJapaneseUi() ? "無期限BAN" : "Permanent ban"), "danger", () => moderateReportedUser(report, "ban", null));
+            apply((isJapaneseUi() ? "対応不要" : "Dismiss"), "", () => resolveCommunityCommentReport(report.id));
             item.append(meta, text, actions);
             return item;
         }));
         if (context?.isAdmin && this.adminReports.length === 0) {
             const empty = document.createElement("p");
-            empty.textContent = uiText("未処理の通報はありません。", "There are no pending reports.");
+            empty.textContent = (isJapaneseUi() ? "未処理の通報はありません。" : "There are no pending reports.");
             reportList.replaceChildren(empty);
         }
         const moderationSection = document.querySelector<HTMLElement>("#community-admin-moderations")!;
@@ -736,16 +721,16 @@ export class ReviewCommentsController {
             const item = document.createElement("div");
             item.className = "community-blocked-user-item";
             const label = document.createElement("span");
-            const action = moderation.action === "ban" ? "BAN" : uiText("コメント禁止", "Comments disabled");
+            const action = moderation.action === "ban" ? "BAN" : (isJapaneseUi() ? "コメント禁止" : "Comments disabled");
             const expiry = moderation.expiresAtMs === null
-                ? uiText("無期限", "Indefinite")
+                ? (isJapaneseUi() ? "無期限" : "Indefinite")
                 : new Date(moderation.expiresAtMs).toLocaleString();
             label.textContent = `${moderation.uid} · ${action} · ${expiry}`;
-            const button = this.createActionButton(uiText("解除", "Lift"), uiText("制限を解除", "Lift restriction"), "", () => {
+            const button = this.createActionButton((isJapaneseUi() ? "解除" : "Lift"), (isJapaneseUi() ? "制限を解除" : "Lift restriction"), "", () => {
                 void (async () => {
                     const confirmed = await this.openCommunityDialog(
-                        uiText("この利用制限を解除しますか？", "Lift this restriction?"),
-                        { confirmLabel: uiText("解除", "Lift") },
+                        (isJapaneseUi() ? "この利用制限を解除しますか？" : "Lift this restriction?"),
+                        { confirmLabel: (isJapaneseUi() ? "解除" : "Lift") },
                     );
                     if (confirmed !== null) {
                         await this.runCommunityAction(() => clearCommunityModeration(moderation.uid));
@@ -757,7 +742,7 @@ export class ReviewCommentsController {
         }));
         if (context?.isAdmin && this.adminModerations.length === 0) {
             const empty = document.createElement("p");
-            empty.textContent = uiText("適用中の制限はありません。", "There are no active restrictions.");
+            empty.textContent = (isJapaneseUi() ? "適用中の制限はありません。" : "There are no active restrictions.");
             moderationList.replaceChildren(empty);
         }
         const blockedSection = document.querySelector<HTMLElement>("#community-blocked-users")!;
@@ -768,7 +753,7 @@ export class ReviewCommentsController {
             item.className = "community-blocked-user-item";
             const label = document.createElement("span");
             label.textContent = name;
-            const button = this.createActionButton(uiText("解除", "Unblock"), uiText("ブロック解除", "Unblock"), "", () => {
+            const button = this.createActionButton((isJapaneseUi() ? "解除" : "Unblock"), (isJapaneseUi() ? "ブロック解除" : "Unblock"), "", () => {
                 this.blockedCommunityAuthors.delete(key);
                 this.saveBlockedCommunityAuthors();
                 this.renderModerationPanel();
@@ -811,9 +796,9 @@ export class ReviewCommentsController {
         const groups = [...new Set(this.communityComments.flatMap((comment) => comment.authorGroupIds ?? []))].toSorted();
         const previous = this.communityGroupFilter;
         select.replaceChildren(
-            new Option(uiText("すべて", "All"), "all"),
-            new Option(uiText("招待ユーザーのみ", "Invited users only"), "invited"),
-            ...groups.map((group) => new Option(`${uiText("コード", "Code")} ${group.slice(0, 6)}`, group)),
+            new Option((isJapaneseUi() ? "すべて" : "All"), "all"),
+            new Option((isJapaneseUi() ? "招待ユーザーのみ" : "Invited users only"), "invited"),
+            ...groups.map((group) => new Option(`${(isJapaneseUi() ? "コード" : "Code")} ${group.slice(0, 6)}`, group)),
         );
         select.value = Array.from(select.options).some((option) => option.value === previous) ? previous : "all";
         this.communityGroupFilter = select.value;
@@ -826,7 +811,7 @@ export class ReviewCommentsController {
             if (!key) continue;
             authors.set(key, {
                 key,
-                name: comment.authorName?.trim() || uiText("不明なユーザー", "Unknown user"),
+                name: comment.authorName?.trim() || (isJapaneseUi() ? "不明なユーザー" : "Unknown user"),
                 publicId: comment.authorPublicId?.trim() || null,
             });
         }
@@ -856,7 +841,7 @@ export class ReviewCommentsController {
             name.textContent = author.name;
             const label = document.createElement("label");
             label.title = author.publicId
-                ? uiText(`投稿者ID: ${author.publicId}`, `Author ID: ${author.publicId}`)
+                ? (isJapaneseUi() ? `投稿者ID: ${author.publicId}` : `Author ID: ${author.publicId}`)
                 : author.name;
             label.append(checkbox, name);
             if (author.publicId) {
@@ -905,8 +890,8 @@ export class ReviewCommentsController {
         button.classList.toggle("active", !this.commentsVisible);
         button.setAttribute("aria-pressed", String(!this.commentsVisible));
         button.textContent = this.commentsVisible
-            ? uiText("◉ コメント非表示", "◉ Hide Comments")
-            : uiText("◉ コメント表示", "◉ Show Comments");
+            ? (isJapaneseUi() ? "◉ コメント非表示" : "◉ Hide Comments")
+            : (isJapaneseUi() ? "◉ コメント表示" : "◉ Show Comments");
     }
 
     private restoreSidebarWidth(): void {
@@ -983,8 +968,8 @@ export class ReviewCommentsController {
         container.classList.toggle("review-comments-collapsed", this.sidebarCollapsed);
         button.textContent = this.sidebarCollapsed ? "‹" : "›";
         button.title = this.sidebarCollapsed
-            ? uiText("コメント欄を展開", "Expand comments")
-            : uiText("コメント欄を格納", "Collapse comments");
+            ? (isJapaneseUi() ? "コメント欄を展開" : "Expand comments")
+            : (isJapaneseUi() ? "コメント欄を格納" : "Collapse comments");
         button.setAttribute("aria-label", button.title);
         button.setAttribute("aria-expanded", String(!this.sidebarCollapsed));
         requestAnimationFrame(() => this.renderOverlay());
@@ -1037,7 +1022,7 @@ export class ReviewCommentsController {
         if (this.communityContext && this.activeVideoId.startsWith("youtube:")) {
             const status = document.querySelector<HTMLElement>("#community-comments-status")!;
             if (!this.communityContext.canWrite) {
-                status.textContent = uiText("コメントを投稿する権限がありません。", "You do not have permission to post comments.");
+                status.textContent = (isJapaneseUi() ? "コメントを投稿する権限がありません。" : "You do not have permission to post comments.");
                 return;
             }
             this.submit.disabled = true;
@@ -1063,10 +1048,10 @@ export class ReviewCommentsController {
                 });
                 this.input.value = "";
                 status.textContent = anonymous
-                    ? uiText("匿名コメントを投稿しました", "Anonymous comment posted")
+                    ? (isJapaneseUi() ? "匿名コメントを投稿しました" : "Anonymous comment posted")
                     : visibility === "private"
-                    ? uiText("非公開コメントを投稿しました", "Private comment posted")
-                    : uiText("コメントを投稿しました", "Comment posted");
+                    ? (isJapaneseUi() ? "非公開コメントを投稿しました" : "Private comment posted")
+                    : (isJapaneseUi() ? "コメントを投稿しました" : "Comment posted");
             } catch (error) {
                 this.pendingScrollCommentId = null;
                 status.textContent = error instanceof Error ? error.message : String(error);
@@ -1140,14 +1125,11 @@ export class ReviewCommentsController {
         this.list.hidden = visible.length === 0;
         this.empty.hidden = visible.length > 0;
         if (!this.activeVideoId) {
-            this.empty.textContent = uiText("動画を選ぶと、その動画のコメントが表示されます。", "Select a video to show its comments.");
+            this.empty.textContent = (isJapaneseUi() ? "動画を選ぶと、その動画のコメントが表示されます。" : "Select a video to show its comments.");
         } else if (comments.length === 0) {
-            this.empty.textContent = uiText(
-                "まだコメントはありません。\n気になった場面でコメントを残しましょう。",
-                "No comments yet.\nLeave a comment at a moment you want to review.",
-            );
+            this.empty.textContent = (isJapaneseUi() ? "まだコメントはありません。\n気になった場面でコメントを残しましょう。" : "No comments yet.\nLeave a comment at a moment you want to review.");
         } else {
-            this.empty.textContent = uiText("この条件に一致するコメントはありません。", "No comments match these filters.");
+            this.empty.textContent = (isJapaneseUi() ? "この条件に一致するコメントはありません。" : "No comments match these filters.");
         }
     }
 
@@ -1209,36 +1191,36 @@ export class ReviewCommentsController {
         time.type = "button";
         time.className = "review-comment-time";
         time.textContent = formatReviewTimestamp(comment.timestamp);
-        time.title = uiText("この時刻へ移動", "Seek to this time");
+        time.title = (isJapaneseUi() ? "この時刻へ移動" : "Seek to this time");
         time.addEventListener("click", () => this.player.currentTime(comment.timestamp));
         const mode = document.createElement("span");
         mode.className = "review-comment-mode";
         mode.textContent = comment.mode === "fixed"
-            ? uiText(`固定 ${comment.duration}秒`, `Pinned ${comment.duration}s`)
-            : uiText(`${comment.duration}秒`, `${comment.duration}s`);
+            ? (isJapaneseUi() ? `固定 ${comment.duration}秒` : `Pinned ${comment.duration}s`)
+            : (isJapaneseUi() ? `${comment.duration}秒` : `${comment.duration}s`);
         meta.append(time, mode);
         if (comment.authorName || comment.anonymous) {
             const author = document.createElement("span");
             author.className = "review-comment-author";
-            author.textContent = comment.anonymous ? uiText("匿名", "Anonymous") : comment.authorName;
+            author.textContent = comment.anonymous ? (isJapaneseUi() ? "匿名" : "Anonymous") : comment.authorName;
             author.title = comment.anonymous
-                ? uiText("匿名コメント", "Anonymous comment")
+                ? (isJapaneseUi() ? "匿名コメント" : "Anonymous comment")
                 : comment.authorPublicId
-                ? uiText(`投稿者ID: ${comment.authorPublicId}`, `Author ID: ${comment.authorPublicId}`)
-                : uiText("投稿者", "Author");
+                ? (isJapaneseUi() ? `投稿者ID: ${comment.authorPublicId}` : `Author ID: ${comment.authorPublicId}`)
+                : (isJapaneseUi() ? "投稿者" : "Author");
             meta.append(author);
         }
         if (comment.authorRank && !comment.anonymous) {
             const rank = document.createElement("span");
             rank.className = `review-comment-rank rank-${comment.authorRank.split(/\s+/u)[0].toLowerCase()}`;
             rank.textContent = comment.authorRank;
-            rank.title = uiText("投稿時のSolo/Duo優先ランク", "Solo/Duo-preferred rank when posted");
+            rank.title = (isJapaneseUi() ? "投稿時のSolo/Duo優先ランク" : "Solo/Duo-preferred rank when posted");
             meta.append(rank);
         }
         if (comment.visibility === "private") {
             const privacy = document.createElement("span");
             privacy.className = "review-comment-private-badge";
-            privacy.textContent = uiText("非公開", "Private");
+            privacy.textContent = (isJapaneseUi() ? "非公開" : "Private");
             meta.append(privacy);
         }
         const text = document.createElement("div");
@@ -1249,21 +1231,21 @@ export class ReviewCommentsController {
         const actions = document.createElement("div");
         actions.className = "review-comment-actions";
         if (comment.source !== "community" || ownsCommunityComment) {
-            const good = this.createActionButton("●", uiText("GOODにする", "Set GOOD"), `set-good${comment.rating === "good" ? " active" : ""}`, () => this.updateRating(comment, "good"));
-            const bad = this.createActionButton("▲", uiText("BADにする", "Set BAD"), `set-bad${comment.rating === "bad" ? " active" : ""}`, () => this.updateRating(comment, "bad"));
-            const question = this.createActionButton("?", uiText("確認にする", "Mark for review"), `set-question${comment.rating === "question" ? " active" : ""}`, () => this.updateRating(comment, "question"));
+            const good = this.createActionButton("●", (isJapaneseUi() ? "GOODにする" : "Set GOOD"), `set-good${comment.rating === "good" ? " active" : ""}`, () => this.updateRating(comment, "good"));
+            const bad = this.createActionButton("▲", (isJapaneseUi() ? "BADにする" : "Set BAD"), `set-bad${comment.rating === "bad" ? " active" : ""}`, () => this.updateRating(comment, "bad"));
+            const question = this.createActionButton("?", (isJapaneseUi() ? "確認にする" : "Mark for review"), `set-question${comment.rating === "question" ? " active" : ""}`, () => this.updateRating(comment, "question"));
             actions.append(good, bad, question);
             if (comment.mode === "fixed") {
-                actions.append(this.createActionButton("◎", uiText("固定を解除", "Unpin"), "release-fixed", () => this.releaseFixedPosition(comment)));
+                actions.append(this.createActionButton("◎", (isJapaneseUi() ? "固定を解除" : "Unpin"), "release-fixed", () => this.releaseFixedPosition(comment)));
             }
         }
         if (comment.source !== "community" || ownsCommunityComment || this.communityContext?.isOwner) {
-            actions.append(this.createActionButton("×", uiText("削除", "Delete"), "delete-comment", () => this.deleteComment(comment)));
+            actions.append(this.createActionButton("×", (isJapaneseUi() ? "削除" : "Delete"), "delete-comment", () => this.deleteComment(comment)));
         }
         if (comment.source === "community" && !ownsCommunityComment && this.communityContext?.currentUid) {
             actions.append(
-                this.createActionButton("!", uiText("管理者へ通報", "Report to administrator"), "report-comment", () => { void this.reportComment(comment); }),
-                this.createActionButton("⊘", uiText("このユーザーをブロック", "Block this user"), "block-comment-author", () => { void this.blockCommentAuthor(comment); }),
+                this.createActionButton("!", (isJapaneseUi() ? "管理者へ通報" : "Report to administrator"), "report-comment", () => { void this.reportComment(comment); }),
+                this.createActionButton("⊘", (isJapaneseUi() ? "このユーザーをブロック" : "Block this user"), "block-comment-author", () => { void this.blockCommentAuthor(comment); }),
             );
         }
         item.append(body, actions);

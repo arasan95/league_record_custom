@@ -1,5 +1,5 @@
 import type { LoadedReplayShare } from "../replay_share";
-import { uiText } from "../ui_locale";
+import { isJapaneseUi } from "../ui_locale";
 
 export const PLAY_OWNED_YOUTUBE_REPLAY_EVENT = "league-record-play-owned-youtube-replay";
 
@@ -74,10 +74,10 @@ export function bindYouTubeReplaySidebar(input: {
     };
 
     const loadAndPlay = async (value: string, fromOwnedUploads = false) => {
-        updateYouTubeReplayStatus(uiText("Firestoreから試合データを取得しています…", "Loading match data from Firestore…"));
+        updateYouTubeReplayStatus((isJapaneseUi() ? "Firestoreから試合データを取得しています…" : "Loading match data from Firestore…"));
         summary.hidden = true;
         loadButton.disabled = true;
-        loadButton.textContent = uiText("読み込んでいます…", "Loading…");
+        loadButton.textContent = (isJapaneseUi() ? "読み込んでいます…" : "Loading…");
         try {
             console.info("[youtube-replay] loading Firestore share", { url: value, fromOwnedUploads });
             const loaded = await input.loadReplay(value);
@@ -85,10 +85,7 @@ export function bindYouTubeReplaySidebar(input: {
             summaryTitle.textContent = "";
             summaryId.textContent = "";
             summary.hidden = true;
-            updateYouTubeReplayStatus(uiText(
-                "試合データを読み込み、YouTube動画をプレイヤーに表示しました。",
-                "Match data loaded and the YouTube video is now displayed in the player.",
-            ));
+            updateYouTubeReplayStatus((isJapaneseUi() ? "試合データを読み込み、YouTube動画をプレイヤーに表示しました。" : "Match data loaded and the YouTube video is now displayed in the player."));
             urlInput.blur();
             document.querySelector<HTMLElement>("#video_player")?.focus({ preventScroll: true });
         } catch (error) {
@@ -96,7 +93,7 @@ export function bindYouTubeReplaySidebar(input: {
             updateYouTubeReplayStatus(error instanceof Error ? error.message : String(error), true);
         } finally {
             loadButton.disabled = false;
-            loadButton.textContent = uiText("試合データを読み込む", "Load Match Data");
+            loadButton.textContent = (isJapaneseUi() ? "試合データを読み込む" : "Load Match Data");
         }
     };
 

@@ -27,7 +27,7 @@ import {
 } from "../platform/firebase";
 import { parseYouTubeVideoId, prepareReplayShare } from "../replay_share";
 import { buildYouTubeUploadDefaults } from "../youtube_upload_defaults";
-import { UI_LANGUAGE_CHANGED_EVENT, uiText } from "../ui_locale";
+import { UI_LANGUAGE_CHANGED_EVENT, isJapaneseUi } from "../ui_locale";
 import {
     findYouTubeUploadForSource,
     rememberYouTubeUpload,
@@ -86,7 +86,7 @@ function createReplayActionButton(videoId: string, titleText: string): HTMLSpanE
         try {
             const result = await commands.playRecordingReplay(videoId);
             if (result.status === "error") {
-                alert(result.error || uiText("リプレイ再生に失敗しました。", "Could not play the replay."));
+                alert(result.error || (isJapaneseUi() ? "リプレイ再生に失敗しました。" : "Could not play the replay."));
             }
         } finally {
             button.classList.remove("is-loading");
@@ -108,9 +108,9 @@ function createYouTubeUploadBadge(): SVGSVGElement {
     const badge = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     badge.setAttribute("class", "sidebar-youtube-badge");
     badge.setAttribute("viewBox", "0 0 20 14");
-    badge.setAttribute("aria-label", uiText("YouTubeへアップロード済み", "Uploaded to YouTube"));
+    badge.setAttribute("aria-label", (isJapaneseUi() ? "YouTubeへアップロード済み" : "Uploaded to YouTube"));
     badge.setAttribute("role", "img");
-    badge.title = uiText("YouTubeへアップロード済み", "Uploaded to YouTube");
+    badge.title = (isJapaneseUi() ? "YouTubeへアップロード済み" : "Uploaded to YouTube");
     const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
     // evenodd makes the play triangle a real hole, exposing the sidebar
     // background rather than painting it white.
@@ -125,10 +125,7 @@ function createOwnedYouTubeReplayButton(youtubeVideoId: string): HTMLButtonEleme
     button.type = "button";
     button.className = "youtube-owned-play";
     button.dataset.youtubeVideoId = youtubeVideoId;
-    const title = uiText(
-        "共有プレイヤーの「自分の投稿」で再生",
-        'Play from "My Uploads" in the shared player',
-    );
+    const title = (isJapaneseUi() ? "共有プレイヤーの「自分の投稿」で再生" : 'Play from "My Uploads" in the shared player');
     button.title = title;
     button.setAttribute("aria-label", title);
     button.textContent = "YT";
@@ -158,7 +155,7 @@ function syncYouTubeUploadControls(item: HTMLElement): void {
     if (!badge) {
         container.append(createYouTubeUploadBadge());
     } else {
-        const title = uiText("YouTubeへアップロード済み", "Uploaded to YouTube");
+        const title = (isJapaneseUi() ? "YouTubeへアップロード済み" : "Uploaded to YouTube");
         badge.setAttribute("aria-label", title);
         badge.title = title;
     }
@@ -166,10 +163,7 @@ function syncYouTubeUploadControls(item: HTMLElement): void {
         playButton?.remove();
         item.querySelector(".sidebar-actions")?.prepend(createOwnedYouTubeReplayButton(uploaded.youtubeVideoId));
     } else {
-        const title = uiText(
-            "共有プレイヤーの「自分の投稿」で再生",
-            'Play from "My Uploads" in the shared player',
-        );
+        const title = (isJapaneseUi() ? "共有プレイヤーの「自分の投稿」で再生" : 'Play from "My Uploads" in the shared player');
         playButton.title = title;
         playButton.setAttribute("aria-label", title);
     }
@@ -185,33 +179,24 @@ window.addEventListener(YOUTUBE_UPLOAD_HISTORY_CHANGED_EVENT, refreshYouTubeUplo
 window.addEventListener(UI_LANGUAGE_CHANGED_EVENT, refreshYouTubeUploadBadges);
 
 function formatUploadProgress(job: YouTubeUploadJob): string {
-    if (job.state === "thumbnail_preparing") return uiText("サムネイルを作成・検証しています…", "Generating and validating the thumbnail…");
-    if (job.state === "preparing") return uiText("アップロードを準備しています…", "Preparing upload…");
+    if (job.state === "thumbnail_preparing") return (isJapaneseUi() ? "サムネイルを作成・検証しています…" : "Generating and validating the thumbnail…");
+    if (job.state === "preparing") return (isJapaneseUi() ? "アップロードを準備しています…" : "Preparing upload…");
     if (job.state === "uploading") {
         const sent = job.sentBytes || 0;
         const total = job.totalBytes || 0;
         const percent = total > 0 ? Math.min(100, Math.floor(sent / total * 100)) : 0;
         const sentMiB = (sent / 1024 / 1024).toFixed(1);
         const totalMiB = (total / 1024 / 1024).toFixed(1);
-        return uiText(
-            `アップロード中: ${percent}%（${sentMiB} / ${totalMiB} MiB）`,
-            `Uploading: ${percent}% (${sentMiB} / ${totalMiB} MiB)`,
-        );
+        return (isJapaneseUi() ? `アップロード中: ${percent}%（${sentMiB} / ${totalMiB} MiB）` : `Uploading: ${percent}% (${sentMiB} / ${totalMiB} MiB)`);
     }
-    if (job.state === "thumbnail_uploading") return uiText(
-        "動画の送信が完了しました。サムネイルをYouTubeへ設定しています…",
-        "Video upload completed. Applying the YouTube thumbnail…",
-    );
+    if (job.state === "thumbnail_uploading") return (isJapaneseUi() ? "動画の送信が完了しました。サムネイルをYouTubeへ設定しています…" : "Video upload completed. Applying the YouTube thumbnail…");
     if (job.state === "processing") {
         const percent = typeof job.processingPercent === "number" ? ` ${job.processingPercent}%` : "";
-        return uiText(
-            `YouTubeで動画を処理しています${percent}（${job.processingStatus || "保留中"}）…`,
-            `YouTube is processing the video${percent} (${job.processingStatus || "pending"})…`,
-        );
+        return (isJapaneseUi() ? `YouTubeで動画を処理しています${percent}（${job.processingStatus || "保留中"}）…` : `YouTube is processing the video${percent} (${job.processingStatus || "pending"})…`);
     }
-    if (job.state === "completed") return uiText("YouTubeへのアップロードが完了しました。", "YouTube upload completed.");
-    if (job.state === "cancelled") return uiText("アップロードをキャンセルしました。", "Upload cancelled.");
-    if (job.state === "failed") return job.error || uiText("アップロードに失敗しました。", "Upload failed.");
+    if (job.state === "completed") return (isJapaneseUi() ? "YouTubeへのアップロードが完了しました。" : "YouTube upload completed.");
+    if (job.state === "cancelled") return (isJapaneseUi() ? "アップロードをキャンセルしました。" : "Upload cancelled.");
+    if (job.state === "failed") return job.error || (isJapaneseUi() ? "アップロードに失敗しました。" : "Upload failed.");
     return "";
 }
 

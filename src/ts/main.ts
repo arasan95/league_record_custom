@@ -35,7 +35,7 @@ import { cleanupDeletedReplayShares, connectReplayShareGoogle, listOwnedReplaySh
 import { hasYouTubeUploadHistory, readYouTubeUploadHistory, removeYouTubeUploadsByVideoIds } from "./youtube_upload_history";
 import { bindYouTubeReplaySidebar, updateYouTubeReplayStatus } from "./ui/youtube_replay_sidebar_usecase";
 import { ReviewCommentsController } from "./review_comments";
-import { uiText } from "./ui_locale";
+import { isJapaneseUi } from "./ui_locale";
 import { listen } from "./platform/event";
 import { getBridge } from "./platform/bridge";
 import { parseReplayDeepLink } from "./replay_deep_link";
@@ -117,19 +117,13 @@ async function openReplayDeepLink(value: string): Promise<void> {
     const replayButton = document.querySelector<HTMLButtonElement>("#nav-youtube-replay");
     if (!replayButton) {
         replayDeepLinkTransitionActive = false;
-        throw new Error(uiText(
-            "共有リプレイ画面を開けませんでした。",
-            "Could not open the shared replay screen.",
-        ));
+        throw new Error((isJapaneseUi() ? "共有リプレイ画面を開けませんでした。" : "Could not open the shared replay screen."));
     }
     replayButton.click();
     const youtubeUrl = `https://www.youtube.com/watch?v=${link.youtubeVideoId}`;
     const urlInput = document.querySelector<HTMLTextAreaElement>("#youtube-replay-url");
     if (urlInput) urlInput.value = youtubeUrl;
-    updateYouTubeReplayStatus(uiText(
-        "招待リンクを確認しています…",
-        "Checking the invite link…",
-    ));
+    updateYouTubeReplayStatus((isJapaneseUi() ? "招待リンクを確認しています…" : "Checking the invite link…"));
 
     try {
         let firebaseIdToken: string;
@@ -141,17 +135,11 @@ async function openReplayDeepLink(value: string): Promise<void> {
         }
         await connectReplayShareGoogle(firebaseIdToken);
         await redeemCommunityCommentInvite(link.youtubeVideoId, link.inviteCode);
-        updateYouTubeReplayStatus(uiText(
-            "招待を適用しました。リプレイを読み込んでいます…",
-            "Invite applied. Loading the replay…",
-        ));
+        updateYouTubeReplayStatus((isJapaneseUi() ? "招待を適用しました。リプレイを読み込んでいます…" : "Invite applied. Loading the replay…"));
         const loaded = await loadReplayShare(youtubeUrl);
         replayButton.click();
         await setYouTubeReplay(loaded);
-        updateYouTubeReplayStatus(uiText(
-            "招待を適用し、共有リプレイを開きました。",
-            "Invite applied and shared replay opened.",
-        ));
+        updateYouTubeReplayStatus((isJapaneseUi() ? "招待を適用し、共有リプレイを開きました。" : "Invite applied and shared replay opened."));
         console.info("[replay-deep-link] shared replay opened", { videoId: link.youtubeVideoId });
     } finally {
         replayDeepLinkTransitionActive = false;
@@ -269,7 +257,7 @@ function initializeYouTubeUiComparison(): void {
             checkbox.checked = false;
             player.el().classList.remove("youtube-ui-comparison");
             console.error("[youtube-replay] YouTube UI toggle failed", error);
-            updateYouTubeReplayStatus(uiText("YouTube UI表示を切り替えられませんでした。", "Could not toggle the YouTube UI."), true);
+            updateYouTubeReplayStatus((isJapaneseUi() ? "YouTube UI表示を切り替えられませんでした。" : "Could not toggle the YouTube UI."), true);
         }
     });
 
@@ -999,14 +987,14 @@ async function main() {
     player.on("error", () => {
         if (!remotePlaybackActive) return;
         const playerError = player.error();
-        const message = String(playerError?.message || uiText("YouTube動画を再生できませんでした。", "Could not play the YouTube video."));
+        const message = String(playerError?.message || (isJapaneseUi() ? "YouTube動画を再生できませんでした。" : "Could not play the YouTube video."));
         console.error("[youtube-replay] Video.js player error", { code: playerError?.code, message });
         if (/disabled|101|150/i.test(message)) {
-            updateYouTubeReplayStatus(uiText("この動画は所有者により埋め込み再生が許可されていません。", "The owner has disabled embedded playback for this video."), true);
+            updateYouTubeReplayStatus((isJapaneseUi() ? "この動画は所有者により埋め込み再生が許可されていません。" : "The owner has disabled embedded playback for this video."), true);
         } else if (/private|find the video|100/i.test(message)) {
-            updateYouTubeReplayStatus(uiText("YouTube動画が非公開、削除済み、または見つかりません。", "The YouTube video is private, deleted, or unavailable."), true);
+            updateYouTubeReplayStatus((isJapaneseUi() ? "YouTube動画が非公開、削除済み、または見つかりません。" : "The YouTube video is private, deleted, or unavailable."), true);
         } else if (/153|referer|client identification/i.test(message)) {
-            updateYouTubeReplayStatus(uiText("YouTubeプレイヤーのクライアント識別に失敗しました（エラー153）。", "YouTube player client identification failed (error 153)."), true);
+            updateYouTubeReplayStatus((isJapaneseUi() ? "YouTubeプレイヤーのクライアント識別に失敗しました（エラー153）。" : "YouTube player client identification failed (error 153)."), true);
         } else {
             updateYouTubeReplayStatus(message, true);
         }
@@ -1667,8 +1655,8 @@ function addYouTubeReplayHistoryCard(
     const removeButton = document.createElement("button");
     removeButton.type = "button";
     removeButton.className = "replay-action delete youtube-replay-remove";
-    removeButton.title = uiText("この履歴を削除", "Remove from history");
-    removeButton.setAttribute("aria-label", uiText("この履歴を削除", "Remove from history"));
+    removeButton.title = (isJapaneseUi() ? "この履歴を削除" : "Remove from history");
+    removeButton.setAttribute("aria-label", (isJapaneseUi() ? "この履歴を削除" : "Remove from history"));
     removeButton.textContent = "\u2716";
     removeButton.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -1693,9 +1681,9 @@ function resolveYouTubeUploadTimestamp(loaded: LoadedReplayShare): number | null
 }
 
 function formatYouTubeUploadDate(timestamp: number | null): string {
-    if (timestamp === null || !Number.isFinite(timestamp)) return uiText("アップロード日不明", "Upload date unavailable");
+    if (timestamp === null || !Number.isFinite(timestamp)) return (isJapaneseUi() ? "アップロード日不明" : "Upload date unavailable");
     const date = new Date(timestamp);
-    if (Number.isNaN(date.getTime())) return uiText("アップロード日不明", "Upload date unavailable");
+    if (Number.isNaN(date.getTime())) return (isJapaneseUi() ? "アップロード日不明" : "Upload date unavailable");
     const hours = date.getHours().toString().padStart(2, "0");
     const minutes = date.getMinutes().toString().padStart(2, "0");
     return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${hours}:${minutes}`;
@@ -1706,12 +1694,12 @@ function decorateYouTubeReplayCard(item: HTMLElement, loaded: LoadedReplayShare)
     const date = item.querySelector<HTMLElement>(".sidebar-date");
     if (date) {
         date.textContent = formatYouTubeUploadDate(uploadTimestamp);
-        date.title = uiText("YouTube動画のアップロード日時", "YouTube video upload date");
+        date.title = (isJapaneseUi() ? "YouTube動画のアップロード日時" : "YouTube video upload date");
     }
     item.querySelector(".youtube-replay-video-id")?.remove();
     const id = document.createElement("div");
     id.className = "youtube-replay-video-id";
-    id.title = uiText(`YouTube動画ID: ${loaded.youtubeVideoId}`, `YouTube video ID: ${loaded.youtubeVideoId}`);
+    id.title = (isJapaneseUi() ? `YouTube動画ID: ${loaded.youtubeVideoId}` : `YouTube video ID: ${loaded.youtubeVideoId}`);
     const label = document.createElement("span");
     label.textContent = "ID:";
     const value = document.createElement("strong");
@@ -1742,15 +1730,15 @@ function addYouTubeReplayOpenAction(item: HTMLElement, youtubeVideoId: string): 
     const openButton = document.createElement("button");
     openButton.type = "button";
     openButton.className = "replay-action share youtube-replay-open";
-    openButton.title = uiText("YouTubeページを規定ブラウザで開く", "Open this video on YouTube");
-    openButton.setAttribute("aria-label", uiText("YouTubeページを規定ブラウザで開く", "Open this video on YouTube"));
+    openButton.title = (isJapaneseUi() ? "YouTubeページを規定ブラウザで開く" : "Open this video on YouTube");
+    openButton.setAttribute("aria-label", (isJapaneseUi() ? "YouTubeページを規定ブラウザで開く" : "Open this video on YouTube"));
     openButton.textContent = "↗";
     openButton.addEventListener("click", (event) => {
         event.stopPropagation();
         const url = `https://www.youtube.com/watch?v=${encodeURIComponent(youtubeVideoId)}`;
         void openExternalUrl(url).catch((error) => {
             console.error("[youtube-replay] could not open YouTube in browser", error);
-            updateYouTubeReplayStatus(uiText("YouTubeページを開けませんでした。", "Could not open the YouTube page."), true);
+            updateYouTubeReplayStatus((isJapaneseUi() ? "YouTubeページを開けませんでした。" : "Could not open the YouTube page."), true);
         });
     });
     actions.append(openButton);
@@ -1780,10 +1768,7 @@ async function restoreYouTubeReplayHistory(): Promise<void> {
         }
     }
     if (restoredCount > 0) {
-        updateYouTubeReplayStatus(uiText(
-            `${restoredCount}件の読み込み履歴を復元しました。`,
-            `Restored ${restoredCount} item${restoredCount === 1 ? "" : "s"} from load history.`,
-        ));
+        updateYouTubeReplayStatus((isJapaneseUi() ? `${restoredCount}件の読み込み履歴を復元しました。` : `Restored ${restoredCount} item${restoredCount === 1 ? "" : "s"} from load history.`));
     }
 }
 
@@ -1792,7 +1777,7 @@ async function refreshOwnedYouTubeReplays(): Promise<void> {
     const status = document.querySelector<HTMLElement>("#youtube-replay-owned-status");
     if (!list || !status) return;
     status.classList.remove("is-error");
-    status.textContent = uiText("自分の投稿を取得しています…", "Loading my uploads…");
+    status.textContent = (isJapaneseUi() ? "自分の投稿を取得しています…" : "Loading my uploads…");
     try {
         await connectReplayShareGoogle(await getYouTubeFirebaseIdToken());
         const videoIds = await listOwnedReplayShareIds();
@@ -1827,11 +1812,8 @@ async function refreshOwnedYouTubeReplays(): Promise<void> {
         list.hidden = list.childElementCount === 0;
         const failed = results.filter((result) => result.status === "rejected").length;
         status.textContent = videoIds.length === 0
-            ? uiText("このGoogleアカウントで投稿した共有リプレイはありません。", "This Google account has no uploaded shared replays.")
-            : uiText(
-                `${list.childElementCount}件を表示${failed > 0 ? `（${failed}件は動画を確認できませんでした）` : ""}`,
-                `Showing ${list.childElementCount}${failed > 0 ? ` (${failed} video${failed === 1 ? "" : "s"} unavailable)` : ""}`,
-            );
+            ? (isJapaneseUi() ? "このGoogleアカウントで投稿した共有リプレイはありません。" : "This Google account has no uploaded shared replays.")
+            : (isJapaneseUi() ? `${list.childElementCount}件を表示${failed > 0 ? `（${failed}件は動画を確認できませんでした）` : ""}` : `Showing ${list.childElementCount}${failed > 0 ? ` (${failed} video${failed === 1 ? "" : "s"} unavailable)` : ""}`);
     } catch (error) {
         list.replaceChildren();
         list.hidden = true;
