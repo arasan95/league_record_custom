@@ -53,6 +53,17 @@ jobs:
             -Version $version `
             -SourceName "Chocolatey ffmpeg package" `
             -SourceUrl "https://community.chocolatey.org/packages/ffmpeg"
+      - name: Verify FFmpeg provenance
+        shell: pwsh
+        run: |
+          $provenancePath = "src-tauri/resources/tools/ffmpeg/ffmpeg-provenance.json"
+          $exePath = "src-tauri/resources/tools/ffmpeg/ffmpeg.exe"
+          if (-not (Test-Path $provenancePath)) { Write-Error "provenance not found"; exit 1 }
+          if (-not (Test-Path $exePath)) { Write-Error "ffmpeg.exe not found"; exit 1 }
+          $provenance = Get-Content $provenancePath -Raw | ConvertFrom-Json
+          $actual = (Get-FileHash -Path $exePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $provenance.sha256.ToLowerInvariant()) { Write-Error "FFmpeg SHA256 mismatch: expected $($provenance.sha256) got $actual"; exit 1 }
+          Write-Host "FFmpeg provenance verified: $actual (version $($provenance.version))"
       - run: bun install --frozen-lockfile --linker=isolated
       - name: Responsibility Coverage Check
         run: bun run check:responsibility
