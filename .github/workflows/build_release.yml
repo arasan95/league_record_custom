@@ -48,6 +48,7 @@ jobs:
       - run: bun install --frozen-lockfile --linker=isolated
       - run: bun audit
       - uses: ./.github/actions/verify
+      - uses: ./.github/actions/build-clip-ffmpeg
 
       - name: Prepare updater-only Tauri config
         shell: pwsh
@@ -84,8 +85,6 @@ jobs:
 
           Add-Content -Path $env:GITHUB_OUTPUT -Value "updater_exe_name=$updaterExeName"
           Add-Content -Path $env:GITHUB_OUTPUT -Value "updater_sig_path=$(Join-Path $stageDir $updaterSigName)"
-
-      - uses: ./.github/actions/build-clip-ffmpeg
 
       - name: Build installer package (with clip FFmpeg)
         run: bunx tauri build --config src-tauri/target/clip-ffmpeg/installer.conf.json -- --locked

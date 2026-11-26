@@ -33,7 +33,9 @@ try {
     Get-VerifiedDownload 'https://ffmpeg.org/ffmpeg-devel.asc' $Key
     Push-Location $Work
     try {
-        $Status = & $Bash -c 'set -e; /usr/bin/gpg --batch --no-options --homedir ./gpg --import ffmpeg-devel.asc; /usr/bin/gpg --batch --no-options --homedir ./gpg --status-fd 1 --verify "$1.asc" "$1"' verify "ffmpeg-$Version.tar.xz"
+        # Public-key verification does not require gpg-agent on headless runners.
+        & $Bash -c '/usr/bin/gpg --batch --no-options --no-autostart --dearmor --output gpg/ffmpeg-release.gpg ffmpeg-devel.asc'
+        $Status = & $Bash -c '/usr/bin/gpgv --homedir "$PWD/gpg" --keyring "$PWD/gpg/ffmpeg-release.gpg" --status-fd 1 "$1.asc" "$1"' verify "ffmpeg-$Version.tar.xz"
     } finally {
         Pop-Location
     }
