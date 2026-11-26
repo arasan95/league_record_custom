@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Version tag for the draft (for example, v1.3.0)'
+        description: 'Version tag for the draft (for example, v1.3.0-rc.1)'
         required: true
         type: string
 
@@ -36,10 +36,10 @@ jobs:
         shell: pwsh
         run: |
           $tag = $env:RELEASE_TAG
-          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
-            throw 'Use a Tauri release tag in the form vX.Y.Z.'
+          if ($tag -notmatch '^v(?<version>\d+\.\d+\.\d+)(?:-rc\.[1-9]\d*)?$') {
+            throw 'Use a Tauri release tag in the form vX.Y.Z or vX.Y.Z-rc.N.'
           }
-          $version = $tag.Substring(1)
+          $version = $Matches['version']
           Add-Content -Path $env:GITHUB_OUTPUT -Value "installer_name=LeagueRecord_${version}_x64-setup.exe"
           $manifest = Get-Content 'src-tauri/Cargo.toml' -Raw
           $appVersion = [regex]::Match($manifest, '(?m)^version = "([^"]+)"\r?$').Groups[1].Value
