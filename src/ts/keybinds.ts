@@ -157,3 +157,16 @@ export function loadMouseConfig(): MouseConfig {
 export function saveMouseConfig(config: MouseConfig) {
     localStorage.setItem(MOUSE_STORAGE_KEY, JSON.stringify(config));
 }
+
+export function createKeybindSettings() {
+    let keybinds = loadKeybinds();
+    let mouse = loadMouseConfig();
+    return {
+        getKeybinds: () => keybinds,
+        getMouse: () => mouse,
+        reload() {
+            keybinds = loadKeybinds();
+            mouse = loadMouseConfig();
+        },
+    };
+}

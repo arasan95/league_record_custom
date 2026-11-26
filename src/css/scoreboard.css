@@ -279,6 +279,7 @@
     padding-bottom: 0; 
     z-index: 20;
     transition: height 0.1s; /* Smooth transition */
+    container: scoreboard / inline-size;
 }
 
 .scoreboard.collapsed {
@@ -757,4 +758,90 @@
 .player-row.dnd-drop-target {
     box-shadow: 0 0 0 2px #4fb6ff inset, 0 0 8px rgba(79, 182, 255, 0.45);
     background-color: rgba(79, 182, 255, 0.12);
+}
+
+
+/* Keep the gold difference centered as the outside columns run out of room. */
+.scoreboard > .team {
+    flex: 1 1 0;
+    min-inline-size: 0;
+    overflow: clip;
+}
+
+.scoreboard > .scoreboard-center {
+    flex: 0 0 auto;
+}
+
+.scoreboard .player-row,
+.scoreboard .team-header {
+    box-sizing: border-box;
+    inline-size: 100%;
+    min-inline-size: 0;
+}
+
+.scoreboard .team-100 > :is(.player-row, .team-header) {
+    align-self: flex-end;
+}
+
+.scoreboard .team-200 > :is(.player-row, .team-header) {
+    align-self: flex-start;
+}
+
+.scoreboard .player-name,
+.scoreboard .player-name-text {
+    min-inline-size: 0;
+}
+
+.scoreboard .player-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@container scoreboard (max-width: 1000px) {
+    .scoreboard .player-name {
+        display: none;
+    }
+
+    .scoreboard .player-row {
+        --scoreboard-slot: clamp(18px, 2.65cqi, 26px);
+        --scoreboard-icon: calc(var(--scoreboard-slot) - 2px);
+        --scoreboard-gap: clamp(1px, calc(0.6cqi - 3px), 3px);
+        min-inline-size: max-content;
+        gap: var(--scoreboard-gap);
+    }
+
+    .scoreboard .player-row > * {
+        margin-inline: 0;
+    }
+
+    .scoreboard :is(.items-grid, .trinket-container) {
+        inline-size: max-content;
+        min-inline-size: max-content;
+        gap: var(--scoreboard-gap) !important;
+    }
+
+    .scoreboard :is(.item-slot, .champ-icon-wrap, .champ-icon) {
+        inline-size: var(--scoreboard-slot);
+        block-size: var(--scoreboard-slot);
+    }
+
+    .scoreboard :is(.item-icon, .trinket-icon, .spell-icon, .rune-icon) {
+        inline-size: var(--scoreboard-icon);
+        block-size: var(--scoreboard-icon);
+    }
+
+    .scoreboard .runes {
+        inline-size: var(--scoreboard-icon);
+    }
+
+    .scoreboard .kda {
+        inline-size: clamp(52px, 7cqi, 70px);
+        min-inline-size: 0;
+    }
+
+    .scoreboard .cs-stat {
+        inline-size: clamp(22px, 3cqi, 26px);
+        min-inline-size: 0;
+    }
 }

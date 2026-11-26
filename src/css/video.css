@@ -967,6 +967,20 @@ body.compact-labels .section-label { display: none !important; }
 /* Inputs & Buttons */
 .auto-checkbox { width: auto !important; }
 
+.clip-control {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+#clip-progress {
+    position: absolute;
+    inset: auto 0 0;
+    width: 100%;
+    height: 3px;
+    accent-color: #c8aa6e;
+    pointer-events: none;
+}
+
 .small-btn {
     display: inline-block !important;
     padding: 4px 8px !important;

@@ -134,7 +134,7 @@ export function showSettingsModalView(input: {
             about: aboutTabContent,
         });
     });
-    const btnAbout = createSettingsTabButton(createEl, getText(lang, "tabAbout" as any) || "About", false, () => {
+    const btnAbout = createSettingsTabButton(createEl, getText(lang, "tabAbout"), false, () => {
         switchSettingsTab("about", { general: btnGeneral, hotkeys: btnHotkeys, about: btnAbout }, {
             general: generalTabContent,
             hotkeys: hotkeysTabContent,
@@ -151,7 +151,7 @@ export function showSettingsModalView(input: {
     ]);
 
     const saveBtn = createEl("button", {
-        onclick: () => {
+        onclick: async () => {
             const { highlightHotkeyValue, startRecHotkeyValue, stopRecHotkeyValue } = getBackendHotkeyValues();
             const newSettings: Settings = buildSettingsPayload({
                 base: settings,
@@ -207,6 +207,7 @@ export function showSettingsModalView(input: {
                 },
                 otherSwitches: {
                     autostart: settingsOptions.refs.otherSwitches.autostart.input.checked,
+                    closeToTray: settingsOptions.refs.otherSwitches.closeToTray.input.checked,
                     autoplayVideo: settingsOptions.refs.otherSwitches.autoplayVideo.input.checked,
                     autoStopPlayback: settingsOptions.refs.otherSwitches.autoStopPlayback.input.checked,
                     autoSelectRecording: settingsOptions.refs.otherSwitches.autoSelectRecording.input.checked,
@@ -218,18 +219,20 @@ export function showSettingsModalView(input: {
                 },
             });
 
-            saveKeybinds(pendingBinds);
-            saveMouseConfig(pendingMouseConfig);
-            onReloadKeybinds();
-            updateAutoButtons(newSettings);
-            closeSettingsModal();
-            void saveCallback(newSettings)
-                .then(() => {
-                    (window as any)._developerModeEnabled = newSettings.developerMode;
-                })
-                .catch((error) => {
-                    console.error("Failed to save settings:", error);
-                });
+            (saveBtn as HTMLButtonElement).disabled = true;
+            try {
+                await saveCallback(newSettings);
+                saveKeybinds(pendingBinds);
+                saveMouseConfig(pendingMouseConfig);
+                onReloadKeybinds();
+                updateAutoButtons(newSettings);
+                closeSettingsModal();
+            } catch (error) {
+                console.error("Failed to save settings:", error);
+                alert(getText(lang, "settingsSaveFailed"));
+            } finally {
+                (saveBtn as HTMLButtonElement).disabled = false;
+            }
         },
     }, { class: "btn-save" }, getText(lang, "save"));
 

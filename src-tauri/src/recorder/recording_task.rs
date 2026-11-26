@@ -1,4 +1,3 @@
-use std::sync::{Mutex as StdMutex, OnceLock};
 use std::{fmt::Display, path::PathBuf, time::Duration};
 
 use anyhow::{bail, Result};
@@ -13,10 +12,10 @@ use tokio_util::sync::CancellationToken;
 
 use riot_datatypes::MatchId;
 
-use crate::app::{action, AppEvent, EventManager, RecordingManager, SystemTrayManager};
+use crate::app::{action, AppEvent, EventManager, RecordingManager, RecordingStatus, SystemTrayManager};
 use crate::cancellable;
 use crate::recorder::Deferred;
-use crate::state::{CurrentlyRecording, SettingsWrapper};
+use crate::state::{CurrentlyRecording, RecordingPhase, SettingsWrapper};
 
 use super::window;
 use super::MetadataFile;
@@ -47,138 +46,121 @@ impl Display for Metadata {
     }
 }
 
+static RECORDING_HELPER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+struct CaptureLease {
+    app: AppHandle,
+    _guard: tokio::sync::MutexGuard<'static, ()>,
+}
+
+impl Drop for CaptureLease {
+    fn drop(&mut self) {
+        RecordingTask::publish_phase(&self.app, RecordingPhase::Idle);
+    }
+}
+
+struct ActiveCapture {
+    recorder: Recorder,
+    metadata: Metadata,
+    lease: CaptureLease,
+}
+
 pub struct RecordingTask {
-    join_handle: JoinHandle<Result<(Recorder, Metadata)>>,
+    join_handle: JoinHandle<Result<ActiveCapture>>,
     pub ctx: GameCtx,
-    manual_mode: bool,
 }
 
 impl RecordingTask {
-    fn manual_warm_slot() -> &'static StdMutex<Option<Recorder>> {
-        static SLOT: OnceLock<StdMutex<Option<Recorder>>> = OnceLock::new();
-        SLOT.get_or_init(|| StdMutex::new(None))
-    }
-
-    fn take_manual_warm_recorder() -> Option<Recorder> {
-        Self::manual_warm_slot().lock().ok()?.take()
-    }
-
-    fn store_manual_warm_recorder(recorder: Recorder) {
-        if let Ok(mut slot) = Self::manual_warm_slot().lock() {
-            if slot.is_none() {
-                *slot = Some(recorder);
-                return;
-            }
-        }
-        // Slot already occupied (or lock poisoned): do not leak process.
-        let _ = recorder.shutdown();
-    }
-
-    fn has_manual_warm_recorder() -> bool {
-        Self::manual_warm_slot()
-            .lock()
-            .map(|slot| slot.is_some())
-            .unwrap_or(false)
-    }
-
     pub fn new(ctx: GameCtx) -> Self {
         let join_handle = async_runtime::spawn(Self::record(ctx.clone(), false));
-        Self {
-            join_handle,
-            ctx,
-            manual_mode: false,
-        }
+        Self { join_handle, ctx }
     }
 
     pub fn new_manual(ctx: GameCtx) -> Self {
         let join_handle = async_runtime::spawn(Self::record(ctx.clone(), true));
-        Self {
-            join_handle,
-            ctx,
-            manual_mode: true,
-        }
+        Self { join_handle, ctx }
     }
 
-    pub async fn prewarm(ctx: GameCtx) -> Result<()> {
-        if Self::has_manual_warm_recorder() {
-            return Ok(());
-        }
-
-        let started = std::time::Instant::now();
-        let mode_label = "manual-prewarm";
-        let (recorder, output_filepath) = Self::setup_recorder(&ctx, true).await?;
-        log::info!(
-            "[record-start][{mode_label}] setup_recorder completed in {:.3}s",
-            started.elapsed().as_secs_f64()
-        );
-
-        // Keep the initialized recorder process for instant manual starts.
-        Self::store_manual_warm_recorder(recorder);
-        log::info!("[record-start][{mode_label}] recorder cached for manual reuse");
-
-        if output_filepath.exists() {
-            if let Err(e) = std::fs::remove_file(&output_filepath) {
-                log::warn!(
-                    "[record-start][{mode_label}] failed to remove warmup output '{}': {e}",
-                    output_filepath.display()
-                );
-            }
-        }
-
-        Ok(())
+    pub(super) fn finished_without_recording(&self) -> bool {
+        self.join_handle.inner().is_finished() && self.ctx.app_handle.state::<CurrentlyRecording>().get().is_none()
     }
 
     pub async fn stop(self) -> Result<Metadata> {
         log::debug!("recording_task::stop called");
         self.ctx.cancel_token.cancel();
-        let result = self.join_handle.await?;
+        let result = self
+            .join_handle
+            .await
+            .map_err(anyhow::Error::from)
+            .and_then(|result| result);
 
         match result {
-            Ok((mut recorder, metadata)) => {
-                let manual_mode = self.manual_mode;
+            Ok(ActiveCapture { mut recorder, metadata, lease }) => {
                 let ctx = self.ctx;
-                ctx.app_handle.state::<CurrentlyRecording>().set(None);
-                ctx.app_handle.set_tray_menu_recording(false);
-                ctx.app_handle.set_tray_menu_preparing(false);
+                Self::publish_phase(
+                    &ctx.app_handle,
+                    RecordingPhase::Stopping(metadata.output_filepath.clone()),
+                );
+
+                // Release the game's capture source before the listener can start another helper.
+                let output = metadata.output_filepath.clone();
+                let shutdown_result = async_runtime::spawn_blocking(move || {
+                    let stopped = recorder.stop_recording();
+                    let shutdown = recorder.shutdown();
+                    log::info!("stopping recording: stopped={stopped:?}, shutdown={shutdown:?}");
+                    let result = match (stopped, shutdown) {
+                        (Ok(()), Ok(())) => Ok(()),
+                        (Ok(()), Err(error)) if has_finalized_mp4(&output) => {
+                            log::warn!("Recording was finalized; helper cleanup failed: {error}");
+                            Ok(())
+                        }
+                        (stopped, shutdown) => Err(anyhow::anyhow!("Recorder stop: {stopped:?}; shutdown: {shutdown:?}")),
+                    };
+                    drop(lease);
+                    result
+                })
+                .await;
+                shutdown_result??;
 
                 async_runtime::spawn_blocking(move || {
-                    log::debug!("Stopping recorder process...");
-
-                    let started = std::time::Instant::now();
-                    let stopped = recorder.stop_recording();
-                    if manual_mode {
-                        log::info!("stopping recording: stopped={stopped:?}, recorder cached for manual reuse");
-                        RecordingTask::store_manual_warm_recorder(recorder);
-                    } else {
-                        let shutdown = recorder.shutdown();
-                        log::info!("stopping recording: stopped={stopped:?}, shutdown={shutdown:?}");
-                    }
-
                     ctx.app_handle.cleanup_recordings();
 
                     if let Err(e) = ctx.app_handle.send_event(AppEvent::RecordingsChanged { payload: () }) {
                         log::error!("RecordingTask failed to send event: {e}");
                     }
-
-                    log::info!(
-                        "recording stop background finalization completed in {:.3}s",
-                        started.elapsed().as_secs_f64()
-                    );
                 });
 
                 Ok(metadata)
             }
             Err(e) => {
                 log::warn!("recording task failed/cancelled: {e}");
-                self.ctx.app_handle.state::<CurrentlyRecording>().set(None);
-                self.ctx.app_handle.set_tray_menu_recording(false);
-                self.ctx.app_handle.set_tray_menu_preparing(false);
                 Err(e)
             }
         }
     }
 
-    async fn record(ctx: GameCtx, manual_mode: bool) -> Result<(Recorder, Metadata)> {
+    fn publish_phase(app: &AppHandle, phase: RecordingPhase) {
+        let status = match &phase {
+            RecordingPhase::Idle => RecordingStatus::Idle,
+            RecordingPhase::Preparing(_) => RecordingStatus::Preparing,
+            RecordingPhase::Recording(_) => RecordingStatus::Recording,
+            RecordingPhase::Stopping(_) => RecordingStatus::Stopping,
+        };
+        app.state::<CurrentlyRecording>().set(phase);
+        if let Err(error) = app.send_event(AppEvent::RecordingPhaseChanged { payload: status }) {
+            log::warn!("Could not notify WebView of recording state: {error}");
+        }
+        app.refresh_recording_tray();
+    }
+
+    async fn record(ctx: GameCtx, manual_mode: bool) -> Result<ActiveCapture> {
+        let lease = cancellable!(async { Some(RECORDING_HELPER.lock().await) }, ctx.cancel_token, Option)
+            .ok_or_else(|| anyhow::anyhow!("recording cancelled before helper start"))?;
+        let lease = CaptureLease {
+            app: ctx.app_handle.clone(),
+            _guard: lease,
+        };
+        Self::publish_phase(&ctx.app_handle, RecordingPhase::Preparing(None));
         let mode_label = if manual_mode { "manual" } else { "auto" };
         let setup_started = std::time::Instant::now();
         let (mut recorder, output_filepath) =
@@ -209,10 +191,6 @@ impl RecordingTask {
             log::info!("manual recording mode: skipping in-game active check");
         }
 
-        ctx.app_handle
-            .state::<CurrentlyRecording>()
-            .set(Some(output_filepath.clone()));
-
         // Fetch game stats BEFORE starting recording to get a baseline for fallback.
         // This is also needed for manual mode so timeline starts from actual game time.
         let ingame_client = IngameClient::new();
@@ -220,22 +198,31 @@ impl RecordingTask {
         let pre_start_instant = std::time::Instant::now();
 
         // if initial game_data is successful => start recording
+        if ctx.cancel_token.is_cancelled() {
+            let _ = recorder.shutdown();
+            bail!("recording cancelled before capture started");
+        }
+        ctx.app_handle
+            .state::<CurrentlyRecording>()
+            .set(RecordingPhase::Preparing(Some(output_filepath.clone())));
         let obs_start = std::time::Instant::now();
         if let Err(e) = recorder.start_recording() {
-            ctx.app_handle.state::<CurrentlyRecording>().set(None);
-            ctx.app_handle.set_tray_menu_recording(false);
-            ctx.app_handle.set_tray_menu_preparing(false);
             let _ = recorder.stop_recording();
+            let _ = recorder.shutdown();
             bail!("failed to start recording: {e}");
         }
         log::info!(
             "[record-start][{mode_label}] recorder.start_recording completed in {:.3}s",
             obs_start.elapsed().as_secs_f64()
         );
-        ctx.app_handle.set_tray_menu_preparing(false);
-        ctx.app_handle.set_tray_menu_recording(true);
+        Self::publish_phase(&ctx.app_handle, RecordingPhase::Recording(output_filepath.clone()));
 
         // Emit RecordingStarted event immediately (UI feedback) - syncing happens below
+        if manual_mode {
+            if let Err(e) = ctx.app_handle.send_event(AppEvent::ManualRecordingStarted) {
+                log::error!("failed to emit ManualRecordingStarted event: {e}");
+            }
+        }
         if let Err(e) = ctx.app_handle.send_event(AppEvent::RecordingStarted) {
             log::error!("failed to emit RecordingStarted event: {e}");
         }
@@ -300,7 +287,7 @@ impl RecordingTask {
             ingame_time_rec_start_offset,
         };
 
-        Ok((recorder, metadata))
+        Ok(ActiveCapture { recorder, metadata, lease })
     }
 
     async fn setup_recorder(ctx: &GameCtx, manual_mode: bool) -> Result<(Recorder, PathBuf)> {
@@ -342,32 +329,15 @@ impl RecordingTask {
         settings.set_audio_source(settings_state.get_audio_source());
         settings.set_application_audio_tracks(settings_state.get_application_audio_tracks());
 
-        let mut recorder = if manual_mode {
-            if let Some(rec) = Self::take_manual_warm_recorder() {
-                log::info!("Using prewarmed manual recorder");
-                rec
-            } else {
-                Recorder::new_with_paths(
-                    ctx.app_handle
-                        .path()
-                        .resolve("libobs/extprocess_recorder.exe", BaseDirectory::Executable)
-                        .ok(),
-                    None,
-                    None,
-                    None,
-                )?
-            }
-        } else {
-            Recorder::new_with_paths(
-                ctx.app_handle
-                    .path()
-                    .resolve("libobs/extprocess_recorder.exe", BaseDirectory::Executable)
-                    .ok(),
-                None,
-                None,
-                None,
-            )?
-        };
+        let mut recorder = Recorder::new_with_paths(
+            ctx.app_handle
+                .path()
+                .resolve("libobs/extprocess_recorder.exe", BaseDirectory::Executable)
+                .ok(),
+            None,
+            None,
+            None,
+        )?;
 
         log::info!("recorder settings: {settings:?}");
         recorder.configure(&settings)?;
@@ -390,5 +360,69 @@ impl RecordingTask {
         }
 
         bail!("unable to get window size");
+    }
+}
+
+// A normal MP4 recording has both a complete media-data box and a movie index.
+fn has_finalized_mp4(path: &std::path::Path) -> bool {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let Ok(mut file) = std::fs::File::open(path) else { return false };
+    let Ok(info) = file.metadata() else { return false };
+    let len = info.len();
+    let mut offset = 0u64;
+    let (mut media, mut index) = (false, false);
+    while len.saturating_sub(offset) >= 8 {
+        let mut header = [0u8; 8];
+        if file.seek(SeekFrom::Start(offset)).and_then(|_| file.read_exact(&mut header)).is_err() {
+            return false;
+        }
+        let (size, header_size) = match u32::from_be_bytes(header[..4].try_into().unwrap()) {
+            0 => (len - offset, 8),
+            1 => {
+                let mut extended = [0u8; 8];
+                if file.read_exact(&mut extended).is_err() { return false; }
+                (u64::from_be_bytes(extended), 16)
+            }
+            size => (u64::from(size), 8),
+        };
+        if size < header_size || size > len - offset { return false; }
+        media |= &header[4..] == b"mdat" && size > header_size;
+        index |= &header[4..] == b"moov" && size > header_size;
+        offset += size;
+    }
+    offset == len && media && index
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RECORDING_HELPER;
+
+    #[test]
+    fn completed_mp4_requires_media_and_a_complete_movie_index() {
+        let path = std::env::temp_dir().join(format!("leaguerecord-mp4-box-test-{}.mp4", std::process::id()));
+        let media = b"\x00\x00\x00\x09mdatX";
+        let index = b"\x00\x00\x00\x09moovY";
+        std::fs::write(&path, media).unwrap();
+        assert!(!super::has_finalized_mp4(&path));
+        std::fs::write(&path, [media.as_slice(), &index[..8]].concat()).unwrap();
+        assert!(!super::has_finalized_mp4(&path));
+        std::fs::write(&path, [media.as_slice(), index.as_slice()].concat()).unwrap();
+        assert!(super::has_finalized_mp4(&path));
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn next_capture_waits_for_manual_shutdown_and_failed_start_can_retry() {
+        let manual = RECORDING_HELPER.lock().await;
+        let mut automatic = std::pin::pin!(RECORDING_HELPER.lock());
+        assert!(futures_util::poll!(automatic.as_mut()).is_pending());
+
+        drop(manual);
+        let failed_start = automatic.await;
+        assert!(RECORDING_HELPER.try_lock().is_err());
+        drop(failed_start);
+
+        assert!(RECORDING_HELPER.try_lock().is_ok());
     }
 }

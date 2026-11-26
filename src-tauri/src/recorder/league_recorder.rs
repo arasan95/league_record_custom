@@ -6,7 +6,7 @@ use tauri::AppHandle;
 use tokio::time::{sleep, timeout};
 use tokio_util::sync::CancellationToken;
 
-use super::game_listener::{ApiCtx, GameListener};
+use super::recording_session::{ApiCtx, RecordingSession};
 use crate::cancellable;
 
 pub struct LeagueRecorder {
@@ -80,7 +80,7 @@ impl LeagueRecorder {
                             cancel_token: cancel_token.clone(),
                         };
 
-                        if let Err(e) = GameListener::new(ctx, manual_stop_tx.subscribe(), manual_start_tx.subscribe())
+                        if let Err(e) = RecordingSession::new(ctx, manual_stop_tx.subscribe(), manual_start_tx.subscribe())
                             .run()
                             .await
                         {
@@ -111,7 +111,7 @@ impl LeagueRecorder {
         let Ok(mut task_slot) = self.task.try_lock() else { return };
         let Some(mut task) = task_slot.take() else { return };
 
-        if timeout(Duration::from_secs(2), &mut task).await.is_err() {
+        if timeout(Duration::from_secs(40), &mut task).await.is_err() {
             log::warn!("RecordingTask stop() ran into timeout - aborting task");
             task.abort();
             let _ = task.await;
@@ -126,8 +126,8 @@ impl LeagueRecorder {
     }
 
     pub fn manual_start(&self) {
-        if let Err(e) = self.manual_start_tx.send(()) {
-            log::debug!("failed to send manual start signal (no receivers?): {e}");
+        if self.manual_start_tx.send(()).is_err() {
+            log::warn!("Manual recording could not start: waiting for the League Client API");
         }
     }
 }

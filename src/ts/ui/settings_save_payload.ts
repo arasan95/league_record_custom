@@ -27,6 +27,7 @@ type GameModeInputs = {
 
 type OtherSwitchInputs = {
     autostart: boolean;
+    closeToTray: boolean;
     autoplayVideo: boolean;
     autoStopPlayback: boolean;
     autoSelectRecording: boolean;
@@ -133,6 +134,7 @@ export function buildSettingsPayload(input: BuildSettingsPayloadInput): Settings
         },
         gameModes,
         autostart: input.otherSwitches.autostart,
+        closeToTray: input.otherSwitches.closeToTray,
         autoplayVideo: input.otherSwitches.autoplayVideo,
         autoStopPlayback: input.otherSwitches.autoStopPlayback,
         autoSelectRecording: input.otherSwitches.autoSelectRecording,

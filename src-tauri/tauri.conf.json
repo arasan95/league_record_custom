@@ -14,23 +14,7 @@
                             ],
                 "security":  {
                                  "assetProtocol":  {
-                                                       "scope":  [
-                                                                     "$VIDEO/**/*.json",
-                                                                     "$VIDEO/**/*.mp4",
-                                                                     "$VIDEO/**/*.png",
-                                                                     "$DOWNLOAD/**/*.json",
-                                                                     "$DOWNLOAD/**/*.mp4",
-                                                                     "$DOWNLOAD/**/*.png",
-                                                                     "$APPLOCALDATA/**/*.json",
-                                                                     "$APPLOCALDATA/**/*.mp4",
-                                                                     "$APPLOCALDATA/**/*.png",
-                                                                     "$APPDATA/**/*.json",
-                                                                     "$APPDATA/**/*.mp4",
-                                                                     "$APPDATA/**/*.png",
-                                                                     "**/*.mp4",
-                                                                     "**/*.json",
-                                                                     "**/*.png"
-                                                                 ],
+                                                       "scope": ["$APPLOCALDATA/img_cache/**"],
                                                        "enable":  true
                                                    }
                              }

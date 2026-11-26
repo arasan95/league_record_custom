@@ -162,6 +162,10 @@
           </div>
           
         </div>
+        <div id="recordings-unavailable" hidden>
+          <span role="status"></span>
+          <button type="button" class="btn"></button>
+        </div>
         <ul id="sidebar-content"></ul>
       </div>
 
@@ -183,7 +187,10 @@
                 <input type="checkbox" id="loop-enabled" />
                 <label for="loop-enabled">On</label>
               </div>
-              <button id="create-clip-btn" class="btn small-btn" disabled>Clip</button>
+              <div class="clip-control">
+                <button id="create-clip-btn" class="btn small-btn" disabled><span id="clip-status" role="status">Clip</span></button>
+                <progress id="clip-progress" max="100" hidden aria-label="Clip progress"></progress>
+              </div>
             </div>
           </div>
 

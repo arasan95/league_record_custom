@@ -1,7 +1,8 @@
 use std::{
     io::{self, BufRead, BufReader, BufWriter, StdinLock, StdoutLock, Write},
     path::{Component, Path},
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    process::{Child, Command, Stdio},
+    sync::mpsc,
     time::Duration,
 };
 
@@ -49,91 +50,97 @@ pub enum IpcResponse {
 
 #[derive(Debug)]
 pub struct IpcLinkMaster {
-    tx: BufWriter<ChildStdin>,
-    rx: BufReader<ChildStdout>,
-    buffer: String,
+    requests: mpsc::Sender<(IpcCommand, mpsc::SyncSender<IpcResponse>)>,
     child_process: Child,
 }
 
 impl IpcLinkMaster {
     pub fn new(executable: impl AsRef<Path>) -> io::Result<Self> {
         let executable = executable.as_ref().canonicalize()?;
+        let mut command = Command::new(executable.as_os_str());
+        command.current_dir(executable.parent().unwrap_or_else(|| Path::new(&Component::RootDir)));
+        Self::spawn(&mut command)
+    }
 
-        let mut child_process = Command::new(executable.as_os_str())
+    fn spawn(command: &mut Command) -> io::Result<Self> {
+        let mut child_process = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .current_dir(executable.parent().unwrap_or_else(|| Path::new(&Component::RootDir)))
             .spawn()?;
-
-        Ok(Self {
-            tx: BufWriter::new(child_process.stdin.take().unwrap()),
-            rx: BufReader::new(child_process.stdout.take().unwrap()),
-            buffer: String::with_capacity(512),
-            child_process,
-        })
+        let mut tx = BufWriter::new(child_process.stdin.take().unwrap());
+        let mut rx = BufReader::new(child_process.stdout.take().unwrap());
+        let (requests, incoming) = mpsc::channel::<(IpcCommand, mpsc::SyncSender<IpcResponse>)>();
+        let worker = std::thread::Builder::new().name("recorder-ipc".into()).spawn(move || {
+            for (command, reply) in incoming {
+                let response = (|| -> io::Result<IpcResponse> {
+                    serde_json::to_writer(&mut tx, &command)?;
+                    tx.write_all(b"\n")?;
+                    tx.flush()?;
+                    let mut line = String::new();
+                    loop {
+                        if rx.read_line(&mut line)? == 0 {
+                            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "recorder pipe closed"));
+                        }
+                        if let Ok(response) = serde_json::from_str(&line) { return Ok(response); }
+                        log::info!("[rec]: {}", line.trim_end());
+                        line.clear();
+                    }
+                })();
+                let _ = reply.send(response.unwrap_or_else(|error| IpcResponse::Err(error.to_string())));
+            }
+        });
+        if let Err(error) = worker {
+            let _ = child_process.kill();
+            let _ = child_process.wait();
+            return Err(error);
+        }
+        Ok(Self { requests, child_process })
     }
 
     pub fn send(&mut self, cmd: IpcCommand) -> IpcResponse {
-        if let Err(e) = serde_json::to_writer(&mut self.tx, &cmd) {
-            return IpcResponse::Err(format!("{e:?}"));
-        }
-        if let Err(e) = self.tx.write(b"\n") {
-            return IpcResponse::Err(format!("{e:?}"));
-        }
-        if let Err(e) = self.tx.flush() {
-            return IpcResponse::Err(format!("{e:?}"));
-        }
+        let timeout = match cmd {
+            IpcCommand::StopRecording | IpcCommand::Shutdown | IpcCommand::Exit => Duration::from_secs(5),
+            _ => Duration::from_secs(15),
+        };
+        self.send_with_timeout(cmd, timeout)
+    }
 
-        loop {
-            let line = match self.read_line() {
-                Ok(line) => line,
-                Err(e) => return IpcResponse::Err(format!("failed to read from recorder: {e}")),
-            };
-            match serde_json::from_str::<IpcResponse>(line) {
-                Ok(response) => return response,
-                // trim newlines from the end because log::info!() adds one
-                Err(_) => log::info!("[rec]: {}", line.trim_end()),
+    fn send_with_timeout(&mut self, cmd: IpcCommand, timeout: Duration) -> IpcResponse {
+        let (reply, response) = mpsc::sync_channel(1);
+        if self.requests.send((cmd, reply)).is_err() {
+            return IpcResponse::Err("recorder IPC worker disconnected".into());
+        }
+        match response.recv_timeout(timeout) {
+            Ok(response) => response,
+            Err(error) => {
+                self.terminate();
+                IpcResponse::Err(format!("recorder IPC response failed: {error}"))
             }
         }
     }
 
-    pub fn drain_logs(&mut self) {
-        while let Ok(line) = self.read_line() {
-            // trim newlines from the end because log::info!() adds one
-            log::info!("[rec]: {}", line.trim_end());
+    pub fn drain_logs(&mut self) -> io::Result<()> {
+        use wait_timeout::ChildExt;
+        match self.child_process.wait_timeout(Duration::from_secs(3))? {
+            Some(status) if status.success() => Ok(()),
+            Some(status) => Err(io::Error::other(format!("recorder exited with {status}"))),
+            None => {
+                self.terminate();
+                Err(io::Error::new(io::ErrorKind::TimedOut, "recorder did not exit"))
+            }
         }
     }
 
-    fn read_line(&mut self) -> Result<&str, String> {
-        self.buffer.clear();
-
-        match self.rx.read_line(&mut self.buffer) {
-            Ok(0) => Err("EOF".into()),
-            Err(e) => Err(format!("{e:?}")),
-            Ok(_) => Ok(&self.buffer),
+    fn terminate(&mut self) {
+        if !matches!(self.child_process.try_wait(), Ok(Some(_))) {
+            let _ = self.child_process.kill();
+            let _ = self.child_process.wait();
         }
     }
 }
 
 impl Drop for IpcLinkMaster {
-    fn drop(&mut self) {
-        use wait_timeout::ChildExt;
-
-        // the normal self.send function waits indefinitely for an answer that might not come if the subprocess
-        // has already been stopped with IpcCommand::Exit
-        _ = serde_json::to_writer(&mut self.tx, &IpcCommand::StopRecording);
-        _ = self.tx.write(b"\n");
-        _ = serde_json::to_writer(&mut self.tx, &IpcCommand::Shutdown);
-        _ = self.tx.write(b"\n");
-        _ = serde_json::to_writer(&mut self.tx, &IpcCommand::Exit);
-        _ = self.tx.write(b"\n");
-        _ = self.tx.flush();
-
-        match self.child_process.wait_timeout(Duration::from_secs(3)) {
-            Ok(Some(status)) if status.success() => { /* process exited successfully */ }
-            _ => _ = self.child_process.kill(),
-        }
-    }
+    fn drop(&mut self) { self.terminate(); }
 }
 
 pub struct IpcLinkSlave<'a> {
@@ -191,5 +198,22 @@ impl IpcLinkSlave<'_> {
 impl Default for IpcLinkSlave<'_> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unresponsive_helper_is_reaped_before_returning_timeout() {
+        let script = "$null = [Console]::ReadLine(); Start-Sleep -Seconds 30";
+        let mut command = Command::new("powershell.exe");
+        command.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+        let mut link = IpcLinkMaster::spawn(&mut command).unwrap();
+        let result = link.send_with_timeout(IpcCommand::StopRecording, Duration::from_millis(250));
+        assert!(matches!(result, IpcResponse::Err(message) if message.contains("timed out") || message.contains("timeout")));
+        assert!(link.child_process.try_wait().unwrap().is_some());
     }
 }

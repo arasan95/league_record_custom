@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 pub struct Shutdown(AtomicBool);
 
 impl Shutdown {
-    pub fn set(&self) {
-        self.0.store(true, Ordering::Release);
+    pub fn begin(&self) -> bool {
+        !self.0.swap(true, Ordering::AcqRel)
     }
 
     pub fn get(&self) -> bool {

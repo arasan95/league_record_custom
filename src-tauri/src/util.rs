@@ -1,8 +1,3 @@
-use std::cmp::Ordering;
-use std::path::Path;
-
-use anyhow::Result;
-
 #[macro_export]
 macro_rules! cancellable {
     ($function:expr, $cancel_token:expr, Option) => {
@@ -25,17 +20,27 @@ macro_rules! cancellable {
     };
 }
 
-pub fn compare_time(a: &Path, b: &Path) -> Result<Ordering> {
-    let get_created = |p: &Path| -> Result<std::time::SystemTime> {
-        let mp4 = p.with_extension("mp4");
-        if mp4.exists() {
-            return Ok(mp4.metadata()?.created()?);
-        }
-        let json = p.with_extension("json");
-        Ok(json.metadata()?.created()?)
+pub fn write_json_atomically(path: &std::path::Path, data: &impl serde::Serialize) -> anyhow::Result<()> {
+    use std::{
+        fs,
+        io::Write,
+        sync::atomic::{AtomicU64, Ordering},
     };
-
-    let a_time = get_created(a)?;
-    let b_time = get_created(b)?;
-    Ok(a_time.cmp(&b_time).reverse())
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let json = serde_json::to_vec_pretty(data)?;
+    let mut name = path.as_os_str().to_os_string();
+    name.push(format!(
+        ".{}-{}.tmp",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let temporary = std::path::PathBuf::from(name);
+    let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&temporary)?;
+    let written = file.write_all(&json).and_then(|_| file.sync_all());
+    drop(file);
+    let result = written.and_then(|_| fs::rename(&temporary, path));
+    if result.is_err() {
+        let _ = fs::remove_file(temporary);
+    }
+    Ok(result?)
 }

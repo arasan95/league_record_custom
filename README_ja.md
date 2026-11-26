@@ -11,43 +11,25 @@
 このバージョンでは以下の変更が実装されています。
 
 - **UI機能**: ユーザーインターフェースやデザインの変更。
-- **手動録画**: ホットキーを使用した手動での録画開始・停止。
+- **手動録画**: システムトレイまたはホットキーから録画を開始・停止できます。
 - **ステータス表示**: 現在の録画ステータスに応じてタスクバーのアイコンが変化。
 - **ゲームモードフィルター**: 特定のゲームモード（ランク、ARAM、アリーナなど）のみを録画する設定。
 - **再生コントロール**: ゲーム状況に基づく自動再生、停止、録画選択。
-- **ビデオツール**: A-Bループ再生およびクリップ動画の作成（FFmpegは初回利用時に自動準備）。
+- **ビデオツール**: A-B ループ再生とクリップ作成。
 - **設定周り**: ホットキーや一般設定項目の拡張。
 - **ツールチップ**: ツールチップのデータはローカルのWADファイルから取得しているため、最新パッチにも対応。
 
 ## ダウンロード
 
-**[LeagueRecordをダウンロード（インストーラー版）](https://github.com/arasan95/league_record_custom/releases/latest/download/LeagueRecord_x64-setup.exe)**
+**[公式サイトから LeagueRecord をダウンロード](https://leaguerecord.web.app/ja/)**
 
-すべてのバージョンを見る: [GitHub Releases](https://github.com/arasan95/league_record_custom/releases)
+Windows インストーラーには、録画から短いクリップを作るために必要な FFmpeg が入っています。
 
-FFmpegは別のリリースアセットとして配布し、アプリデータフォルダにキャッシュします。FFmpegのSHA256が変わらない限り、アプリ更新時に再インストールしません。
-
-## Tooltip運用ドキュメント（引き継ぎ）
-
-Tooltip修正の運用手順、参照ファイル、生成方法、検出方法は以下を参照してください。  
-`TOOLTIP_HANDOVER_JA.md`
-
-## Tooltipデバッグ検査の入口
-
-再発時に同じ検査をすぐ回せるよう、専用フォルダを追加しています。
-
-- フォルダ: `tools/tooltip-diagnostics`
-- 手順書: `tools/tooltip-diagnostics/README_ja.md`
-- 実行コマンド:
-  - `bun run diag:tooltip`（DB内の全ロケールを検査）
-  - `bun run diag:tooltip:ja`（日本語のみ検査）
-
-結果は `tmp/tooltip_diagnostics/<日時>/` に保存されます。
+[すべてのバージョンを GitHub Releases で見る](https://github.com/arasan95/league_record_custom/releases)
 
 ## FFmpegについて
 
-通常利用では、アプリデータフォルダに準備されたFFmpegが自動で使われます。
-開発者向けに手動で差し替える場合のみ、`src-tauri/resources/tools/ffmpeg/` 配下の更新を行ってください。
+アプリの自動更新では、LeagueRecord のアプリデータフォルダに保存済みの FFmpeg を引き続き使います。
 
 ## 使い方
 

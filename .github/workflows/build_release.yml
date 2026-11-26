@@ -4,6 +4,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag for the draft (for example, v1.3.0)'
+        required: true
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -12,6 +17,8 @@ jobs:
   release:
     name: cargo release
     runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     permissions:
       contents: write
 
@@ -24,17 +31,23 @@ jobs:
         with:
           workspaces: "./src-tauri"
 
-      # Update version based on tag
-      - name: Update Version
-        shell: powershell
+      - name: Validate release version
+        id: release_version
+        shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          if ($tag.StartsWith("v")) { $version = $tag.Substring(1) } else { $version = $tag }
-          Write-Host "Syncing version to $version"
-          $path = "src-tauri/Cargo.toml"
-          (Get-Content $path) -replace '^version = ".*"', "version = `"$version`"" | Set-Content $path
+          $tag = $env:RELEASE_TAG
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw 'Use a Tauri release tag in the form vX.Y.Z.'
+          }
+          $version = $tag.Substring(1)
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "installer_name=LeagueRecord_${version}_x64-setup.exe"
+          $manifest = Get-Content 'src-tauri/Cargo.toml' -Raw
+          $appVersion = [regex]::Match($manifest, '(?m)^version = "([^"]+)"\r?$').Groups[1].Value
+          if ($appVersion -cne $version) { throw "Release tag $tag does not match Cargo.toml version $appVersion." }
 
-      - run: bun install --linker=isolated
+      - run: bun install --frozen-lockfile --linker=isolated
+      - run: bun audit
+      - uses: ./.github/actions/verify
 
       - name: Prepare updater-only Tauri config (without bundled FFmpeg runtime)
         shell: pwsh
@@ -48,7 +61,7 @@ jobs:
           }
           $cfg.bundle.createUpdaterArtifacts = $true
           if ($cfg.bundle.resources.PSObject.Properties.Name -contains "resources/tools/ffmpeg/*") {
-            $cfg.bundle.resources.PSObject.Properties.Remove("resources/tools/ffmpeg/*")
+            $cfg.bundle.resources.'resources/tools/ffmpeg/*' = $null
             Write-Host "Removed FFmpeg runtime resource entry for updater build."
           } else {
             Write-Host "FFmpeg runtime resource entry not found; updater build already excludes it."
@@ -56,7 +69,7 @@ jobs:
           $cfg | ConvertTo-Json -Depth 100 | Set-Content $targetPath -Encoding UTF8
 
       - name: Build updater package (no bundled FFmpeg)
-        run: bun run --bun tauri build --config src-tauri/tauri.updater.conf.json
+        run: bunx tauri build --config src-tauri/tauri.updater.conf.json -- --locked
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -65,16 +78,12 @@ jobs:
         id: updater_stage
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = $env:RELEASE_TAG
           $stageDir = ".artifacts/updater"
           $nsisDir = "src-tauri/target/release/bundle/nsis"
           New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
 
-          $setup = Get-ChildItem -Path $nsisDir -Filter "*_x64-setup.exe" | Select-Object -First 1
-          if ($null -eq $setup) {
-            Write-Error "Could not find updater setup exe in $nsisDir"
-            exit 1
-          }
+          $setup = Get-Item -LiteralPath (Join-Path $nsisDir '${{ steps.release_version.outputs.installer_name }}') -ErrorAction Stop
           $sigPath = "$($setup.FullName).sig"
           if (-not (Test-Path $sigPath)) {
             Write-Error "Could not find updater signature: $sigPath"
@@ -83,8 +92,8 @@ jobs:
 
           $updaterExeName = "LeagueRecord_${tag}_x64-updater.exe"
           $updaterSigName = "${updaterExeName}.sig"
-          Copy-Item -Force $setup.FullName (Join-Path $stageDir $updaterExeName)
-          Copy-Item -Force $sigPath (Join-Path $stageDir $updaterSigName)
+          Move-Item -Force -LiteralPath $setup.FullName -Destination (Join-Path $stageDir $updaterExeName)
+          Move-Item -Force -LiteralPath $sigPath -Destination (Join-Path $stageDir $updaterSigName)
 
           Add-Content -Path $env:GITHUB_OUTPUT -Value "updater_exe_name=$updaterExeName"
           Add-Content -Path $env:GITHUB_OUTPUT -Value "updater_sig_path=$(Join-Path $stageDir $updaterSigName)"
@@ -121,33 +130,15 @@ jobs:
             -SourceUrl "https://community.chocolatey.org/packages/ffmpeg"
 
       - name: Build installer package (with bundled FFmpeg)
-        run: bun run --bun tauri build
+        run: bunx tauri build -- --locked
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
-      - run: 7z a -tzip LeagueRecord_${{ github.ref_name }}_x64_en-US.zip LeagueRecord.exe ../libobs licenses LICENSE.txt
-        working-directory: ./src-tauri/target/release/
-
-      - run: 7z a -tzip LeagueRecord_x64.zip LeagueRecord.exe ../libobs licenses LICENSE.txt
-        working-directory: ./src-tauri/target/release/
-
-      - name: Create stable installer filename for latest link
-        shell: pwsh
-        run: |
-          $nsisDir = "src-tauri/target/release/bundle/nsis"
-          $setup = Get-ChildItem -Path $nsisDir -Filter "*_x64-setup.exe" | Select-Object -First 1
-          if ($null -eq $setup) {
-            Write-Error "Could not find setup exe in $nsisDir"
-            exit 1
-          }
-          Copy-Item -Force $setup.FullName (Join-Path $nsisDir "LeagueRecord_x64-setup.exe")
-
       - name: Generate latest.json
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}"
-          if ($version.StartsWith("v")) { $version = $version.Substring(1) }
+          $version = $env:RELEASE_TAG.Substring(1)
 
           $updaterSigPath = "${{ steps.updater_stage.outputs.updater_sig_path }}"
           if (-not (Test-Path $updaterSigPath)) {
@@ -162,7 +153,7 @@ jobs:
           }
 
           $date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-          $url = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$updaterExeName"
+          $url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/$updaterExeName"
 
           $notes = "Update v$version"
           if (Test-Path "release_notes.json") {
@@ -191,7 +182,7 @@ jobs:
           $jsonText = $json | ConvertTo-Json -Depth 10
           Set-Content -Path latest.json -Value $jsonText -Encoding utf8NoBOM
 
-      - name: Validate latest.json
+      - name: Validate release assets and updater manifest
         shell: pwsh
         run: |
           if (-not (Test-Path "latest.json")) {
@@ -200,6 +191,18 @@ jobs:
           }
 
           $latest = Get-Content "latest.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+          $installerPath = 'src-tauri/target/release/bundle/nsis/${{ steps.release_version.outputs.installer_name }}'
+          $updaterName = '${{ steps.updater_stage.outputs.updater_exe_name }}'
+          $updaterPath = Join-Path '.artifacts/updater' $updaterName
+          foreach ($path in @($installerPath, $updaterPath)) {
+            if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing release asset: $path" }
+          }
+          $windows = $latest.platforms.'windows-x86_64'
+          $expectedUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/$updaterName"
+          $signature = Get-Content -LiteralPath '${{ steps.updater_stage.outputs.updater_sig_path }}' -Raw
+          if ($windows.url -cne $expectedUrl -or !$signature.Trim() -or $windows.signature -cne $signature) {
+            throw 'latest.json does not reference the staged Windows updater and its signature.'
+          }
           if ($latest.version -notmatch '^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$') {
             Write-Error "latest.json version must be semver without a leading 'v'. got: $($latest.version)"
             exit 1
@@ -214,7 +217,7 @@ jobs:
         id: release_body
         shell: pwsh
         run: |
-          $body = "Windows-x64 installer and portable version.`nVersion: ${{ github.ref_name }}"
+          $body = "Windows x64 installer.`nVersion: $env:RELEASE_TAG"
           if (Test-Path "release_notes.json") {
             try {
               $rn = Get-Content "release_notes.json" -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -242,7 +245,21 @@ jobs:
 
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "./src-tauri/target/release/*.zip, ./src-tauri/target/release/bundle/nsis/*, ./.artifacts/updater/*, latest.json"
-          draft: ${{ github.event_name == 'workflow_dispatch' }}
+          tag: ${{ env.RELEASE_TAG }}
+          commit: ${{ github.sha }}
+          artifacts: "./src-tauri/target/release/bundle/nsis/${{ steps.release_version.outputs.installer_name }}, ./.artifacts/updater/${{ steps.updater_stage.outputs.updater_exe_name }}, latest.json"
+          artifactErrorsFailBuild: true
+          draft: true
           prerelease: true
           body: ${{ steps.release_body.outputs.body }}
+
+
+      - name: List Windows release acceptance checks
+        shell: pwsh
+        run: |
+          @'
+          ### Before publishing this draft
+          - On a clean Windows installation without FFmpeg, install the signed package and create a clip.
+          - Upgrade from the previous release through the signed updater and create a clip again.
+          - Check recording start and stop, playback seeking, and hiding and reopening the window from the tray.
+          '@ | Add-Content -Path $env:GITHUB_STEP_SUMMARY

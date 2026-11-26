@@ -26,6 +26,7 @@ impl WindowManager for AppHandle {
         let window: &'static str = window.into();
 
         if let Some(main) = self.webview_windows().get(window) {
+            _ = main.show();
             _ = main.unminimize();
             _ = main.set_focus();
         } else {

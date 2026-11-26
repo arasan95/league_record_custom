@@ -14,6 +14,7 @@ const RULES = [
   { area: "frontend.platform-types", pattern: /^src\/vite-env\.d\.ts$/ },
   { area: "frontend.runtime", pattern: /^src\/ts\/main\.ts$/ },
   { area: "frontend.runtime", pattern: /^src\/ts\/main_.*\.ts$/ },
+  { area: "frontend.runtime", pattern: /^src\/ts\/update_checker\.ts$/ },
   { area: "frontend.ui", pattern: /^src\/ts\/ui\.ts$/ },
   { area: "frontend.ui", pattern: /^src\/ts\/ui\/.*\.ts$/ },
   { area: "frontend.ui", pattern: /^src\/ts\/titlebar\.ts$/ },
@@ -29,7 +30,7 @@ const RULES = [
   { area: "frontend.input", pattern: /^src\/ts\/keybinds\.ts$/ },
   { area: "frontend.events", pattern: /^src\/ts\/listeners\.ts$/ },
   { area: "frontend.common", pattern: /^src\/ts\/util\.ts$/ },
-  { area: "frontend.i18n", pattern: /^src\/ts\/i18n\.ts$/ },
+  { area: "frontend.i18n", pattern: /^src\/ts\/i18n(?:\.test)?\.ts$/ },
   { area: "frontend.contract", pattern: /^src\/ts\/bindings\.ts$/ },
 
   // Backend

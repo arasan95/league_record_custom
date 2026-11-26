@@ -1277,3 +1277,26 @@ img.tft-trait {
     background-color: #3f3f3f;
     color: #fff;
 }
+
+
+.sidebar-recording-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 6px;
+    margin-inline-start: 6px;
+    border-radius: 4px;
+    background: #521b22;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.sidebar-recording-badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ff626c;
+}

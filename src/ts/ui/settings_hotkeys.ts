@@ -1,9 +1,9 @@
 import type { Settings } from "../bindings";
 import { formatKeyCombo, keyComboToBackendString, loadMouseConfig, type ActionName, type KeyCombo, type MouseConfig } from "../keybinds";
-import type { Language } from "../i18n";
+import type { Language, getText as translate } from "../i18n";
 import type { UiCreateEl } from "./settings_primitives";
 
-type GetText = (lang: Language, key: any) => string;
+type GetText = typeof translate;
 
 type CreateSettingsHotkeysTabInput = {
     createEl: UiCreateEl;
@@ -86,7 +86,7 @@ export function createSettingsHotkeysTabContent({
         const btn = createEl("button", {}, {
             class: "settings-input keybind-btn",
             style: "text-align: center; cursor: pointer; width: 140px; padding: 6px 10px; background-color: #202225; border: 1px solid #202225; color: #dcddde; border-radius: 3px; font-size: 0.9em;",
-        }, formatKeyCombo(pendingBinds[action])) as HTMLButtonElement;
+        }, pendingBinds[action] ? formatKeyCombo(pendingBinds[action]) : getText(lang, "settingNone")) as HTMLButtonElement;
 
         const detachBindingListener = () => {
             if (keydownHandler) {
@@ -102,12 +102,12 @@ export function createSettingsHotkeysTabContent({
             if (btn.classList.contains("binding")) {
                 detachBindingListener();
                 pendingBinds[action] = null;
-                btn.textContent = "None";
+                btn.textContent = getText(lang, "settingNone");
                 btn.classList.remove("binding");
                 return;
             }
 
-            btn.textContent = "Press any key...";
+            btn.textContent = getText(lang, "pressAnyKey");
             btn.classList.add("binding");
             btn.focus();
             keydownHandler = (kEvent: KeyboardEvent) => {
@@ -156,7 +156,7 @@ export function createSettingsHotkeysTabContent({
         const btn = createEl("button", {}, {
             class: "settings-input keybind-btn",
             style: "text-align: center; cursor: pointer; width: 140px; padding: 6px 10px; background-color: #202225; border: 1px solid #202225; color: #dcddde; border-radius: 3px; font-size: 0.9em;",
-        }, initialValue || "None") as HTMLButtonElement;
+        }, initialValue || getText(lang, "settingNone")) as HTMLButtonElement;
 
         let keydownHandler: ((kEvent: KeyboardEvent) => void) | null = null;
         btn.onclick = (e: MouseEvent) => {
@@ -168,12 +168,12 @@ export function createSettingsHotkeysTabContent({
                     keydownHandler = null;
                 }
                 onUpdate(null);
-                btn.textContent = "None";
+                btn.textContent = getText(lang, "settingNone");
                 btn.classList.remove("binding");
                 return;
             }
 
-            btn.textContent = "Press any key...";
+            btn.textContent = getText(lang, "pressAnyKey");
             btn.classList.add("binding");
             btn.focus();
             keydownHandler = (kEvent: KeyboardEvent) => {
@@ -266,7 +266,7 @@ export function createSettingsHotkeysTabContent({
         createEl("option", { value: "Shift" }, {}, "Shift"),
         createEl("option", { value: "Ctrl" }, {}, "Ctrl"),
         createEl("option", { value: "Alt" }, {}, "Alt"),
-        createEl("option", { value: "None" }, {}, "None"),
+        createEl("option", { value: "None" }, {}, getText(lang, "settingNone")),
     ]) as HTMLSelectElement;
     scrollModSelect.value = (settings as any).scrollFrameStepModifier || "Shift";
     scrollModSelect.onchange = () => {
@@ -286,7 +286,7 @@ export function createSettingsHotkeysTabContent({
         createEl("option", { value: "Ctrl" }, {}, "Ctrl"),
         createEl("option", { value: "Alt" }, {}, "Alt"),
         createEl("option", { value: "Meta" }, {}, "Meta"),
-        createEl("option", { value: "None" }, {}, "None"),
+        createEl("option", { value: "None" }, {}, getText(lang, "settingNone")),
     ]) as HTMLSelectElement;
     scoreboardModSelect.value = (settings as any).scoreboardLinkModifier || "Shift";
     scoreboardModSelect.onchange = () => {

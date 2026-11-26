@@ -3,28 +3,28 @@ import type Player from "video.js/dist/types/player";
 import { MarkersPlugin, type Settings } from "@fffffffxxxxxxx/videojs-markers";
 import "@fffffffxxxxxxx/videojs-markers";
 
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { join, sep } from "@tauri-apps/api/path";
+import { sep } from "@tauri-apps/api/path";
 
-import { commands, type ClipAudioTrack, type GameEvent, type Recording } from "./bindings";
+import { commands, type ClipAudioTrack, type GameEvent, type Recording, type RecordingSnapshot } from "./bindings";
 import ListenerManager from "./listeners";
 import UI from "./ui";
 import { splitRight, playNotificationSound } from "./util";
-import { DEFAULT_KEYBINDS, isAction, loadKeybinds, loadMouseConfig, type KeybindMap, type MouseConfig } from "./keybinds";
+import { DEFAULT_KEYBINDS, isAction, createKeybindSettings } from "./keybinds";
 import { TitleBar } from "./titlebar";
 import { initPatchVersion } from "./version";
 import { initTooltipFallback } from "./tooltip";
 import { getText } from "./i18n";
+import { createVideoSelection } from "./main_video_selection_usecase";
+import { bindClipCreation } from "./main_clip_usecase";
 import { ensureDataLoaded } from "./datadragon";
-import { buildMetadataCandidates, normalizeVideoId, toAssetPath, videoIdsMatch } from "./main_video_id_usecase";
+import { videoIdsMatch } from "./main_video_id_usecase";
 import { getLatestRetryVideoId, getRetryState } from "./main_sidebar_usecase";
-import { getMetadataFromRecordingsList, getMetadataWithFallback } from "./main_metadata_usecase";
-import { renderMetadataState } from "./main_metadata_render_usecase";
+import { createMetadataController } from "./main_metadata_render_usecase";
 import { buildMarkers, markerEventName, type HighlightEvents, type MarkerDetail, type RecordingEvents, type TftRoundEvents } from "./main_markers_usecase";
 import { initializeProgressTooltips } from "./main_progress_tooltip_usecase";
 import { initializeMarkerHoverTooltips } from "./main_marker_tooltip_usecase";
 import { createKeyboardHandlers } from "./main_keyboard_usecase";
-import { refreshSidebar, retrySidebarUpdateLoop } from "./main_recordings_usecase";
+import { createRecordingRefresh, handleRecordingFinished, refreshSidebar, retrySidebarUpdateLoop } from "./main_recordings_usecase";
 import { buildTimelineRows } from "./main_timeline_usecase";
 import {
     deleteVideoFlow,
@@ -40,37 +40,15 @@ import {
 // jumps to (eventTime - EVENT_DELAY) when a marker is clicked
 const EVENT_DELAY = 2;
 
-const ui = new UI(videojs);
-// new TitleBar();
-
-// Load keybinds & mouse config
-export let currentKeybinds: KeybindMap = loadKeybinds();
-export let currentMouseConfig: MouseConfig = loadMouseConfig();
-
-export function reloadKeybinds() {
-    currentKeybinds = loadKeybinds();
-    currentMouseConfig = loadMouseConfig();
-}
+const keybinds = createKeybindSettings();
+const ui = new UI(videojs, keybinds);
 
 let currentEvents: RecordingEvents | null = null;
 let highlightEvents: HighlightEvents | null = null;
 let tftRoundEvents: TftRoundEvents | null = null;
 let markerDetails: Array<MarkerDetail | undefined> = [];
-let preferredActiveVideoId: string | null = null;
-const metadataRetryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
-const metadataRenderSignatures = new Map<string, string>();
-let metadataRenderRequestSerial = 0;
-let lastRenderedMetadataVideoKey: string | null = null;
-let recordingsChangedRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-let recordingsChangedRefreshInFlight = false;
-let recordingsChangedRefreshQueued = false;
-let suppressRecordingsChangedUntil = 0;
-let cachedRecordingsSizeGb = 0;
-let recordingsSizeCacheUpdatedAt = 0;
-let recordingsSizeFetchInFlight: Promise<number> | null = null;
-let manualStartPending = false;
-let manualStartPendingTimeout: ReturnType<typeof setTimeout> | null = null;
-const RECORDINGS_SIZE_CACHE_MS = 5000;
+let lastRecordingsSnapshot: RecordingSnapshot | null = null;
+let recordingsRefresh: Promise<RecordingSnapshot | null> | null = null;
 
 function perfNowMs(): number {
     if (typeof performance !== "undefined" && typeof performance.now === "function") {
@@ -86,148 +64,71 @@ function logPerf(label: string, startedAtMs: number): void {
     console.log(`[perf] ${label}: ${elapsedMs.toFixed(1)}ms`);
 }
 
-function metadataDataSignature(data: any): string {
-    if (!data) return "null";
-    if ("NoData" in data) return "NoData";
-    if ("Metadata" in data) {
-        const m = data.Metadata;
-        const eventCount = Array.isArray(m.events) ? m.events.length : 0;
-        const lastEventTs = eventCount > 0 ? Number(m.events[eventCount - 1]?.timestamp ?? -1) : -1;
-        const participantKey = Array.isArray(m.participants)
-            ? m.participants.map((p: any) => `${p.participantId}:${p.championId}:${p.honorReceived ? 1 : 0}`).join("|")
-            : "";
-        const highlightsCount = Array.isArray(m.highlights) ? m.highlights.length : 0;
-        const tftRoundCount = Array.isArray(m.tftRoundMarkers) ? m.tftRoundMarkers.length : 0;
-        const lastTftRound = tftRoundCount > 0 ? `${m.tftRoundMarkers[tftRoundCount - 1]?.round}:${m.tftRoundMarkers[tftRoundCount - 1]?.timestamp}` : "";
-        return `Metadata|pid=${m.participantId}|pc=${m.participants?.length ?? 0}|p=${participantKey}|ev=${eventCount}|last=${lastEventTs}|hi=${highlightsCount}|tft=${tftRoundCount}:${lastTftRound}|q=${m.queue?.id ?? 0}|gv=${m.gameVersion ?? ""}`;
-    }
-    if ("Deferred" in data) {
-        const d = data.Deferred;
-        const eventCount = Array.isArray(d.events) ? d.events.length : 0;
-        const lastEventTs = eventCount > 0 ? Number(d.events[eventCount - 1]?.timestamp ?? -1) : -1;
-        const participantKey = Array.isArray(d.participants)
-            ? d.participants.map((p: any) => `${p.participantId}:${p.championId}:${p.honorReceived ? 1 : 0}`).join("|")
-            : "";
-        const highlightsCount = Array.isArray(d.highlights) ? d.highlights.length : 0;
-        const tftRoundCount = Array.isArray(d.tftRoundMarkers) ? d.tftRoundMarkers.length : 0;
-        const lastTftRound = tftRoundCount > 0 ? `${d.tftRoundMarkers[tftRoundCount - 1]?.round}:${d.tftRoundMarkers[tftRoundCount - 1]?.timestamp}` : "";
-        return `Deferred|pc=${d.participants?.length ?? 0}|p=${participantKey}|ev=${eventCount}|last=${lastEventTs}|hi=${highlightsCount}|tft=${tftRoundCount}:${lastTftRound}|off=${d.ingameTimeRecStartOffset ?? 0}`;
-    }
-    return "unknown";
+const {
+    flush: flushRecordingsChangedRefresh,
+    schedule: scheduleRecordingsChangedRefresh,
+} = createRecordingRefresh(updateSidebar);
+
+const storageStatus = document.querySelector<HTMLElement>("#recordings-unavailable")!;
+const storageRetry = storageStatus.querySelector("button")!;
+storageRetry.addEventListener("click", () => void flushRecordingsChangedRefresh());
+let storageRetryTimer: ReturnType<typeof setTimeout> | undefined;
+
+function showStorageStatus(unavailable: boolean) {
+    storageStatus.hidden = !unavailable;
+    clearTimeout(storageRetryTimer);
+    if (!unavailable) return;
+    storageRetryTimer = setTimeout(() => void flushRecordingsChangedRefresh(), 5000);
+    void commands.getSettings().then(settings => {
+        const lang = settings.language as Parameters<typeof getText>[0];
+        storageStatus.querySelector("span")!.textContent = getText(lang, "recordingsUnavailable");
+        storageRetry.textContent = getText(lang, "retry");
+    });
 }
 
-function armManualStartPending() {
-    manualStartPending = true;
-    if (manualStartPendingTimeout) {
-        clearTimeout(manualStartPendingTimeout);
-    }
-    manualStartPendingTimeout = setTimeout(() => {
-        manualStartPending = false;
-        manualStartPendingTimeout = null;
-    }, 15000);
+function refreshRecordingsSnapshot(): Promise<RecordingSnapshot | null> {
+    recordingsRefresh ??= commands.getRecordingsSnapshot().then((result) => {
+        if (result.status === "error") throw new Error(result.error);
+        showStorageStatus(result.data.stale);
+        lastRecordingsSnapshot = result.data;
+        return result.data;
+    }).catch((error) => {
+        console.warn("Failed to refresh recording library:", error);
+        showStorageStatus(true);
+        return lastRecordingsSnapshot;
+    }).finally(() => {
+        recordingsRefresh = null;
+    });
+    return recordingsRefresh;
 }
 
-function clearManualStartPending() {
-    manualStartPending = false;
-    if (manualStartPendingTimeout) {
-        clearTimeout(manualStartPendingTimeout);
-        manualStartPendingTimeout = null;
-    }
-}
+const getVisibleRecordings = async () => lastRecordingsSnapshot?.recordings ?? [];
+const metadata = createMetadataController({
+    ui,
+    getActiveVideoId: () => videoSelection.getActiveId() ?? ui.getActiveVideoId(),
+    getMetadata: commands.getMetadata,
+    getVisibleRecordings,
+    onRender: (rendered) => {
+        currentEvents = rendered.currentEvents;
+        highlightEvents = rendered.highlightEvents;
+        tftRoundEvents = rendered.tftRoundEvents;
+        changeMarkers();
+    },
+});
 
-function clearMetadataRetry(videoId: string) {
-    const key = normalizeVideoId(videoId);
-    const timeout = metadataRetryTimeouts.get(key);
-    if (timeout) {
-        clearTimeout(timeout);
-        metadataRetryTimeouts.delete(key);
-    }
-}
-
-async function flushRecordingsChangedRefresh() {
-    if (recordingsChangedRefreshInFlight) {
-        recordingsChangedRefreshQueued = true;
-        return;
-    }
-
-    recordingsChangedRefreshInFlight = true;
-    try {
-        do {
-            recordingsChangedRefreshQueued = false;
-            await updateSidebar();
-        } while (recordingsChangedRefreshQueued);
-    } finally {
-        recordingsChangedRefreshInFlight = false;
-    }
-}
-
-function scheduleRecordingsChangedRefresh(delayMs: number = 120) {
-    if (recordingsChangedRefreshTimer) {
-        clearTimeout(recordingsChangedRefreshTimer);
-    }
-    recordingsChangedRefreshTimer = setTimeout(() => {
-        recordingsChangedRefreshTimer = null;
-        void flushRecordingsChangedRefresh();
-    }, delayMs);
-}
-
-function suppressRecordingsChangedEventsFor(ms: number = 3000) {
-    suppressRecordingsChangedUntil = Date.now() + ms;
-}
-
-async function getRecordingsSizeCached(forceRefresh: boolean = false): Promise<number> {
-    const now = Date.now();
-    const cacheFresh = now - recordingsSizeCacheUpdatedAt < RECORDINGS_SIZE_CACHE_MS;
-    if (!forceRefresh && cacheFresh) {
-        return cachedRecordingsSizeGb;
-    }
-
-    if (recordingsSizeFetchInFlight) {
-        return recordingsSizeFetchInFlight;
-    }
-
-    recordingsSizeFetchInFlight = commands
-        .getRecordingsSize()
-        .then((size) => {
-            cachedRecordingsSizeGb = size;
-            recordingsSizeCacheUpdatedAt = Date.now();
-            return size;
-        })
-        .catch((error) => {
-            console.warn("Failed to refresh recordings size, using cached value:", error);
-            return cachedRecordingsSizeGb;
-        })
-        .finally(() => {
-            recordingsSizeFetchInFlight = null;
-        });
-
-    return recordingsSizeFetchInFlight;
-}
-
-function scheduleMetadataRetry(videoId: string, attemptsLeft: number = 4, delayMs: number = 700) {
-    const key = normalizeVideoId(videoId);
-    clearMetadataRetry(key);
-    if (attemptsLeft <= 0) {
-        return;
-    }
-
-    const timeout = setTimeout(async () => {
-        metadataRetryTimeouts.delete(key);
-
-        // Only retry for the currently selected recording.
-        const activeVideoId = preferredActiveVideoId ?? ui.getActiveVideoId();
-        if (!activeVideoId || !videoIdsMatch(activeVideoId, key)) {
-            return;
-        }
-
-        const completed = await setMetadata(activeVideoId);
-        if (!completed) {
-            scheduleMetadataRetry(activeVideoId, attemptsLeft - 1, delayMs);
-        }
-    }, delayMs);
-
-    metadataRetryTimeouts.set(key, timeout);
-}
+const videoSelection = createVideoSelection({
+    ui,
+    metadata,
+    getAutoplay: async () => (await commands.getSettings()).autoplayVideo,
+    resetMarkers: () => {
+        currentEvents = highlightEvents = tftRoundEvents = null;
+        changeMarkers();
+    },
+    changeMarkers,
+    logPerf,
+    perfNowMs,
+});
+const setVideo = videoSelection.setVideo;
 
 const VIDEO_JS_OPTIONS = {
     // fluid: true, // - Removed
@@ -261,7 +162,8 @@ const VIDEO_JS_OPTIONS = {
 const player = videojs("video_player", VIDEO_JS_OPTIONS) as Player & {
     markers: (settings?: Settings) => MarkersPlugin;
 };
-ui.setPlayer(player); // Pass player instance to UI
+ui.setPlayer(player);
+videoSelection.setPlayer(player);
 
 // Initialize Video Header
 const mainContainer = document.getElementById("main");
@@ -275,15 +177,22 @@ const loopStartInput = document.getElementById("loop-start") as HTMLInputElement
 const loopEndInput = document.getElementById("loop-end") as HTMLInputElement;
 const loopEnabledCheckbox = document.getElementById("loop-enabled") as HTMLInputElement;
 const createClipBtn = document.getElementById("create-clip-btn") as HTMLButtonElement;
+const clipStatus = document.querySelector<HTMLSpanElement>("#clip-status")!;
+const clipProgress = document.querySelector<HTMLProgressElement>("#clip-progress")!;
 
 let loopStart: number | null = null;
 let loopEnd: number | null = null;
 let isLooping = false;
-
-function updateClipBtnState() {
-    const canCreateClip = loopStart !== null && loopEnd !== null && loopEnd > loopStart;
-    if (createClipBtn) createClipBtn.disabled = !canCreateClip;
-}
+const updateClipBtnState = bindClipCreation({
+    button: createClipBtn,
+    status: clipStatus,
+    progressBar: clipProgress,
+    getRange: () => ({ start: loopStart, end: loopEnd }),
+    getVideoId: ui.getActiveVideoId,
+    pickAudioMode: pickClipAudioMode,
+    showError: (message) => ui.showErrorModal(message),
+    onSaved: scheduleRecordingsChangedRefresh,
+});
 
 function formatLoopTime(seconds: number): string {
     const mins = Math.floor(seconds / 60);
@@ -390,62 +299,12 @@ if (loopStartInput && loopEndInput && loopEnabledCheckbox) {
         isLooping = loopEnabledCheckbox.checked;
     });
 }
-if (createClipBtn) {
-    createClipBtn.onclick = async () => {
-        const videoId = ui.getActiveVideoId();
-        if (!videoId || loopStart === null || loopEnd === null) return;
-        
-        try {
-            createClipBtn.disabled = true;
-            createClipBtn.textContent = "...";
-            const tracksResult = await commands.getClipAudioTracks(videoId);
-            if (tracksResult.status === "error") {
-                throw tracksResult.error;
-            }
-
-            let selectedAudioTrackIndex: number | null = null;
-            if (tracksResult.data.length > 1) {
-                const settings = await commands.getSettings();
-                const lang = settings.language || "en";
-                const mode = await pickClipAudioMode(tracksResult.data, lang);
-                if (mode === null) {
-                    return;
-                }
-                selectedAudioTrackIndex = mode === "game-only" ? 1 : 0;
-            } else if (tracksResult.data.length === 1) {
-                selectedAudioTrackIndex = tracksResult.data[0].index;
-            }
-
-            const clipResult = await commands.createClip(
-                videoId,
-                loopStart,
-                loopEnd,
-                selectedAudioTrackIndex === null ? null : false,
-                selectedAudioTrackIndex,
-            );
-            if (clipResult.status === "error") {
-                throw clipResult.error;
-            }
-            const newFile = clipResult.data;
-            // Wait a bit or refresh? Ideally we should refresh the sidebar
-            await  updateSidebar(); 
-            // Show simple alert using error modal for now as it's the only one available
-            // Or console log.
-            console.log(`Clip created: ${newFile}`);
-        } catch (e) {
-            ui.showErrorModal(`Failed to create clip: ${e}`);
-        } finally {
-            createClipBtn.textContent = "Clip";
-            updateClipBtnState();
-        }
-    };
-}
 // ---------------------
 
 const keyboardHandlers = createKeyboardHandlers({
     player,
     ui,
-    matchesAction: (event, action) => isAction(event, action as any, currentKeybinds),
+    matchesAction: (event, action) => isAction(event, action as any, keybinds.getKeybinds()),
     getLoopState: () => ({ loopStart, loopEnd, isLooping }),
     setLoopState: (patch) => {
         if (patch.loopStart !== undefined) loopStart = patch.loopStart;
@@ -533,7 +392,6 @@ async function main() {
         // if src is a blank string that means no recording is selected
         if (src === "") {
             player.markers().removeAll();
-            ui.setActiveVideoId(null);
 
             // make sure the bigplaybutton and controlbar are hidden
             ui.showBigPlayButton(false);
@@ -602,7 +460,8 @@ async function main() {
         commands.getSettings().then(settings => {
              const previousLanguage = settings.language || "en";
              ui.showSettingsModal(settings, async (s) => { 
-                 await commands.saveSettings(s); 
+                 const result = await commands.saveSettings(s);
+                 if (result.status === "error") throw new Error("Settings save failed"); 
                  
                  // Update developer mode state
                  (window as any)._developerModeEnabled = s.developerMode;
@@ -636,20 +495,20 @@ async function main() {
                      (settings as any).championBuildSubUrl !== (s as any).championBuildSubUrl ||
                      (settings as any).scoreboardLinkModifier !== (s as any).scoreboardLinkModifier;
                  if (scoreboardLinksChanged) {
-                     const activeVideoId = preferredActiveVideoId ?? ui.getActiveVideoId();
+                     const activeVideoId = videoSelection.getActiveId() ?? ui.getActiveVideoId();
                      if (activeVideoId) {
-                         metadataRenderSignatures.delete(normalizeVideoId(activeVideoId));
-                         void setMetadata(activeVideoId);
+                         metadata.invalidate(activeVideoId);
+                         void metadata.load(activeVideoId);
                      }
                  }
 
                  const languageChanged = previousLanguage !== (s.language || "en");
                  if (languageChanged) {
                      ui.setCurrentLanguage(s.language || "en");
-                     const activeVideoId = preferredActiveVideoId ?? ui.getActiveVideoId();
+                     const activeVideoId = videoSelection.getActiveId() ?? ui.getActiveVideoId();
                      if (activeVideoId) {
-                         metadataRenderSignatures.delete(normalizeVideoId(activeVideoId));
-                         void setMetadata(activeVideoId);
+                         metadata.invalidate(activeVideoId);
+                         void metadata.load(activeVideoId);
                      }
                      setTimeout(() => {
                          window.location.reload();
@@ -694,7 +553,7 @@ async function main() {
     const playerEl = document.getElementById("video_player");
     if (playerEl) {
         playerEl.addEventListener("wheel", (e: WheelEvent) => {
-            if (currentMouseConfig.wheelAction === "speed") {
+            if (keybinds.getMouse().wheelAction === "speed") {
                 e.preventDefault();
                 // DeltaY negative means scrolling up (speed up)
                 const direction = e.deltaY < 0 ? 1 : -1;
@@ -712,7 +571,7 @@ async function main() {
 
         playerEl.addEventListener("auxclick", (e: MouseEvent) => {
             // Button 1 is Middle Click
-            if (e.button === 1 && currentMouseConfig.middleClickAction === "resetSpeed") {
+            if (e.button === 1 && keybinds.getMouse().middleClickAction === "resetSpeed") {
                 e.preventDefault();
                 player.playbackRate(1.0);
             }
@@ -721,16 +580,13 @@ async function main() {
 
     const listenerManager = new ListenerManager();
     listenerManager.listen_app("RecordingsChanged", () => {
-        if (Date.now() < suppressRecordingsChangedUntil) {
-            return;
-        }
         scheduleRecordingsChangedRefresh();
     });
     listenerManager.listen_app("MarkerflagsChanged", () =>
         commands.getMarkerFlags().then((flags) => ui.setMarkerFlags(flags)),
     );
     listenerManager.listen_app("MetadataChanged", async ({ payload }) => {
-        const activeVideoId = preferredActiveVideoId ?? ui.getActiveVideoId();
+        const activeVideoId = videoSelection.getActiveId() ?? ui.getActiveVideoId();
         scheduleRecordingsChangedRefresh(1500);
 
         // 2. Active Video Update (Refresh Detail View)
@@ -739,32 +595,22 @@ async function main() {
         if (activeVideoId !== null && payload.some(id => videoIdsMatch(activeVideoId, id))) {
             console.log("MetadataChanged event received for active video. Reloading.");
             // update metadata for currently selected recording
-            void setMetadata(activeVideoId);
+            void metadata.load(activeVideoId);
         }
     });
     
-    listenerManager.listen_app("RecordingStarted", () => {
-        if (manualStartPending) {
-            clearManualStartPending();
-            return;
+    listenerManager.listen_app("RecordingPhaseChanged", ({ payload }) => {
+        if (payload === "recording" || payload === "idle") scheduleRecordingsChangedRefresh();
+        if (payload === "recording") {
+            void commands.getSettings().then(settings => {
+                if (settings.playRecordingSounds) playNotificationSound("start");
+            });
         }
-        commands.getSettings().then(settings => {
-            if (settings.playRecordingSounds) playNotificationSound('start');
-
-        });
-    });
-
-    listenerManager.listen_app("ManualRecordingStarted", () => {
-        armManualStartPending();
-        commands.getSettings().then(settings => {
-            if (settings.playRecordingSounds) playNotificationSound('start');
-        });
     });
 
     listenerManager.listen_app("ManualRecordingStopped", () => {
-        clearManualStartPending();
-        commands.getSettings().then(settings => {
-            if (settings.playRecordingSounds) playNotificationSound('stop');
+        void commands.getSettings().then(settings => {
+            if (settings.playRecordingSounds) playNotificationSound("stop");
         });
     });
 
@@ -782,80 +628,31 @@ async function main() {
         });
     });
 
+    listenerManager.listen_app("RecordingFailed", ({ payload }) => {
+        console.error("Recording finalization failed:", payload);
+        void commands.getSettings().then(settings =>
+            ui.showErrorModal(getText(settings.language as Parameters<typeof getText>[0], "recordingFinalizeFailed"))
+        );
+    });
+
+    listenerManager.listen_app("RecordingMetadataSaveFailed", ({ payload }) => {
+        console.error("Could not save recording metadata:", payload);
+        void commands.getSettings().then(settings =>
+            ui.showErrorModal(getText(settings.language as Parameters<typeof getText>[0], "metadataSaveFailed"))
+        );
+    });
     listenerManager.listen_app("RecordingFinished", ({ payload }) => {
-        const [videoId, isManualStop] = payload;
-        suppressRecordingsChangedEventsFor(8000);
-        scheduleRecordingsChangedRefresh(2500);
-        commands.getSettings().then(settings => {
-            if (settings.playRecordingSounds && !isManualStop) playNotificationSound('stop');
-        });
-        
-        // Check if we are currently viewing this video (e.g. user clicked it while recording)
-        const activeId = ui.getActiveVideoId();
-        
-        if (!isManualStop) {
-             commands.getSettings().then(async settings => {
-                 if (settings.autoSelectRecording) {
-                     let fullPath = videoId;
-                     if (!videoId.includes("\\") && !videoId.includes("/")) {
-                         try {
-                            fullPath = await join(settings.recordingsFolder, videoId);
-                         } catch (e) {
-                             console.error("Failed to join path:", e);
-                         }
-                     }
-
-                     console.log(`Auto-selecting recording: ${fullPath}`);
-                     
-                     // Standard delay to ensure file handle release
-                     setTimeout(async () => {
-                         // Force metadata update if already active (e.g. user clicked early)
-                         if (activeId && videoIdsMatch(activeId, fullPath)) {
-                             console.log("Recording finished for active video. Forcing initial metadata reload.");
-                             const completed = await setMetadata(activeId);
-                             if (!completed) {
-                                 scheduleMetadataRetry(activeId);
-                             }
-                         }
-                         // setVideo might return early if ID matches, but that's fine if we called setMetadata above.
-                         // Crucially, rely on MetadataChanged event for the FINAL update.
-                         void setVideo(fullPath);
-                     }, 500);
-                 } else {
-                     // Auto-select OFF
-                     const settingsVals = await commands.getSettings();
-                     let fullPath = videoId;
-                     if (!videoId.includes("\\") && !videoId.includes("/")) {
-                         try {
-                            fullPath = await join(settingsVals.recordingsFolder, videoId);
-                         } catch (e) {}
-                     }
-                     if (activeId && videoIdsMatch(activeId, fullPath)) {
-                          console.log("Recording finished for active video (Auto-select OFF). Forcing metadata reload.");
-                          const completed = await setMetadata(activeId);
-                          if (!completed) {
-                              scheduleMetadataRetry(activeId);
-                          }
-                     }
-                 }
-
-                 if (settings.autoPopupOnEnd) {
-                     console.log("Auto-popup triggered");
-                     ui.showWindow();
-                     ui.setFullscreen(false); 
-                 }
-             });
-        } else {
-             // Manual stop also needs reload if active
-             const activeId = ui.getActiveVideoId();
-             if (activeId && videoId) {
-                 // Check match (simple includes check for safety if paths differ)
-                 if (videoIdsMatch(activeId, videoId)) {
-                      console.log("Manual stop for active video. Forcing metadata reload.");
-                      void setMetadata(activeId);
-                 }
-             }
-        }
+        void handleRecordingFinished(payload, {
+            scheduleRefresh: scheduleRecordingsChangedRefresh,
+            getActiveId: ui.getActiveVideoId,
+            setVideo,
+            loadMetadata: metadata.load,
+            scheduleMetadataRetry: metadata.scheduleRetry,
+            popup: () => {
+                ui.showWindow();
+                ui.setFullscreen(false);
+            },
+        }).catch(error => console.error("Could not show finished recording:", error));
     });
 
     // load data
@@ -936,7 +733,7 @@ async function main() {
 
     // Mouse Navigation for Seeking (Back = Rewind, Forward = Skip)
     window.addEventListener('mouseup', (e) => {
-        const mouseConfig = loadMouseConfig();
+        const mouseConfig = keybinds.getMouse();
         if (!mouseConfig.sideButtonSeek) return;
 
         if (e.button === 3) { // Back button
@@ -981,21 +778,21 @@ async function updateSidebar(forceUpdateIds: string[] = []): Promise<Recording[]
     const recordings = await refreshSidebar({
         ui,
         forceUpdateIds,
-        getRecordingsList: commands.getRecordingsList,
-        getRecordingsSize: () => getRecordingsSizeCached(false),
+        getRecordingsSnapshot: refreshRecordingsSnapshot,
         setVideo,
-        toggleFavorite: commands.toggleFavorite,
+        toggleFavorite: async id => {
+            const favorite = await commands.toggleFavorite(id);
+            if (favorite === null) {
+                const settings = await commands.getSettings();
+                ui.showErrorModal(getText(settings.language as Parameters<typeof getText>[0], "metadataSaveFailed"));
+            }
+            return favorite;
+        },
         showRenameModal,
         showDeleteModal,
         handleDeleteVideoOnly,
     });
-    if (preferredActiveVideoId) {
-        const matched = recordings.find((r) => videoIdsMatch(r.videoId, preferredActiveVideoId!));
-        if (matched) {
-            preferredActiveVideoId = matched.videoId;
-            ui.setActiveVideoId(matched.videoId);
-        }
-    }
+    videoSelection.reconcile(recordings);
     logPerf(`updateSidebar(forceIds=${forceUpdateIds.length})`, startedAt);
     return recordings;
 }
@@ -1018,121 +815,6 @@ async function retrySidebarUpdate(attemptsLeft: number, targetId: string) {
     });
 }
 
-
-// use this function to set the video (null => no video)
-async function setVideo(videoId: string | null, allowAutoplay: boolean = true) {
-    const startedAt = perfNowMs();
-    if (videoId === null) {
-        preferredActiveVideoId = null;
-        ui.setActiveVideoId(null);
-        player.src("");
-        logPerf("setVideo(null)", startedAt);
-    } else {
-        const settings = await commands.getSettings();
-        
-        // Strip out existing extensions (.mp4, .json, .webm) if present to prevent '.mp4.mp4' duplication
-        const cleanVideoId = videoId.replace(/\.(mp4|json|webm)$/i, "");
-
-        if (preferredActiveVideoId && videoIdsMatch(preferredActiveVideoId, cleanVideoId)) {
-            return;
-        }
-        preferredActiveVideoId = cleanVideoId;
-
-        // VideoId is now an absolute path (base path without extension), so we use it directly
-        ui.setActiveVideoId(cleanVideoId);
-        clearMetadataRetry(cleanVideoId);
-        const setMetadataStartedAt = perfNowMs();
-        const completed = await setMetadata(cleanVideoId);
-        logPerf("setVideo:setMetadata", setMetadataStartedAt);
-        if (!completed) {
-            scheduleMetadataRetry(cleanVideoId);
-        }
-        const normalizedVideoPath = toAssetPath(cleanVideoId + ".mp4");
-        const videoSrc = convertFileSrc(normalizedVideoPath);
-        console.log(`[diagnose] setVideo clean=${cleanVideoId} normalized=${normalizedVideoPath} src=${videoSrc}`);
-        player.src({ type: "video/mp4", src: videoSrc });
-        // Re-apply markers after source swap to avoid plugin/source timing clears.
-        player.one("loadedmetadata", () => {
-            changeMarkers();
-        });
-        if (settings.autoplayVideo && allowAutoplay) {
-            void player.play()?.catch(() => {});
-        }
-        logPerf("setVideo(total)", startedAt);
-    }
-}
-
-async function setMetadata(videoId: string): Promise<boolean> {
-    const startedAt = perfNowMs();
-    const requestSerial = ++metadataRenderRequestSerial;
-    const requestedVideoKey = normalizeVideoId(videoId);
-
-    const loadStartedAt = perfNowMs();
-    let { data, resolvedVideoId } = await getMetadataWithFallback(
-        videoId,
-        commands.getMetadata,
-        buildMetadataCandidates,
-    );
-    logPerf("setMetadata:load", loadStartedAt);
-    let kind = !data ? "null" : "Metadata" in data ? "Metadata" : "Deferred" in data ? "Deferred" : "NoData";
-    console.log(`[diagnose] setMetadata kind=${kind} requested=${videoId} resolved=${resolvedVideoId}`);
-
-    if (!data || "NoData" in data) {
-        const listFallback = await getMetadataFromRecordingsList(
-            videoId,
-            commands.getRecordingsList,
-            videoIdsMatch,
-        );
-        if (listFallback?.data && ("Metadata" in listFallback.data || "Deferred" in listFallback.data)) {
-            data = listFallback.data;
-            resolvedVideoId = listFallback.resolvedVideoId;
-            kind = "Metadata" in data ? "Metadata" : "Deferred";
-            console.log(`[diagnose] setMetadata upgraded-by-list kind=${kind} requested=${videoId} resolved=${resolvedVideoId}`);
-        }
-    }
-
-    // Ignore stale async responses when the active video changed while metadata was loading.
-    const latestActiveVideoId = preferredActiveVideoId ?? ui.getActiveVideoId();
-    if (
-        requestSerial !== metadataRenderRequestSerial ||
-        !latestActiveVideoId ||
-        !videoIdsMatch(latestActiveVideoId, requestedVideoKey)
-    ) {
-        const completed = !!(data && "Metadata" in data);
-        console.log(
-            `[diagnose] setMetadata stale-skip requested=${videoId} active=${latestActiveVideoId ?? "null"} serial=${requestSerial}/${metadataRenderRequestSerial}`,
-        );
-        return completed;
-    }
-
-    // Cache by requested video id so different recordings never share a skip key.
-    const cacheKey = requestedVideoKey;
-    const signature = metadataDataSignature(data);
-    const previousSignature = metadataRenderSignatures.get(cacheKey);
-    if (previousSignature === signature && lastRenderedMetadataVideoKey === cacheKey) {
-        const completed = !!(data && "Metadata" in data);
-        console.log(`[diagnose] setMetadata skip-same-signature kind=${kind} key=${cacheKey}`);
-        return completed;
-    }
-
-    const rendered = await renderMetadataState({
-        data,
-        requestedVideoId: videoId,
-        resolvedVideoId,
-        ui,
-    });
-    metadataRenderSignatures.set(cacheKey, signature);
-    lastRenderedMetadataVideoKey = cacheKey;
-    if (rendered.clearRetry) {
-        clearMetadataRetry(videoId);
-    }
-    currentEvents = rendered.currentEvents;
-    highlightEvents = rendered.highlightEvents;
-    tftRoundEvents = rendered.tftRoundEvents;
-    changeMarkers();
-    logPerf(`setMetadata(total kind=${kind})`, startedAt);
-    return rendered.completed;
-}
 
 function changeMarkers() {
     const built = buildMarkers(currentEvents, highlightEvents, tftRoundEvents, ui.getMarkerFlags(), EVENT_DELAY);
@@ -1162,7 +844,7 @@ function changeMarkers() {
 async function showRenameModal(videoId: string): Promise<void> {
     return openRenameModal({
         videoId,
-        getRecordingsList: commands.getRecordingsList,
+        getRecordingsList: getVisibleRecordings,
         showRenameModal: ui.showRenameModal,
         onRename: renameVideo,
     });
@@ -1197,7 +879,6 @@ function showDeleteModal(videoId: string, isFavorite: boolean = false) {
 }
 
 function handleDeleteVideoOnly(videoId: string, isFavorite: boolean = false) {
-    suppressRecordingsChangedEventsFor();
     deleteVideoOnlyWithConfirm({
         videoId,
         isFavorite,
@@ -1211,13 +892,10 @@ function handleDeleteVideoOnly(videoId: string, isFavorite: boolean = false) {
 }
 
 async function deleteVideo(videoId: string): Promise<void> {
-    suppressRecordingsChangedEventsFor();
     return deleteVideoFlow({
         videoId,
         getActiveVideoId: ui.getActiveVideoId,
-        clearPlayerSource: () => {
-            player.src(null);
-        },
+        clearPlayerSource: () => { void setVideo(null); },
         removeRecordingItem: ui.removeRecordingItem,
         deleteVideo: commands.deleteVideo,
         updateSidebar: () => updateSidebar(),

@@ -23,6 +23,7 @@
     { "application": null, "enabled": true, "volumePercent": 100 }
   ],
   "autostart": false,
+  "closeToTray": false,
   "maxRecordingAgeDays": null,
   "maxRecordingsSizeGb": null,
   "confirmDelete": true,

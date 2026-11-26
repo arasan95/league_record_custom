@@ -5,10 +5,10 @@ import { check } from "@tauri-apps/plugin-updater";
 import { commands } from "../bindings";
 import { clearLocalChampionTooltipCache } from "../datadragon";
 import type { Settings } from "../bindings";
-import type { Language } from "../i18n";
+import type { Language, getText as translate } from "../i18n";
 import type { UiCreateEl } from "./settings_primitives";
 
-type GetText = (lang: Language, key: any) => string;
+type GetText = typeof translate;
 
 type CreateSettingsAboutTabInput = {
     createEl: UiCreateEl;
@@ -35,11 +35,11 @@ export function createSettingsAboutTabContent({
     const appVersionLine = createEl("div", {}, { style: "font-size: 1.1em; color: #eee; margin-bottom: 5px;" }) as HTMLDivElement;
     getVersion()
         .then((ver) => {
-            appVersionLine.innerText = `${getText(lang, "appVersion" as any)}: v${ver}`;
+            appVersionLine.innerText = `${getText(lang, "appVersion")}: v${ver}`;
         })
         .catch((err) => {
             console.error("getVersion failed:", err);
-            appVersionLine.innerText = `${getText(lang, "appVersion" as any)}: Unknown`;
+            appVersionLine.innerText = `${getText(lang, "appVersion")}: ${getText(lang, "unknown")}`;
         });
 
     const repoLine = createEl(
@@ -51,13 +51,13 @@ export function createSettingsAboutTabContent({
         "a",
         { onclick: () => open("https://github.com/arasan95/League_Record_custom") },
         { style: "color: #00d2ff; cursor: pointer; text-decoration: underline;" },
-        "GitHub Repository",
+        `${getText(lang, "repository")} (GitHub)`,
     );
     const reportBugBtn = createEl(
         "button",
         { onclick: () => open("https://docs.google.com/forms/d/e/1FAIpQLScM3I0di-DeqQACBhGfrewibuos2xl-pTNv4XoYhK3R0p3ziA/viewform") },
         { class: "btn-browse", style: "border: 1px solid #c8aa6e; color: #c8aa6e; background: #222; max-width: 300px;" },
-        getText(lang as any, "reportBug" as any) || "Report Bug / Feature Request",
+        getText(lang, "reportBug"),
     );
     repoLine.append(repoLink, reportBugBtn);
 
@@ -77,7 +77,7 @@ export function createSettingsAboutTabContent({
         {
             onclick: async () => {
                 checkUpdateBtn.disabled = true;
-                updateStatusMsg.innerText = "Checking...";
+                updateStatusMsg.innerText = getText(lang, "updateChecking");
                 updateStatusMsg.style.color = "#aaa";
                 try {
                     const update = await check();
@@ -86,20 +86,20 @@ export function createSettingsAboutTabContent({
                         checkUpdateBtn.disabled = false;
                         onShowUpdateModal(update, lang);
                     } else {
-                        updateStatusMsg.innerText = getText(lang as any, "updateLatest" as any) || "You are on the latest version.";
+                        updateStatusMsg.innerText = getText(lang, "updateLatest");
                         updateStatusMsg.style.color = "#4CAF50";
                         checkUpdateBtn.disabled = false;
                     }
                 } catch (e) {
                     console.error("Update check failed", e);
-                    updateStatusMsg.innerText = getText(lang as any, "updateError" as any) || "Failed to check for updates.";
+                    updateStatusMsg.innerText = getText(lang, "updateError");
                     updateStatusMsg.style.color = "#ff5555";
                     checkUpdateBtn.disabled = false;
                 }
             },
         },
         { class: "btn-browse" },
-        getText(lang as any, "checkForUpdates" as any) || "Check for updates",
+        getText(lang, "checkForUpdates"),
     ) as HTMLButtonElement;
     updateActionsContainer.append(checkUpdateBtn);
 
@@ -119,7 +119,7 @@ export function createSettingsAboutTabContent({
             onclick: async () => {
                 tooltipDbUpdateBtn.disabled = true;
                 tooltipDbStatusMsg.innerText =
-                    getText(lang as any, "tooltipDbChecking" as any) || "Checking tooltip database...";
+                    getText(lang, "tooltipDbChecking");
                 tooltipDbStatusMsg.style.color = "#aaa";
                 try {
                     const result = await commands.checkTooltipDbUpdate();
@@ -129,24 +129,20 @@ export function createSettingsAboutTabContent({
                     const info = result.data;
                     if (!info.updateAvailable) {
                         tooltipDbStatusMsg.innerText =
-                            getText(lang as any, "tooltipDbLatest" as any) || "Tooltip database is up to date.";
+                            getText(lang, "tooltipDbLatest");
                         tooltipDbStatusMsg.style.color = "#4CAF50";
                         return;
                     }
-
-                    const sizeMb = (info.remoteSize / 1024 / 1024).toFixed(1);
-                    const message =
-                        getText(lang as any, "tooltipDbUpdateConfirm" as any)
-                        || `A new tooltip database is available (${sizeMb} MB). Replace the current local database?`;
+                    const message = getText(lang, "tooltipDbUpdateConfirm");
                     if (!confirm(message)) {
                         tooltipDbStatusMsg.innerText =
-                            getText(lang as any, "tooltipDbUpdateCancelled" as any) || "Tooltip database update cancelled.";
+                            getText(lang, "tooltipDbUpdateCancelled");
                         tooltipDbStatusMsg.style.color = "#aaa";
                         return;
                     }
 
                     tooltipDbStatusMsg.innerText =
-                        getText(lang as any, "tooltipDbUpdating" as any) || "Updating tooltip database...";
+                        getText(lang, "tooltipDbUpdating");
                     tooltipDbStatusMsg.style.color = "#aaa";
                     const applyResult = await commands.applyTooltipDbUpdate(info.remoteSha256);
                     if (applyResult.status === "error") {
@@ -154,13 +150,12 @@ export function createSettingsAboutTabContent({
                     }
                     clearLocalChampionTooltipCache();
                     tooltipDbStatusMsg.innerText =
-                        getText(lang as any, "tooltipDbUpdated" as any)
-                        || "Tooltip database updated. Newly opened tooltips will use the new data.";
+                        getText(lang, "tooltipDbUpdated");
                     tooltipDbStatusMsg.style.color = "#4CAF50";
                 } catch (e) {
                     console.error("Tooltip DB update failed", e);
                     tooltipDbStatusMsg.innerText =
-                        getText(lang as any, "tooltipDbUpdateError" as any) || "Failed to update tooltip database.";
+                        getText(lang, "tooltipDbUpdateError");
                     tooltipDbStatusMsg.style.color = "#ff5555";
                 } finally {
                     tooltipDbUpdateBtn.disabled = false;
@@ -168,7 +163,7 @@ export function createSettingsAboutTabContent({
             },
         },
         { class: "btn-browse" },
-        getText(lang as any, "checkTooltipDbUpdates" as any) || "Check tooltip DB updates",
+        getText(lang, "checkTooltipDbUpdates"),
     ) as HTMLButtonElement;
     tooltipDbActionsContainer.append(tooltipDbUpdateBtn);
 
@@ -189,7 +184,7 @@ export function createSettingsAboutTabContent({
         { style: "margin-top: 15px; font-size: 0.9em; color: #ccc; cursor: pointer; display: inline-flex; justify-content: center; align-items: center;" },
         [
             updateOnStartupCheckbox,
-            createEl("span", {}, {}, getText(lang, "checkUpdatesOnStartup" as any)),
+            createEl("span", {}, {}, getText(lang, "checkUpdatesOnStartup")),
         ],
     ) as HTMLLabelElement;
 

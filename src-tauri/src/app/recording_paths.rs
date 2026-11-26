@@ -36,7 +36,7 @@ fn is_under_allowed_roots(path: &Path, settings: &SettingsWrapper) -> bool {
         .any(|root| candidate == root || candidate.starts_with(&(root + "\\")))
 }
 
-fn normalize_video_base_path(path: &Path) -> PathBuf {
+pub(super) fn normalize_video_base_path(path: &Path) -> PathBuf {
     let mut out = path.to_path_buf();
     if matches!(
         out.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()),
@@ -47,7 +47,14 @@ fn normalize_video_base_path(path: &Path) -> PathBuf {
     out
 }
 
-pub(super) fn resolve_existing_video_base(video_id: &str, settings: &SettingsWrapper) -> Result<PathBuf, String> {
+pub(crate) fn recording_file(path: &Path, extension: &str) -> PathBuf {
+    let mut filename = normalize_video_base_path(path).into_os_string();
+    filename.push(".");
+    filename.push(extension);
+    PathBuf::from(filename)
+}
+
+pub(crate) fn resolve_existing_video_base(video_id: &str, settings: &SettingsWrapper) -> Result<PathBuf, String> {
     let trimmed = video_id.trim().trim_end_matches('.');
     if trimmed.is_empty() || trimmed.contains('\0') {
         return Err("Invalid video id".to_string());
@@ -63,8 +70,8 @@ pub(super) fn resolve_existing_video_base(video_id: &str, settings: &SettingsWra
     }
 
     for base in candidates {
-        let mp4 = base.with_extension("mp4");
-        let json = base.with_extension("json");
+        let mp4 = recording_file(&base, "mp4");
+        let json = recording_file(&base, "json");
         if mp4.exists() || json.exists() {
             if !is_under_allowed_roots(&base, settings) {
                 return Err("Access denied for video path".to_string());
@@ -73,7 +80,12 @@ pub(super) fn resolve_existing_video_base(video_id: &str, settings: &SettingsWra
         }
     }
 
-    // Fallback by basename to absorb separator/canonicalization mismatches on Windows.
+    // A complete path identifies one folder even when both folders contain the same name.
+    if raw.is_absolute() {
+        return Err("Input video not found".into());
+    }
+
+    // Older callers also pass just the filename.
     let requested_stem = Path::new(trimmed)
         .file_stem()
         .or_else(|| Path::new(trimmed).file_name())
@@ -112,9 +124,9 @@ pub(super) fn resolve_existing_video_base(video_id: &str, settings: &SettingsWra
     Err("Input video not found".to_string())
 }
 
-pub(super) fn resolve_clip_input_path(video_id: &str, settings: &SettingsWrapper) -> Result<PathBuf, String> {
+pub(crate) fn resolve_clip_input_path(video_id: &str, settings: &SettingsWrapper) -> Result<PathBuf, String> {
     let base = resolve_existing_video_base(video_id, settings)?;
-    let mp4 = base.with_extension("mp4");
+    let mp4 = recording_file(&base, "mp4");
     if mp4.exists() {
         Ok(mp4)
     } else {

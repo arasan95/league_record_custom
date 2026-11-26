@@ -130,7 +130,7 @@ impl AppManager for AppHandle {
         if debug_log {
             log::info!("recordings watcher initialized");
         }
-        filewatcher::replace(self, &recordings_path);
+        filewatcher::replace(self, [&recordings_path, &settings.get_clips_path()]);
         if PERF_LOG_ENABLED {
             log::info!(
                 "[perf] setup:filewatcher_replace {:.1}ms",

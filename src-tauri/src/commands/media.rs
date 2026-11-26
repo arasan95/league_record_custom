@@ -1,12 +1,14 @@
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use sha2::{Digest, Sha256};
+use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
+use tokio::io::{AsyncBufReadExt, BufReader};
 
-use super::path_guard::resolve_clip_input_path;
+use crate::app::recording_paths::resolve_clip_input_path;
 use crate::recorder::{MetadataFile, NoData};
 use crate::state::SettingsWrapper;
 
@@ -270,7 +272,8 @@ fn install_ffmpeg_archive(app_handle: &AppHandle, desired: &FfmpegProvenance, by
         let mut file = archive
             .by_index(index)
             .map_err(|e| format!("Failed to read FFmpeg archive entry: {}", e))?;
-        let Some(name) = Path::new(file.name()).file_name().and_then(|s| s.to_str()) else {
+        let entry_name = file.name().map_err(|e| format!("Invalid FFmpeg archive entry name: {e}"))?;
+        let Some(name) = Path::new(entry_name.as_ref()).file_name().and_then(|s| s.to_str()) else {
             continue;
         };
         let output_path = temp_dir.join(name);
@@ -363,6 +366,7 @@ pub(crate) async fn resolve_ffmpeg_command(settings: &SettingsWrapper, app_handl
 }
 
 fn probe_audio_tracks(video_path: &PathBuf, ffmpeg_cmd: &str) -> Result<Vec<ClipAudioTrack>, String> {
+    check_clip_input_readable(video_path)?;
     let mut command = Command::new(ffmpeg_cmd);
 
     #[cfg(target_os = "windows")]
@@ -408,6 +412,12 @@ fn probe_audio_tracks(video_path: &PathBuf, ffmpeg_cmd: &str) -> Result<Vec<Clip
     Ok(tracks)
 }
 
+fn check_clip_input_readable(video_path: &Path) -> Result<(), String> {
+    fs::File::open(video_path)
+        .and_then(|mut file| file.read_exact(&mut [0]))
+        .map_err(|error| format!("Could not read the original recording {}: {error}", video_path.display()))
+}
+
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub async fn get_clip_audio_tracks(
@@ -417,7 +427,9 @@ pub async fn get_clip_audio_tracks(
 ) -> Result<Vec<ClipAudioTrack>, String> {
     let video_path = resolve_clip_input_path(&video_id, &state)?;
     let (ffmpeg_cmd, _mode) = resolve_ffmpeg_command(&state, &app_handle).await;
-    probe_audio_tracks(&video_path, &ffmpeg_cmd)
+    tauri::async_runtime::spawn_blocking(move || probe_audio_tracks(&video_path, &ffmpeg_cmd))
+        .await
+        .map_err(|e| format!("FFmpeg audio track check failed: {e}"))?
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -428,11 +440,16 @@ pub async fn create_clip(
     end: f64,
     game_audio_only: Option<bool>,
     audio_track_index: Option<u32>,
+    on_progress: Channel<u32>,
     app_handle: AppHandle,
     state: State<'_, SettingsWrapper>,
 ) -> Result<String, String> {
     let recordings_path = state.get_clips_path();
     let video_path = resolve_clip_input_path(&video_id, &state)?;
+    let input_path = video_path.clone();
+    tauri::async_runtime::spawn_blocking(move || check_clip_input_readable(&input_path))
+        .await
+        .map_err(|e| format!("Failed to check the original recording: {e}"))??;
 
     // Ensure clips directory exists
     if !recordings_path.exists() {
@@ -450,19 +467,18 @@ pub async fn create_clip(
     let output_path = recordings_path.join(&output_filename);
 
     let duration = end - start;
-    if duration <= 0.0 {
+    if !duration.is_finite() || duration <= 0.0 {
         return Err("End time must be greater than start time".into());
     }
 
     let (ffmpeg_cmd, _mode) = resolve_ffmpeg_command(&state, &app_handle).await;
-    let mut command = Command::new(ffmpeg_cmd);
+    let mut command = tokio::process::Command::new(ffmpeg_cmd);
 
-    #[cfg(target_os = "windows")]
-    use std::os::windows::process::CommandExt;
     #[cfg(target_os = "windows")]
     command.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
     command
+        .args(["-hide_banner", "-loglevel", "error", "-nostdin", "-nostats", "-progress", "pipe:1"])
         .arg("-ss")
         .arg(format!("{:.3}", start))
         .arg("-i")
@@ -490,7 +506,29 @@ pub async fn create_clip(
         command.arg("-c").arg("copy");
     }
 
-    let output = command.arg(&output_path).output();
+    let mut child = command
+        .arg(&output_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| format!("Failed to execute ffmpeg: {e}. Is FFmpeg installed?"))?;
+    let stdout = child.stdout.take().expect("FFmpeg stdout is piped");
+    let read_progress = async {
+        let mut lines = BufReader::new(stdout).lines();
+        let mut last_percent = 0;
+        while let Some(line) = lines.next_line().await? {
+            if let Some(micros) = line.strip_prefix("out_time_us=").and_then(|value| value.parse::<i64>().ok()) {
+                let percent = (micros as f64 / (duration * 10_000.0)).clamp(0.0, 99.0) as u32;
+                if percent > last_percent {
+                    last_percent = percent;
+                    let _ = on_progress.send(percent);
+                }
+            }
+        }
+        Ok(())
+    };
+    let output = tokio::try_join!(read_progress, child.wait_with_output()).map(|(_, output)| output);
 
     match output {
         Ok(o) if o.status.success() => {

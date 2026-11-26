@@ -140,7 +140,7 @@ export function updateRecordingSidebarView(params: {
                 shouldHide = false;
             }
 
-            if (shouldHide) {
+            if (shouldHide && !recording.isRecording) {
                 return undefined;
             }
 
@@ -157,7 +157,7 @@ export function updateRecordingSidebarView(params: {
                         (recording.metadata.Metadata.queue.name &&
                             !recording.metadata.Metadata.queue.name.toLowerCase().includes("unknown")));
 
-                if (Boolean(isNowValid) !== cachedHasMeta) {
+                if (Boolean(isNowValid) !== cachedHasMeta || li.dataset.recording !== String(recording.isRecording)) {
                     li = undefined;
                 }
             }
@@ -167,7 +167,7 @@ export function updateRecordingSidebarView(params: {
                 recordingElementMap.set(recording.videoId, li);
             }
 
-            const isVisible = isRecordingVisibleByUiFilters({
+            const isVisible = recording.isRecording || isRecordingVisibleByUiFilters({
                 recording,
                 filterStar: search.filterStar,
                 clipFilterMode: search.clipFilterMode,

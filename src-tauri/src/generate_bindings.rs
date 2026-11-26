@@ -5,38 +5,7 @@ fn generate_bindings() -> anyhow::Result<()> {
     use tauri_specta::{collect_commands, collect_events};
 
     tauri_specta::Builder::<tauri::Wry>::new()
-        .commands(collect_commands![
-            commands::get_marker_flags,
-            commands::set_marker_flags,
-            commands::get_recordings_path,
-            commands::get_recordings_size,
-            commands::get_recordings_list,
-            commands::open_recordings_folder,
-            commands::delete_video,
-            commands::delete_video_only,
-            commands::rename_video,
-            commands::get_metadata,
-            commands::append_tft_round_marker,
-            commands::toggle_favorite,
-            commands::confirm_delete,
-            commands::disable_confirm_delete,
-            commands::get_settings,
-            commands::save_settings,
-            commands::pick_recordings_folder,
-            commands::get_running_applications,
-            commands::is_league_client_available,
-            commands::download_recording_replay,
-            commands::play_recording_replay,
-            commands::create_clip,
-            commands::get_clip_audio_tracks,
-            commands::pick_ffmpeg_path,
-            commands::get_ffmpeg_runtime_info,
-            commands::clear_cache,
-            commands::clear_cache_for_patch_update,
-            commands::download_image,
-            commands::save_scoreboard_cache,
-            commands::load_scoreboard_cache
-        ])
+        .commands(commands::app_commands!(collect_commands))
         .events(collect_events![AppEvent])
         .export(
             Typescript::new().bigint(specta_typescript::BigIntExportBehavior::Number),

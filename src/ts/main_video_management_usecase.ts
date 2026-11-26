@@ -1,3 +1,4 @@
+import { videoIdsMatch } from "./main_video_id_usecase";
 import type { Recording } from "./bindings";
 
 export async function openRenameModal(input: {
@@ -34,18 +35,21 @@ export async function renameVideoFlow(input: {
         showErrorModal,
     } = input;
 
-    const activeVideoId = getActiveVideoId();
     const ok = await renameVideo(videoId, newVideoId);
     if (!ok) {
         showErrorModal("Error renaming video!");
         return;
     }
 
-    if (videoId === activeVideoId) {
+    if (videoId === getActiveVideoId()) {
         const currentTime = getCurrentTime();
-        void updateSidebar();
-        void setVideo(newVideoId).then(() => setCurrentTime(currentTime));
+        const directoryEnd = Math.max(videoId.lastIndexOf("/"), videoId.lastIndexOf("\\")) + 1;
+        const renamedVideoId = videoId.slice(0, directoryEnd) + newVideoId;
+        await setVideo(renamedVideoId);
+        const activeId = getActiveVideoId();
+        if (activeId && videoIdsMatch(activeId, renamedVideoId)) setCurrentTime(currentTime);
     }
+    await updateSidebar();
 }
 
 export function showDeleteWithConfirm(input: {

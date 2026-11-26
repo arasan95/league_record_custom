@@ -1017,11 +1017,13 @@ export function createRecordingSidebarItem(input: {
 
     const li = createEl("li", {
         onclick: () => {
+            if (recording.isRecording) return;
             if (recording.videoExists) onVideo(recording.videoId);
             else console.log("Video file no longer exists for this recording.");
         },
     }, { id: recording.videoId, class: liClass }) as HTMLElement;
     li.dataset.videoId = recording.videoId;
+    li.dataset.recording = String(recording.isRecording);
 
     const favoriteBtn = createEl("span", {
         onclick: (e: MouseEvent) => {
@@ -1081,7 +1083,15 @@ export function createRecordingSidebarItem(input: {
         li.dataset.hasMetadata = hasSidebarMetadata ? "true" : "false";
         li.append(...displayContent);
     }
-    li.append(actionsDiv);
+    if (recording.isRecording) {
+        li.append(createEl("span", {}, {
+            class: "sidebar-recording-badge",
+            title: tooltipText("録画中", "Recording"),
+            "aria-label": tooltipText("録画中", "Recording"),
+        }, "REC"));
+    } else {
+        li.append(actionsDiv);
+    }
     scheduleImageLoadForItem?.(li);
     return li;
 }

@@ -11,13 +11,57 @@ use crate::wad::parser::{extract_file_from_wad, parse_wad_entries, WadEntry};
 use crate::wad::updater::get_league_install_dir;
 
 mod media;
-mod path_guard;
 mod recordings;
 mod tooltip_db;
 
 pub use media::*;
 pub use recordings::*;
 pub use tooltip_db::*;
+
+macro_rules! app_commands {
+    ($($handler:ident)::+) => {
+        $($handler)::+![
+            commands::get_marker_flags,
+            commands::set_marker_flags,
+            commands::get_recordings_path,
+            commands::get_recordings_size,
+            commands::get_recordings_list,
+            commands::get_recordings_snapshot,
+            commands::open_recordings_folder,
+            commands::delete_video,
+            commands::delete_video_only,
+            commands::rename_video,
+            commands::get_metadata,
+            commands::append_tft_round_marker,
+            commands::toggle_favorite,
+            commands::confirm_delete,
+            commands::disable_confirm_delete,
+            commands::get_settings,
+            commands::save_settings,
+            commands::pick_recordings_folder,
+            commands::get_running_applications,
+            commands::is_league_client_available,
+            commands::download_recording_replay,
+            commands::play_recording_replay,
+            commands::create_clip,
+            commands::get_clip_audio_tracks,
+            commands::pick_clips_folder,
+            commands::pick_ffmpeg_path,
+            commands::get_ffmpeg_runtime_info,
+            commands::clear_cache,
+            commands::clear_cache_for_patch_update,
+            commands::download_image,
+            commands::save_scoreboard_cache,
+            commands::load_scoreboard_cache,
+            commands::update_champion_data,
+            commands::load_tooltip_locale_db,
+            commands::check_tooltip_db_update,
+            commands::apply_tooltip_db_update,
+            commands::perf_log
+        ]
+    };
+}
+pub(crate) use app_commands;
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]

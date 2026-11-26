@@ -6,7 +6,7 @@ import { commands, type GameMetadata, type GoldFrame, type MarkerFlags, type Rec
 import { ensureItemDataLoaded, ensureTftDataLoaded, getChampionEnglishNameByIdSync, getChampionLocalizedNameByIdSync, getGameModeByQueueId } from "./datadragon";
 import { getCurrentPatchVersion } from "./version";
 import { InventoryTimeline } from "./timeline";
-import { currentKeybinds, reloadKeybinds } from "./main";
+import type { createKeybindSettings } from "./keybinds";
 import { isFavorite } from "./util";
 import { getText } from "./i18n";
 import { showSettingsModalView } from "./ui/settings_modal_usecase";
@@ -210,7 +210,7 @@ export default class UI {
     private frameDuration: number = 1/60; // Default to 60fps
     private readonly vjs: typeof videojs;
 
-    constructor(vjs: typeof videojs) {
+    constructor(vjs: typeof videojs, private readonly keybinds: ReturnType<typeof createKeybindSettings>) {
         this.vjs = vjs;
 
         this.modal = document.querySelector<HTMLDivElement>("#modal")!;
@@ -722,6 +722,11 @@ export default class UI {
     };
 
     public clearVideoMetadata() {
+        this.metadataRenderId++;
+        this.timeline = null;
+        this.scoreboardEl = null;
+        this.currentQueueId = 0;
+        this.player?.off("timeupdate", this.updateTimelineItems);
         this.setTftMode(false);
         clearVideoMetadataView({
             emptyEl: this.vjs.dom.emptyEl,
@@ -733,9 +738,8 @@ export default class UI {
         (this.player.el() as HTMLElement).classList.toggle("lr-tft-mode", enabled);
     }
 
-    public async setVideoDescriptionMetadata(data: GameMetadata) {
+    public async setVideoDescriptionMetadata(data: GameMetadata, isCurrent: () => boolean) {
         this.metadataRenderId++;
-        this.currentQueueId = data.queue?.id ?? 0;
 
         console.log("Setting Video Description Metadata", data);
 
@@ -751,12 +755,16 @@ export default class UI {
         );
         const isTftMatch = isTftByQueue || hasTftParticipantData;
 
-        this.currentGameVersion = data.gameVersion || (await getCurrentPatchVersion());
-        await ensureItemDataLoaded(this.currentGameVersion);
+        const gameVersion = data.gameVersion || (await getCurrentPatchVersion());
+        await ensureItemDataLoaded(gameVersion);
         if (isTftMatch) {
             await ensureTftDataLoaded();
         }
 
+        const isRenderValid = () => isCurrent() && this.metadataRenderId === currentRenderId;
+        if (!isRenderValid()) return;
+        this.currentQueueId = data.queue?.id ?? 0;
+        this.currentGameVersion = gameVersion;
         resetScoreboardRuntimeState(this, data);
 
         this.setTftMode(isTftMatch);
@@ -808,7 +816,7 @@ export default class UI {
             sorted200: prepared.sorted200,
             currentGameVersion: this.currentGameVersion,
             currentRenderId,
-            isRenderValid: () => this.metadataRenderId === currentRenderId,
+            isRenderValid,
             createEl: this.vjs.dom.createEl,
             csRefs: this.csRefs,
             kdaRefs: this.kdaRefs,
@@ -818,7 +826,7 @@ export default class UI {
             playerEl: prepared.playerEl,
             controlBarEl: this.player.controlBar.el() as HTMLElement,
         });
-        if (!rendered) return;
+        if (!rendered || !isRenderValid()) return;
 
         this.player.off("timeupdate", this.updateTimelineItems);
         this.player.on("timeupdate", this.updateTimelineItems);
@@ -961,13 +969,13 @@ export default class UI {
             hideModal: this.hideModal,
             getText,
             currentPatchVersion: getCurrentPatchVersion(),
-            currentBinds: currentKeybinds,
+            currentBinds: this.keybinds.getKeybinds(),
             reopenWithLanguage: () => this.showSettingsModal(settings, saveCallback),
             onShowUpdateModal: (update, langCode) => this.showUpdateModal(update, langCode),
             onScrollModifierChange: (modifier) => {
                 this.scrollFrameStepModifier = modifier ?? "Shift";
             },
-            onReloadKeybinds: reloadKeybinds,
+            onReloadKeybinds: this.keybinds.reload,
             updateAutoButtons: (newSettings) => {
                 this.updateAutoStopBtn(newSettings.autoStopPlayback);
                 this.updateAutoPlayBtn(newSettings.autoplayVideo);

@@ -9,12 +9,11 @@ env:
 
 jobs:
   build:
-    if: github.actor != 'dependabot[bot]'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
       - name: Bundle FFmpeg for build
         shell: pwsh
         run: |
@@ -45,7 +44,8 @@ jobs:
             -Version $version `
             -SourceName "Chocolatey ffmpeg package" `
             -SourceUrl "https://community.chocolatey.org/packages/ffmpeg"
-      - run: bun install --linker=isolated
-      - name: Responsibility Coverage Check
-        run: bun run check:responsibility
-      - run: bun run --bun tauri build
+      - run: bun install --frozen-lockfile --linker=isolated
+      - run: bun audit
+      - uses: ./.github/actions/verify
+      - run: bunx tauri build -- --locked
+
