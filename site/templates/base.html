@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{title}} | LeagueRecord Custom</title>
+  <meta name="description" content="{{description}}">
+  <link rel="canonical" href="https://leaguerecord.web.app/{{canonical}}">
+  <link rel="alternate" hreflang="{{altLang}}" href="https://leaguerecord.web.app/{{altPath}}">
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="stylesheet" href="/styles.css?v={{version}}">
+  <script src="/site.js?v={{version}}" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="{{homeHref}}"><img src="/icon.png" alt=""><span>LeagueRecord Custom</span></a>
+    <nav class="main-nav">{{nav}}</nav>
+  </header>
+  <main>
+    {{content}}
+  </main>
+  <footer class="site-footer"><span>LeagueRecord Custom</span></footer>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Open Shared Replay | LeagueRecord Custom</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; background: #171717; color: #e8e8e8; }
+    main { width: min(100%, 520px); padding: 30px; border: 1px solid #454545; border-radius: 12px; background: #232323; box-shadow: 0 20px 60px #0008; }
+    h1 { margin: 0 0 12px; font-size: 23px; }
+    p { margin: 8px 0; color: #bdbdbd; line-height: 1.65; }
+    button, .button { display: block; width: 100%; margin-top: 18px; padding: 12px 18px; border: 1px solid #666; border-radius: 7px; background: #3a3a3a; color: #fff; font: inherit; font-weight: 700; text-align: center; text-decoration: none; cursor: pointer; }
+    button:hover { background: #4a4a4a; }
+    #status { min-height: 1.6em; margin-top: 15px; color: #a9a9a9; font-size: 14px; }
+    .error { color: #ffaaaa !important; }
+    small { display: block; margin-top: 18px; color: #888; line-height: 1.55; }
+    #homepage-fallback { margin-top: 22px; padding-top: 20px; border-top: 1px solid #454545; }
+    #homepage-fallback[hidden] { display: none; }
+    #homepage-fallback h2 { margin: 0 0 8px; font-size: 18px; }
+    .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; color: #fff; font-weight: 700; }
+    .brand img { width: 36px; height: 36px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="brand" href="/"><img src="/icon.png" alt=""><span>LeagueRecord Custom</span></a>
+    <h1>共有リプレイを開く</h1>
+    <p>LeagueRecord Customを起動し、招待を適用してYouTube共有リプレイを開きます。</p>
+    <p lang="en">Open the YouTube shared replay in LeagueRecord Custom and apply its invitation.</p>
+    <button id="open-app" type="button">アプリで開く / Open in App</button>
+    <div id="status" role="status" aria-live="polite">アプリを確認しています…</div>
+    <section id="homepage-fallback" hidden>
+      <h2>アプリをお持ちでない場合</h2>
+      <p>LeagueRecord Customの機能、ダウンロード、ソースコードはホームページから確認できます。</p>
+      <p lang="en">Learn about LeagueRecord Custom, downloads, and source code on the homepage.</p>
+      <a class="button" href="/">ホームページを表示 / View Homepage</a>
+    </section>
+    <small>招待リンクは転送せず、受け取った本人だけが使用してください。</small>
+  </main>
+  <script>
+    (() => {
+      const status = document.querySelector("#status");
+      const button = document.querySelector("#open-app");
+      const fallback = document.querySelector("#homepage-fallback");
+      const params = new URLSearchParams(location.search);
+      const keys = [...params.keys()];
+      const videoId = params.get("v") || "";
+      const invite = (params.get("invite") || "").toLowerCase();
+      const valid = keys.length === 2 && keys.includes("v") && keys.includes("invite")
+        && /^[A-Za-z0-9_-]{11}$/.test(videoId) && /^[0-9a-f]{48}$/.test(invite);
+      if (!valid) {
+        status.textContent = "共有リンクが不正です。 / Invalid replay link.";
+        status.classList.add("error");
+        button.disabled = true;
+        return;
+      }
+      const appUrl = new URL("leaguerecord://replay");
+      appUrl.searchParams.set("v", videoId);
+      appUrl.searchParams.set("invite", invite);
+      const launcher = document.createElement("iframe");
+      launcher.hidden = true;
+      launcher.title = "LeagueRecord Custom launcher";
+      document.body.append(launcher);
+      let appLaunchObserved = false;
+      window.addEventListener("blur", () => { appLaunchObserved = true; });
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) appLaunchObserved = true;
+      });
+      const openApp = () => {
+        appLaunchObserved = false;
+        fallback.hidden = true;
+        status.classList.remove("error");
+        status.textContent = "LeagueRecord Customを起動しています… / Opening LeagueRecord Custom…";
+        launcher.src = appUrl.toString();
+        setTimeout(() => {
+          if (appLaunchObserved || document.hidden) return;
+          status.textContent = "アプリを開けませんでした。インストールされていない場合はホームページをご覧ください。 / The app did not open. Visit the homepage if it is not installed.";
+          fallback.hidden = false;
+        }, 1800);
+      };
+      button.addEventListener("click", openApp);
+      setTimeout(openApp, 350);
+    })();
+  </script>
+</body>
+</html>
