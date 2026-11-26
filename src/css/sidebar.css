@@ -1,19 +1,16 @@
-:root {
-    --sidebar-surface: #1e1e1e;
-}
-
 #sidebar {
     display: grid;
     grid-template-columns: 1fr;
     grid-template-rows: [header] 0.5fr [list] 11fr;
 
     /* border-right: 1px solid #333; */
-    background-color: var(--sidebar-surface);
+    border-left: 1px solid #1e1e1e; /* 1px Invisible Safety Buffer for DWM */
+    background-color: #1e1e1e;
     isolation: isolate;
 }
 
 #sidebar #sidebar-info {
-    background: var(--sidebar-surface);
+    background: #1e1e1e;
     border-bottom: 1px solid #333;
     color: #ccc;
     font-size: 0.9em;
@@ -222,422 +219,6 @@
     background: rgba(0, 210, 255, 0.15) !important;
 }
 
-#youtube-replay-sidebar {
-    display: none;
-    min-height: 0;
-    overflow: hidden;
-    color: #e5e7eb;
-}
-
-#sidebar.replay-mode {
-    grid-template-rows: minmax(0, 1fr);
-}
-
-#sidebar.replay-mode #sidebar-info,
-#sidebar.replay-mode #sidebar-content {
-    display: none;
-}
-
-#sidebar.replay-mode #youtube-replay-sidebar {
-    display: flex;
-    flex-direction: column;
-}
-
-.youtube-replay-sidebar-inner {
-    display: flex;
-    flex: 1 1 auto;
-    min-height: 0;
-    flex-direction: column;
-    padding: 26px 20px 0;
-}
-
-.youtube-replay-tabs {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 4px;
-    margin: 10px 0 14px;
-    padding: 3px;
-    border: 1px solid #3b3b3b;
-    border-radius: 7px;
-    background: #181818;
-}
-
-.youtube-replay-tabs button {
-    border: 0;
-    border-radius: 5px;
-    padding: 7px 4px;
-    background: transparent;
-    color: #999;
-    font: 600 11px Inter, sans-serif;
-    cursor: pointer;
-}
-
-.youtube-replay-tabs button[aria-selected="true"] {
-    background: #3b3b3b;
-    color: #f2f2f2;
-}
-
-.youtube-replay-tab-panel:not([hidden]) {
-    display: flex;
-    flex: 1 1 auto;
-    min-height: 0;
-    flex-direction: column;
-}
-
-.youtube-replay-owned-toolbar {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-    color: #aaa;
-    font: 11px/1.4 Inter, sans-serif;
-}
-
-#youtube-replay-owned-status {
-    flex: 1 1 auto;
-}
-
-#youtube-replay-owned-status.is-error {
-    color: #ef9a9a;
-}
-
-#youtube-replay-owned-refresh {
-    border: 1px solid #4a4a4a;
-    border-radius: 5px;
-    padding: 5px 8px;
-    background: #292929;
-    color: #ddd;
-    cursor: pointer;
-}
-
-#youtube-replay-owned {
-    display: block;
-    flex: 1 1 auto;
-    min-height: 0;
-    margin: 0 -20px;
-    padding: 0 0 80px;
-    list-style: none;
-    overflow: auto;
-    background: #000;
-    border-top: 1px solid #333;
-}
-
-#youtube-replay-owned[hidden] {
-    display: none;
-}
-
-#youtube-replay-owned li {
-    position: relative;
-    min-width: 0;
-    margin-bottom: 4px;
-    padding: 10px 10px 10px 15px;
-    overflow: hidden;
-    border-radius: 8px;
-    background: var(--sidebar-surface);
-    cursor: pointer;
-}
-
-#youtube-replay-owned li:hover {
-    background: #3f3f3f;
-}
-
-.youtube-replay-eyebrow {
-    color: #9ca3af;
-    font-family: Inter, sans-serif;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-}
-
-#youtube-replay-title {
-    margin: 7px 0 8px;
-    font-family: Inter, sans-serif;
-    font-size: 21px;
-}
-
-.youtube-replay-sidebar-inner p,
-.youtube-replay-sidebar-inner label,
-#youtube-replay-status,
-#youtube-replay-summary span {
-    font-family: Inter, sans-serif;
-}
-
-#youtube-replay-history {
-    display: block;
-    flex: 1 1 auto;
-    min-height: 0;
-    margin: 0 -20px;
-    padding: 0 0 80px;
-    list-style: none;
-    font-size: 14px;
-    color: #ccc;
-    background-color: #000000;
-    overflow-y: auto;
-    overflow-x: hidden;
-}
-
-#youtube-replay-history-header {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: space-between;
-    margin: 10px -20px 0;
-    padding: 9px 12px 8px 15px;
-    border-top: 1px solid #333;
-    border-bottom: 1px solid #333;
-    background: #1e1e1e;
-    color: #aaa;
-    font-family: Inter, sans-serif;
-    font-size: 11px;
-}
-
-#youtube-replay-history-header[hidden] {
-    display: none;
-}
-
-#youtube-replay-history-clear {
-    border: 1px solid #4a4a4a;
-    border-radius: 5px;
-    padding: 4px 7px;
-    background: #292929;
-    color: #c8c8c8;
-    font: inherit;
-    cursor: pointer;
-}
-
-#youtube-replay-history-clear:hover {
-    border-color: #777;
-    background: #383838;
-    color: #fff;
-}
-
-#youtube-replay-history[hidden] {
-    display: none;
-}
-
-#youtube-replay-history::-webkit-scrollbar {
-    width: 11px;
-}
-
-#youtube-replay-history::-webkit-scrollbar-track {
-    background-color: #000000 !important;
-    border-left: 1px solid transparent;
-    border-right: 1px solid transparent;
-    background-clip: padding-box;
-}
-
-#youtube-replay-history::-webkit-scrollbar-thumb {
-    background-clip: padding-box;
-    border-left: 2px solid transparent;
-    border-right: 2px solid transparent;
-    border-radius: 4px;
-}
-
-/* Keep loaded shared replays visually identical to the normal recording list. */
-#youtube-replay-history li {
-    position: relative;
-    min-width: 0;
-    margin-bottom: 4px;
-    padding: 10px 10px 10px 15px;
-    overflow: hidden;
-    cursor: pointer;
-    border-radius: 8px;
-    background-color: #1e1e1e;
-    transition: background-color 0.1s;
-}
-
-#youtube-replay-history li:hover {
-    background-color: #3f3f3f;
-}
-
-#youtube-replay-history li.active {
-    background-color: #2e2e2e;
-}
-
-.youtube-replay-remove {
-    border: 0;
-    cursor: pointer;
-}
-
-.youtube-replay-remove:hover,
-.youtube-replay-remove:focus-visible {
-    color: red;
-    background: rgba(0, 0, 0, 0.5);
-    outline: none;
-}
-
-#youtube-replay-history li::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: 2px;
-    background-color: #444;
-    transition: background-color 0.2s, box-shadow 0.2s;
-}
-
-#youtube-replay-history li.side-blue::before {
-    background-color: #0acbe6;
-}
-
-#youtube-replay-history li.side-red::before {
-    background-color: #e63b3b;
-}
-
-#youtube-replay-history li.active:not(.side-blue):not(.side-red)::before {
-    background-color: #e0e0e0 !important;
-    box-shadow: 0 0 8px 2px rgba(220, 220, 220, 0.8), 0 0 15px 5px rgba(220, 220, 220, 0.5) !important;
-    z-index: 10;
-}
-
-#youtube-replay-history li.active.side-blue::before {
-    background-color: #b5f6ff !important;
-    box-shadow: 0 0 8px 2px rgba(10, 203, 230, 0.9), 0 0 15px 5px rgba(10, 204, 230, 0.598) !important;
-    z-index: 10;
-}
-
-#youtube-replay-history li.active.side-red::before {
-    background-color: #ffc8c8 !important;
-    box-shadow: 0 0 8px 2px rgba(255, 0, 0, 0.685), 0 0 15px 5px rgba(255, 0, 0, 0.692) !important;
-    z-index: 10;
-}
-
-#youtube-replay-history li.tft-match::before {
-    background-color: #bf9d46;
-}
-
-#youtube-replay-history li.active.tft-match::before {
-    background-color: #fff09c !important;
-    box-shadow: 0 0 8px 2px rgba(255, 215, 0, 0.8), 0 0 15px 5px rgba(255, 215, 0, 0.5) !important;
-    z-index: 10;
-}
-
-.youtube-replay-sidebar-inner p {
-    margin: 0 0 24px;
-    color: #a8abb3;
-    font-size: 12px;
-    line-height: 1.6;
-}
-
-.youtube-replay-sidebar-inner label {
-    display: block;
-    margin-bottom: 7px;
-    color: #d1d5db;
-    font-size: 12px;
-}
-
-#youtube-replay-url {
-    box-sizing: border-box;
-    width: 100%;
-    resize: vertical;
-    border: 1px solid #41444c;
-    border-radius: 7px;
-    outline: none;
-    background: #111;
-    color: #f3f4f6;
-    padding: 10px;
-    font-family: Inter, sans-serif;
-    font-size: 12px;
-    line-height: 1.5;
-}
-
-#youtube-replay-url:focus {
-    border-color: #d9d9d9;
-    box-shadow: 0 0 0 2px rgba(209, 209, 209, 0.15);
-}
-
-#youtube-replay-load {
-    width: 100%;
-    margin-top: 12px;
-    border: 1px solid #d4d4d4;
-    border-radius: 7px;
-    background: #989898;
-    color: #181818;
-    padding: 10px 12px;
-    font-family: Inter, sans-serif;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-}
-
-#youtube-replay-load:hover:enabled {
-    background: #bdbdbd;
-}
-
-#youtube-replay-load:disabled {
-    cursor: wait;
-    opacity: 0.6;
-}
-
-#youtube-replay-status {
-    min-height: 38px;
-    margin-top: 13px;
-    color: #aeb4c0;
-    font-size: 11px;
-    line-height: 1.5;
-    overflow-wrap: anywhere;
-}
-
-#youtube-replay-status.is-error {
-    color: #f4a7a7;
-}
-
-#youtube-ui-comparison {
-    margin: 4px 0 8px;
-}
-
-.youtube-ui-comparison-toggle {
-    display: flex !important;
-    align-items: center;
-    gap: 6px;
-    margin: 0 !important;
-    color: #aaa;
-    font-size: 10px;
-    line-height: 1.2;
-    cursor: pointer;
-}
-
-.youtube-ui-comparison-toggle input {
-    flex: 0 0 auto;
-    margin: 0;
-}
-
-#youtube-replay-summary {
-    margin-top: 8px;
-    border: 1px solid #353944;
-    border-radius: 8px;
-    background: #17191f;
-    padding: 13px;
-}
-
-.youtube-replay-summary-label {
-    margin-bottom: 5px;
-    color: #8ea0d1;
-    font-family: Inter, sans-serif;
-    font-size: 10px;
-    letter-spacing: 0.08em;
-}
-
-#youtube-replay-summary strong,
-#youtube-replay-summary span {
-    display: block;
-    overflow-wrap: anywhere;
-}
-
-#youtube-replay-summary strong {
-    color: #f3f4f6;
-    font-family: Inter, sans-serif;
-    font-size: 13px;
-}
-
-#youtube-replay-summary span {
-    margin-top: 6px;
-    color: #8f96a3;
-    font-size: 10px;
-}
-
 #filter-clip-btn.exclude {
     color: #5f6770 !important;
     background: rgba(0, 0, 0, 0.22) !important;
@@ -716,10 +297,8 @@
 }
 
 /* List Item Base */
-#sidebar #sidebar-content li,
-#youtube-replay-history li {
+#sidebar #sidebar-content li {
     position: relative;
-    min-width: 0;
     padding: 10px;
     padding-left: 15px; /* Add space for the bar */
     cursor: pointer;
@@ -733,20 +312,16 @@
 
 /* Remove the ::after separator line */
 
-#sidebar #sidebar-content li:hover,
-#youtube-replay-history li:hover {
+#sidebar #sidebar-content li:hover {
     background-color: #3f3f3f;
 }
 
-#sidebar #sidebar-content li.active,
-#youtube-replay-history li.active {
+#sidebar #sidebar-content li.active {
     background-color: #2e2e2e;
 }
 
 /* Side Indicators (Bar via pseudo-element) */
-#sidebar #sidebar-content li::before,
-#youtube-replay-history li::before,
-#youtube-replay-owned li::before {
+#sidebar #sidebar-content li::before {
     content: "";
     position: absolute;
     left: 0px;
@@ -757,22 +332,16 @@
     transition: background-color 0.2s, box-shadow 0.2s;
 }
 
-#sidebar #sidebar-content li.side-blue::before,
-#youtube-replay-history li.side-blue::before,
-#youtube-replay-owned li.side-blue::before {
+#sidebar #sidebar-content li.side-blue::before {
     background-color: #0acbe6;
 }
 
-#sidebar #sidebar-content li.side-red::before,
-#youtube-replay-history li.side-red::before,
-#youtube-replay-owned li.side-red::before {
+#sidebar #sidebar-content li.side-red::before {
     background-color: #e63b3b;
 }
 
 /* Fallback for active item with no side info - Neutral color */
-#sidebar #sidebar-content li.active:not(.side-blue):not(.side-red)::before,
-#youtube-replay-history li.active:not(.side-blue):not(.side-red)::before,
-#youtube-replay-owned li.active:not(.side-blue):not(.side-red)::before {
+#sidebar #sidebar-content li.active:not(.side-blue):not(.side-red)::before {
     background-color: #e0e0e0 !important;
     box-shadow: 
         0 0 8px 2px rgba(220, 220, 220, 0.8),
@@ -781,16 +350,12 @@
 }
 
 /* Fallback for INACTIVE item with no side info - Neutral line */
-#sidebar #sidebar-content li:not(.side-blue):not(.side-red)::before,
-#youtube-replay-history li:not(.side-blue):not(.side-red)::before,
-#youtube-replay-owned li:not(.side-blue):not(.side-red)::before {
+#sidebar #sidebar-content li:not(.side-blue):not(.side-red)::before {
     background-color: #444;
 }
 
 /* Neon Glow Effect on Active State - Intensified */
-#sidebar #sidebar-content li.active.side-blue::before,
-#youtube-replay-history li.active.side-blue::before,
-#youtube-replay-owned li.active.side-blue::before {
+#sidebar #sidebar-content li.active.side-blue::before {
     background-color: #b5f6ff !important;
     box-shadow: 
         0 0 8px 2px rgba(10, 203, 230, 0.9),
@@ -798,9 +363,7 @@
     z-index: 10;
 }
 
-#sidebar #sidebar-content li.active.side-red::before,
-#youtube-replay-history li.active.side-red::before,
-#youtube-replay-owned li.active.side-red::before {
+#sidebar #sidebar-content li.active.side-red::before {
     background-color: #ffc8c8 !important;
     box-shadow: 
         0 0 8px 2px rgba(255, 0, 0, 0.685),
@@ -809,15 +372,11 @@
 }
 
 /* Yellow Glow for TFT */
-#sidebar #sidebar-content li.tft-match::before,
-#youtube-replay-history li.tft-match::before,
-#youtube-replay-owned li.tft-match::before {
+#sidebar #sidebar-content li.tft-match::before {
     background-color: #bf9d46;
 }
 
-#sidebar #sidebar-content li.active.tft-match::before,
-#youtube-replay-history li.active.tft-match::before,
-#youtube-replay-owned li.active.tft-match::before {
+#sidebar #sidebar-content li.active.tft-match::before {
     background-color: #fff09c !important;
     box-shadow: 
         0 0 8px 2px rgba(255, 215, 0, 0.8),
@@ -885,7 +444,7 @@
 }
 
 .sidebar-time {
-    font-size: 20px;
+    font-size: 24px;
     font-weight: 700;
     color: #fff;
     text-shadow: 0 0 5px rgba(0,0,0,0.5);
@@ -931,19 +490,6 @@
     font-weight: 700;
     color: #ffd700;
     text-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
-}
-
-.sidebar-youtube-badge {
-    display: block;
-    width: 20px;
-    height: 14px;
-    overflow: visible;
-    fill: #ff0033;
-    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.45));
-}
-
-.sidebar-upload-badges {
-    padding: 0 10px 2px;
 }
 
 .tft-match .sidebar-badges {
@@ -1081,21 +627,7 @@
     display: flex;
 }
 
-#youtube-replay-history li:hover .youtube-replay-actions,
-#youtube-replay-history li:focus-within .youtube-replay-actions,
-#youtube-replay-owned li:hover .youtube-replay-actions,
-#youtube-replay-owned li:focus-within .youtube-replay-actions {
-    display: flex;
-}
-
-#youtube-replay-history .youtube-replay-actions {
-    top: 5px;
-    right: 5px;
-    display: none;
-    gap: 8px;
-}
-
-.favorite, .share, .rename, .delete, .delete-video-only, .replay-action, .youtube-owned-play {
+.favorite, .share, .rename, .delete, .delete-video-only, .replay-action {
     font-size: 16px;
     color: #666;
     transition: color 0.2s;
@@ -1109,73 +641,6 @@
     height: 25px;
 }
 
-.youtube-replay-actions .replay-action {
-    appearance: none;
-    box-sizing: border-box;
-    min-width: 20px;
-    width: auto;
-    height: 25px;
-    margin: 0;
-    border: 0;
-    border-radius: 3px;
-    padding: 0 4px;
-    color: #666;
-    background: rgba(0, 0, 0, 0.5);
-    font-family: inherit;
-    font-size: 16px;
-    font-weight: 400;
-    line-height: 1;
-    cursor: pointer;
-}
-
-.youtube-replay-open:hover,
-.youtube-replay-open:focus-visible {
-    color: #7dd3fc;
-    background: rgba(0, 0, 0, 0.5);
-    outline: none;
-}
-
-.youtube-owned-play {
-    border: 0;
-    color: #666;
-    font: 700 10px/1 Inter, sans-serif;
-    cursor: pointer;
-}
-
-.youtube-owned-play:hover,
-.youtube-owned-play:focus-visible {
-    color: #ff85bd;
-    background: rgba(0, 0, 0, 0.5);
-    outline: none;
-}
-
-.youtube-replay-video-id {
-    display: flex;
-    justify-content: flex-end;
-    gap: 3px;
-    width: 100%;
-    margin-top: 2px;
-    padding-right: 8px;
-    box-sizing: border-box;
-    color: #777;
-    font: 9px/1.25 Inter, sans-serif;
-    white-space: nowrap;
-}
-
-.youtube-replay-video-id strong {
-    overflow: hidden;
-    color: #999;
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-    font-weight: 600;
-    text-overflow: ellipsis;
-}
-
-/* Keep the existing full-width CS label as one line. Compact mode below
-   changes only these two parts into separate rows. */
-.sidebar-cs-total::after {
-    content: " ";
-}
-
 .favorite:hover { color: gold; }
 .share:hover { color: #7dd3fc; }
 .replay-play:hover { color: #34d399; }
@@ -1183,7 +648,7 @@
     opacity: 0.65;
     pointer-events: none;
 }
-.rename:hover { color: #c084fc; }
+.rename:hover { color: rgb(69, 255, 137); }
 .delete:hover { color: red; }
 .delete-video-only:hover { color: orange; }
 
@@ -1199,9 +664,7 @@
 }
 
 .recording-share-modal {
-    width: min(620px, calc(100vw - 32px));
-    max-height: calc(100vh - 32px);
-    overflow-y: auto;
+    width: min(360px, calc(100vw - 32px));
     padding: 14px;
     border: 1px solid #384766;
     border-radius: 12px;
@@ -1267,138 +730,6 @@
     justify-content: center;
     padding: 0;
     text-align: center;
-}
-
-.recording-share-option-youtube {
-    color: #fff;
-    border-color: #b91c1c;
-    background: #a30d13;
-    font-weight: 700;
-}
-
-.recording-share-option-youtube:hover {
-    border-color: #f87171;
-    background: #c81e25;
-}
-
-.recording-share-input {
-    box-sizing: border-box;
-    width: 100%;
-    border: 1px solid #4a5a80;
-    border-radius: 7px;
-    padding: 9px 10px;
-    background: #0d1629;
-    color: #edf2ff;
-    font: inherit;
-}
-
-.recording-share-textarea {
-    min-height: 76px;
-    resize: vertical;
-}
-
-.recording-share-guidelines {
-    display: flex;
-    gap: 8px;
-    align-items: flex-start;
-    color: #cbd5e1;
-    font-size: 12px;
-    line-height: 1.4;
-    cursor: pointer;
-}
-
-.recording-share-guidelines-check {
-    flex: 0 0 auto;
-    margin: 2px 0 0;
-}
-
-.recording-share-link {
-    appearance: none;
-    border: 0;
-    padding: 0;
-    color: #93c5fd;
-    background: transparent;
-    font: inherit;
-    text-decoration: underline;
-    cursor: pointer;
-}
-
-.recording-youtube-requirements {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px 12px;
-    border: 1px solid #665f45;
-    border-radius: 7px;
-    background: #2b2921;
-    color: #ddd7bd;
-    font-size: 12px;
-    line-height: 1.5;
-}
-
-.recording-youtube-requirements[hidden] {
-    display: none;
-}
-
-.recording-youtube-studio-link {
-    width: fit-content;
-    color: #f1d77a;
-}
-
-.recording-share-upload {
-    background: #a30d13;
-    border-color: #b91c1c;
-    text-align: center;
-}
-
-.recording-share-upload:disabled {
-    border-color: #596171;
-    background: #4b5563;
-    color: #c6cad1;
-    cursor: not-allowed;
-    opacity: 1;
-}
-
-.recording-share-uploaded-id {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    padding: 9px 10px;
-    border: 1px solid #3d4f73;
-    border-radius: 8px;
-    background: rgba(15, 23, 42, 0.72);
-    color: #cbd5e1;
-    font-size: 12px;
-}
-
-.recording-share-uploaded-id[hidden] {
-    display: none;
-}
-
-.recording-share-uploaded-id code {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    color: #f8fafc;
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.recording-share-copy-id {
-    flex: 0 0 auto;
-    border: 1px solid #5871a8;
-    border-radius: 6px;
-    padding: 5px 8px;
-    background: #253b67;
-    color: #eff6ff;
-    font: inherit;
-    cursor: pointer;
-}
-
-.recording-share-copy-id:hover {
-    background: #304d83;
 }
 
 .recording-share-option-icon {
@@ -1538,54 +869,6 @@
 
 #sidebar.sidebar-compact .sub-champ-icon {
     display: none !important;
-}
-
-/* Compact recordings use every available horizontal pixel. */
-#sidebar.sidebar-compact #sidebar-content li,
-#sidebar.sidebar-compact #youtube-replay-history li {
-    padding-left: 4px;
-    padding-right: 2px;
-}
-
-#sidebar.sidebar-compact .recording-content {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-    padding-right: 0;
-}
-
-#sidebar.sidebar-compact .sidebar-main {
-    padding-left: 0;
-    padding-right: 0;
-}
-
-#sidebar.sidebar-compact .sidebar-time {
-    margin-left: 14px;
-}
-
-#sidebar.sidebar-compact .sidebar-stats {
-    margin-left: 0;
-    align-items: flex-start;
-    text-align: left;
-    justify-self: start;
-    font-size: 1.1em;
-}
-
-#sidebar.sidebar-compact .sidebar-body-row {
-    display: grid;
-    grid-template-columns: auto auto;
-    justify-content: space-evenly;
-    column-gap: 0;
-}
-
-#sidebar.sidebar-compact .sidebar-cs {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    line-height: 1.15;
-}
-
-#sidebar.sidebar-compact .sidebar-cs-total::after {
-    content: none;
 }
 
 /* --- Collapsed Mode --- */
@@ -1732,12 +1015,11 @@ img.tft-trait {
 
 #server-nav {
     grid-area: server-nav;
-    background-color: var(--sidebar-surface);
+    background-color: #1e1f22;
     display: flex;
     flex-direction: column;
     align-items: center;
     padding: 12px 0;
-    box-sizing: border-box;
     gap: 14px;
     z-index: 100;
     overflow-y: auto;
@@ -1974,7 +1256,6 @@ img.tft-trait {
     flex-direction: column;
     gap: 8px;
     align-items: center;
-    flex: 0 0 auto;
 }
 
 .nav-action-btn {
@@ -1997,24 +1278,25 @@ img.tft-trait {
     color: #fff;
 }
 
-/* Share Modal Compact View & Unified Options Alignment */
-.recording-share-modal {
-    transition: width 0.15s ease-out;
+
+.sidebar-recording-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 6px;
+    margin-inline-start: 6px;
+    border-radius: 4px;
+    background: #521b22;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
-.recording-share-modal.recording-share-modal-compact {
-    width: min(340px, calc(100vw - 32px));
-}
-
-.recording-share-modal-compact .recording-share-modal-title {
-    text-align: center;
-}
-
-.recording-share-modal-options {
-    justify-content: center;
-    gap: 12px;
-}
-.recording-thumbnail-path::placeholder {
-    color: #ffffff;
-    opacity: 0.82;
+.sidebar-recording-badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ff626c;
 }

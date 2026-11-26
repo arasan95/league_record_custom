@@ -1,0 +1,16 @@
+name: Verify LeagueRecord
+description: Run the same locked-source checks for pull requests and releases
+runs:
+  using: composite
+  steps:
+    - shell: pwsh
+      run: bun run check:types
+    - shell: pwsh
+      run: bun test
+    - shell: pwsh
+      run: bun run check:responsibility
+    - shell: pwsh
+      run: |
+        cargo test --locked --manifest-path src-tauri/Cargo.toml -- --skip wad:: --skip generate_type_bindings
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        git diff --exit-code -- src/ts/bindings.ts

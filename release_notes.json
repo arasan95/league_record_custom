@@ -1,13 +1,19 @@
 {
     "notes": [
         "[日本語]",
-        "主な変更点:",
-        "- アイテムが重複して表示される問題を修正しました",
-        "- サイドバーにランク戦のLPが表示されない問題を修正しました",
+        "- 録画が始まらない、映像が黒くなる、ゲームを途中で閉じると録画の終了に失敗する問題を修正しました。",
+        "- スコアボードが表示されないことがある問題を修正し、ウィンドウが狭いときも見やすくしました。",
+        "- 録画中の動画に、サイドバーで赤い REC マークを表示するようにしました。",
+        "- クリップ作成の進み具合が分かるようになり、保存が終わると控えめな音で知らせます。",
+        "- 右上の × を押したときに、アプリを終了するか、システムトレイに格納するかを選べるようになりました。",
+        "- 設定画面の翻訳を見直しました。",
         "",
         "[English]",
-        "Highlights:",
-        "- Fixed an issue where items were displayed duplicated",
-        "- Fixed an issue where LP for ranked games was not shown in the sidebar"
+        "- Fixed issues that could prevent recording from starting, produce a black screen, or cause a recording error when exiting a game early.",
+        "- Fixed cases where the scoreboard did not appear and made it easier to read in narrow windows.",
+        "- Added a red REC badge in the sidebar for recordings in progress.",
+        "- Clip creation now shows progress and plays a quiet sound when the clip is saved.",
+        "- You can now choose whether the close button quits the app or hides it in the system tray.",
+        "- Improved translations in the settings screen."
     ]
 }

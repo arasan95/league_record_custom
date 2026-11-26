@@ -1,4 +1,4 @@
-import type { WebviewWindow } from "../platform/webviewWindow";
+import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 export function applySidebarWidthLayout(sidebarContainer: HTMLDivElement | null, newWidth: number): void {
     if (!sidebarContainer) return;
@@ -10,8 +10,7 @@ export function applySidebarWidthLayout(sidebarContainer: HTMLDivElement | null,
     const dateLimit = 220;
     const collapseLimit = 80;
 
-    const isCompact = newWidth < dateLimit;
-    if (isCompact) {
+    if (newWidth < dateLimit) {
         sidebarContainer.classList.add("sidebar-compact");
     } else {
         sidebarContainer.classList.remove("sidebar-compact");
@@ -23,16 +22,8 @@ export function applySidebarWidthLayout(sidebarContainer: HTMLDivElement | null,
 
         const info = sidebarContainer.querySelector("#sidebar-info");
         const content = sidebarContainer.querySelector("#sidebar-content");
-        const replayHistory = sidebarContainer.querySelector("#youtube-replay-history");
         if (info) (info as HTMLElement).style.zoom = "1";
-        if (content) {
-            (content as HTMLElement).style.zoom = "1";
-            (content as HTMLElement).style.removeProperty("width");
-        }
-        if (replayHistory) {
-            (replayHistory as HTMLElement).style.zoom = "1";
-            (replayHistory as HTMLElement).style.removeProperty("width");
-        }
+        if (content) (content as HTMLElement).style.zoom = "1";
         return;
     }
 
@@ -40,31 +31,17 @@ export function applySidebarWidthLayout(sidebarContainer: HTMLDivElement | null,
 
     if (container) container.style.setProperty("--sidebar-width", `${newWidth}px`);
 
-    // Compact mode first consumes the evenly distributed horizontal spacing.
-    // Once the row reaches its practical content width, scale it uniformly so
-    // the right side remains visible without changing the aspect ratio.
-    const compactScaleStartWidth = 160;
-    const compactMinScale = collapseLimit / compactScaleStartWidth;
-    const scale = isCompact
-        ? Math.max(compactMinScale, Math.min(1, newWidth / compactScaleStartWidth))
-        : Math.max(0.4, Math.min(1.2, newWidth / maxWidth));
+    let targetBase = maxWidth;
+    if (newWidth < dateLimit) targetBase = 220;
+
+    let scale = newWidth / targetBase;
+    scale = Math.max(scale, 0.4);
+    scale = Math.min(scale, 1.2);
 
     const info = sidebarContainer.querySelector("#sidebar-info");
     const sbcontent = sidebarContainer.querySelector("#sidebar-content");
-    const replayHistory = sidebarContainer.querySelector("#youtube-replay-history");
     if (info) (info as HTMLElement).style.setProperty("zoom", scale.toFixed(3));
-    if (sbcontent) {
-        const content = sbcontent as HTMLElement;
-        content.style.setProperty("zoom", scale.toFixed(3));
-        // Let the grid determine the list width. Counter-scaling this element
-        // pushes compact entries beyond the sidebar's visible right edge.
-        content.style.removeProperty("width");
-    }
-    if (replayHistory) {
-        const history = replayHistory as HTMLElement;
-        history.style.setProperty("zoom", scale.toFixed(3));
-        history.style.removeProperty("width");
-    }
+    if (sbcontent) (sbcontent as HTMLElement).style.setProperty("zoom", scale.toFixed(3));
 }
 
 export function applyWindowSizeLayout(params: {
@@ -76,16 +53,10 @@ export function applyWindowSizeLayout(params: {
 }): void {
     const { windowWidth, windowHeight, scoreboardScale, setSidebarWidth, setScoreboardHeight } = params;
 
-    const compactWindowMin = 800;
-    const compactWindowMax = 1200;
-    const compactSidebarMin = 80;
-    const compactSidebarMax = 219;
-
-    if (windowWidth < compactWindowMin) {
+    if (windowWidth < 800) {
         setSidebarWidth(79);
-    } else if (windowWidth < compactWindowMax) {
-        const progress = (windowWidth - compactWindowMin) / (compactWindowMax - compactWindowMin);
-        setSidebarWidth(compactSidebarMin + (compactSidebarMax - compactSidebarMin) * progress);
+    } else if (windowWidth < 1200) {
+        setSidebarWidth(219);
     } else {
         setSidebarWidth(325);
     }

@@ -1,45 +1,11 @@
 import { commands, type Participant, type Recording } from "../bindings";
-import { startDrag } from "../platform/drag";
-import { writeText } from "../platform/clipboard";
-import { open } from "../platform/shell";
-import {
-    cancelYouTubeUpload,
-    chooseYouTubeThumbnail,
-    getYouTubeAuthStatus,
-    getYouTubeChannelCapabilities,
-    getYouTubeFirebaseIdToken,
-    getYouTubeUploadJob,
-    previewYouTubeThumbnail,
-    reopenYouTubeSignIn,
-    setYouTubeThumbnail,
-    signInToYouTube,
-    signOutFromYouTube,
-    startYouTubeUpload,
-    YOUTUBE_AUTH_CHANGED_EVENT,
-    YOUTUBE_AUTH_CONNECTED_EVENT,
-    type YouTubeUploadJob,
-} from "../platform/youtube";
-import {
-    connectReplayShareGoogle,
-    getReplayShareAuthStatus,
-    publishReplayShare,
-    signOutReplayShareAuth,
-} from "../platform/firebase";
-import { parseYouTubeVideoId, prepareReplayShare } from "../replay_share";
-import { buildYouTubeUploadDefaults } from "../youtube_upload_defaults";
-import { UI_LANGUAGE_CHANGED_EVENT, isJapaneseUi } from "../ui_locale";
-import {
-    findYouTubeUploadForSource,
-    rememberYouTubeUpload,
-    YOUTUBE_UPLOAD_HISTORY_CHANGED_EVENT,
-} from "../youtube_upload_history";
+import { startDrag } from "@crabnebula/tauri-plugin-drag";
+import { open } from "@tauri-apps/plugin-shell";
 import xLogoIcon from "../../assets/share-icons/x-logo.svg";
 import discordSymbolIcon from "../../assets/share-icons/discord-symbol.svg";
-import youtubeIcon from "../../assets/share-icons/youtube-icon.svg";
 import {
     getChampionIconUrl,
     getChampionIconUrlById,
-    getChampionNameById,
     getTftItemIconUrl,
     getTftTraitIconUrl,
     getTftTraitStyleClass,
@@ -48,7 +14,6 @@ import {
 import { getText } from "../i18n";
 import { isFavorite, toVideoName } from "../util";
 import { getShortQueueLabel } from "./queue_helpers";
-import { requestOwnedYouTubeReplay } from "./youtube_replay_sidebar_usecase";
 import {
     calcCsPerMin,
     createClipIconElement,
@@ -86,7 +51,7 @@ function createReplayActionButton(videoId: string, titleText: string): HTMLSpanE
         try {
             const result = await commands.playRecordingReplay(videoId);
             if (result.status === "error") {
-                alert(result.error || (isJapaneseUi() ? "リプレイ再生に失敗しました。" : "Could not play the replay."));
+                alert(result.error || "リプレイ再生に失敗しました。");
             }
         } finally {
             button.classList.remove("is-loading");
@@ -95,109 +60,13 @@ function createReplayActionButton(videoId: string, titleText: string): HTMLSpanE
     return button;
 }
 
-function createShareIcon(kind: "x" | "discord" | "youtube"): HTMLImageElement {
+function createShareIcon(kind: "x" | "discord"): HTMLImageElement {
     const img = document.createElement("img");
     img.className = "recording-share-option-icon";
     img.alt = "";
     img.draggable = false;
-    img.src = kind === "x" ? xLogoIcon : kind === "discord" ? discordSymbolIcon : youtubeIcon;
+    img.src = kind === "x" ? xLogoIcon : discordSymbolIcon;
     return img;
-}
-
-function createYouTubeUploadBadge(): SVGSVGElement {
-    const badge = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    badge.setAttribute("class", "sidebar-youtube-badge");
-    badge.setAttribute("viewBox", "0 0 20 14");
-    badge.setAttribute("aria-label", (isJapaneseUi() ? "YouTubeへアップロード済み" : "Uploaded to YouTube"));
-    badge.setAttribute("role", "img");
-    badge.title = (isJapaneseUi() ? "YouTubeへアップロード済み" : "Uploaded to YouTube");
-    const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    // evenodd makes the play triangle a real hole, exposing the sidebar
-    // background rather than painting it white.
-    shape.setAttribute("fill-rule", "evenodd");
-    shape.setAttribute("d", "M3.1 0h13.8C18.6 0 20 1.4 20 3.1v7.8c0 1.7-1.4 3.1-3.1 3.1H3.1C1.4 14 0 12.6 0 10.9V3.1C0 1.4 1.4 0 3.1 0Zm4.8 3.2v7.6L14.1 7 7.9 3.2Z");
-    badge.append(shape);
-    return badge;
-}
-
-function createOwnedYouTubeReplayButton(youtubeVideoId: string): HTMLButtonElement {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "youtube-owned-play";
-    button.dataset.youtubeVideoId = youtubeVideoId;
-    const title = (isJapaneseUi() ? "共有プレイヤーの「自分の投稿」で再生" : 'Play from "My Uploads" in the shared player');
-    button.title = title;
-    button.setAttribute("aria-label", title);
-    button.textContent = "YT";
-    button.addEventListener("click", (event) => {
-        event.stopPropagation();
-        requestOwnedYouTubeReplay(youtubeVideoId);
-    });
-    return button;
-}
-
-function syncYouTubeUploadControls(item: HTMLElement): void {
-    const sourceVideoId = item.dataset.videoId || "";
-    const uploaded = sourceVideoId ? findYouTubeUploadForSource(sourceVideoId) : null;
-    let container = item.querySelector<HTMLElement>(".sidebar-badges");
-    const badge = item.querySelector<HTMLElement>(".sidebar-youtube-badge");
-    const playButton = item.querySelector<HTMLButtonElement>(".youtube-owned-play");
-    if (!uploaded) {
-        badge?.remove();
-        playButton?.remove();
-        return;
-    }
-    if (!container) {
-        container = document.createElement("div");
-        container.className = "sidebar-badges sidebar-upload-badges";
-        item.querySelector(".sidebar-actions")?.before(container);
-    }
-    if (!badge) {
-        container.append(createYouTubeUploadBadge());
-    } else {
-        const title = (isJapaneseUi() ? "YouTubeへアップロード済み" : "Uploaded to YouTube");
-        badge.setAttribute("aria-label", title);
-        badge.title = title;
-    }
-    if (!playButton || playButton.dataset.youtubeVideoId !== uploaded.youtubeVideoId) {
-        playButton?.remove();
-        item.querySelector(".sidebar-actions")?.prepend(createOwnedYouTubeReplayButton(uploaded.youtubeVideoId));
-    } else {
-        const title = (isJapaneseUi() ? "共有プレイヤーの「自分の投稿」で再生" : 'Play from "My Uploads" in the shared player');
-        playButton.title = title;
-        playButton.setAttribute("aria-label", title);
-    }
-}
-
-function refreshYouTubeUploadBadges(): void {
-    document.querySelectorAll<HTMLElement>("li[data-video-id]").forEach((item) => {
-        syncYouTubeUploadControls(item);
-    });
-}
-
-window.addEventListener(YOUTUBE_UPLOAD_HISTORY_CHANGED_EVENT, refreshYouTubeUploadBadges);
-window.addEventListener(UI_LANGUAGE_CHANGED_EVENT, refreshYouTubeUploadBadges);
-
-function formatUploadProgress(job: YouTubeUploadJob): string {
-    if (job.state === "thumbnail_preparing") return (isJapaneseUi() ? "サムネイルを作成・検証しています…" : "Generating and validating the thumbnail…");
-    if (job.state === "preparing") return (isJapaneseUi() ? "アップロードを準備しています…" : "Preparing upload…");
-    if (job.state === "uploading") {
-        const sent = job.sentBytes || 0;
-        const total = job.totalBytes || 0;
-        const percent = total > 0 ? Math.min(100, Math.floor(sent / total * 100)) : 0;
-        const sentMiB = (sent / 1024 / 1024).toFixed(1);
-        const totalMiB = (total / 1024 / 1024).toFixed(1);
-        return (isJapaneseUi() ? `アップロード中: ${percent}%（${sentMiB} / ${totalMiB} MiB）` : `Uploading: ${percent}% (${sentMiB} / ${totalMiB} MiB)`);
-    }
-    if (job.state === "thumbnail_uploading") return (isJapaneseUi() ? "動画の送信が完了しました。サムネイルをYouTubeへ設定しています…" : "Video upload completed. Applying the YouTube thumbnail…");
-    if (job.state === "processing") {
-        const percent = typeof job.processingPercent === "number" ? ` ${job.processingPercent}%` : "";
-        return (isJapaneseUi() ? `YouTubeで動画を処理しています${percent}（${job.processingStatus || "保留中"}）…` : `YouTube is processing the video${percent} (${job.processingStatus || "pending"})…`);
-    }
-    if (job.state === "completed") return (isJapaneseUi() ? "YouTubeへのアップロードが完了しました。" : "YouTube upload completed.");
-    if (job.state === "cancelled") return (isJapaneseUi() ? "アップロードをキャンセルしました。" : "Upload cancelled.");
-    if (job.state === "failed") return job.error || (isJapaneseUi() ? "アップロードに失敗しました。" : "Upload failed.");
-    return "";
 }
 
 type SidebarImagePerfStats = {
@@ -463,13 +332,10 @@ function closeShareModal(): void {
     document.getElementById(SHARE_MODAL_ID)?.remove();
 }
 
-async function showShareModal(recording: Recording): Promise<void> {
+async function showShareModal(videoId: string): Promise<void> {
     closeShareModal();
-    const videoId = recording.videoId;
-    const isClipUpload = videoId.includes("_clip");
     const settings = await commands.getSettings().catch(() => null);
     const currentLanguage = (settings?.language || "en") as string;
-    const tr = (japanese: string, english: string): string => currentLanguage === "ja" ? japanese : english;
 
     const overlay = document.createElement("div");
     overlay.id = SHARE_MODAL_ID;
@@ -483,7 +349,6 @@ async function showShareModal(recording: Recording): Promise<void> {
     content.className = "recording-share-modal-content";
 
     const renderSelectView = () => {
-        panel.classList.add("recording-share-modal-compact");
         content.replaceChildren();
 
         const title = document.createElement("div");
@@ -509,771 +374,17 @@ async function showShareModal(recording: Recording): Promise<void> {
         discordButton.append(createShareIcon("discord"));
         discordButton.onclick = () => renderDiscordView();
 
-        const youtubeButton = document.createElement("button");
-        youtubeButton.className = "recording-share-option recording-share-option-icon-only";
-        youtubeButton.type = "button";
-        youtubeButton.title = "YouTube";
-        youtubeButton.setAttribute("aria-label", tr("YouTubeへアップロード", "Upload to YouTube"));
-        youtubeButton.append(createShareIcon("youtube"));
-        youtubeButton.onclick = () => void renderYouTubeView();
-
-        const uploaded = findYouTubeUploadForSource(videoId);
-        const uploadedLink = uploaded
-            ? `https://www.youtube.com/watch?v=${uploaded.youtubeVideoId}`
-            : null;
-        const uploadedLinkRow = document.createElement("div");
-        uploadedLinkRow.className = "recording-share-uploaded-id";
-        if (uploadedLink) {
-            const uploadedLinkLabel = document.createElement("span");
-            uploadedLinkLabel.textContent = tr("YouTubeリンク", "YouTube Link");
-            const uploadedLinkValue = document.createElement("code");
-            uploadedLinkValue.textContent = uploadedLink;
-            uploadedLinkValue.title = uploadedLink;
-            const copyUploadedLink = document.createElement("button");
-            copyUploadedLink.type = "button";
-            copyUploadedLink.className = "recording-share-copy-id";
-            copyUploadedLink.textContent = tr("リンクをコピー", "Copy Link");
-            copyUploadedLink.addEventListener("click", async () => {
-                try {
-                    await writeText(uploadedLink);
-                    copyUploadedLink.textContent = tr("コピーしました", "Copied");
-                    window.setTimeout(() => { copyUploadedLink.textContent = tr("リンクをコピー", "Copy Link"); }, 1500);
-                } catch {
-                    copyUploadedLink.textContent = tr("コピーできませんでした", "Could not copy");
-                }
-            });
-            uploadedLinkRow.append(uploadedLinkLabel, uploadedLinkValue, copyUploadedLink);
-        }
-
         const cancelButton = document.createElement("button");
         cancelButton.className = "recording-share-cancel";
         cancelButton.type = "button";
         cancelButton.textContent = getText(currentLanguage as any, "close" as any) || "Close";
         cancelButton.onclick = () => closeShareModal();
 
-        options.append(xButton, discordButton, youtubeButton);
-        content.append(title, options);
-        if (uploadedLink) content.append(uploadedLinkRow);
-        content.append(cancelButton);
-    };
-
-    const renderYouTubeView = async () => {
-        panel.classList.remove("recording-share-modal-compact");
-        content.replaceChildren();
-        const videoPath = getRecordingMp4Path(videoId);
-        const defaultTitle = basename(videoPath).replace(/\.(mp4|webm)$/i, "");
-
-        const title = document.createElement("div");
-        title.className = "recording-share-modal-title";
-        title.textContent = tr("YouTubeへアップロード", "Upload to YouTube");
-
-        const status = document.createElement("div");
-        status.className = "recording-share-modal-subtitle";
-        status.textContent = tr("接続状態を確認しています…", "Checking connection…");
-
-        const backButton = document.createElement("button");
-        backButton.className = "recording-share-option";
-        backButton.type = "button";
-        backButton.textContent = getText(currentLanguage as any, "back" as any) || "Back";
-        backButton.onclick = () => renderSelectView();
-
-        const actions = document.createElement("div");
-        actions.className = "recording-share-modal-actions";
-        actions.append(backButton);
-        content.append(title, status, actions);
-
-        let auth;
-        try {
-            auth = await getYouTubeAuthStatus();
-        } catch (error) {
-            status.textContent = String(error);
-            return;
-        }
-        if (!auth.configured) {
-            status.textContent = tr("YouTubeの開発用Client IDが設定されていません。", "The YouTube OAuth Client ID is not configured.");
-            return;
-        }
-        if (!auth.connected) {
-            status.textContent = tr(
-                "Googleアカウントを接続すると、自分のYouTubeチャンネルへのアップロードと試合データの登録ができます。",
-                "Connect a Google account to upload to your YouTube channel and publish match data.",
-            );
-            const connect = document.createElement("button");
-            connect.className = "recording-share-option";
-            connect.type = "button";
-            connect.textContent = tr("Googleアカウントを接続", "Connect Google Account");
-            let googleAuthorizationPending = false;
-            connect.onclick = async () => {
-                if (googleAuthorizationPending) {
-                    status.textContent = tr("Google認証画面をもう一度開いています…", "Opening Google authorization again…");
-                    try {
-                        await reopenYouTubeSignIn();
-                        status.textContent = tr(
-                            "ブラウザでGoogleアカウントにログインしてください…",
-                            "Sign in to your Google account in the browser…",
-                        );
-                    } catch (error) {
-                        status.textContent = error instanceof Error ? error.message : String(error);
-                    }
-                    return;
-                }
-                googleAuthorizationPending = true;
-                connect.textContent = tr("Google認証画面をもう一度開く", "Open Google Authorization Again");
-                status.textContent = tr("ブラウザでGoogleアカウントにログインしてください…", "Sign in to your Google account in the browser…");
-                try {
-                    const signedIn = await signInToYouTube();
-                    if (!signedIn.firebaseIdToken) {
-                        throw new Error(tr(
-                            "Google本人確認情報を取得できませんでした。",
-                            "Could not obtain Google identity information.",
-                        ));
-                    }
-                    await connectReplayShareGoogle(signedIn.firebaseIdToken);
-                    window.dispatchEvent(new Event(YOUTUBE_AUTH_CHANGED_EVENT));
-                    window.dispatchEvent(new Event(YOUTUBE_AUTH_CONNECTED_EVENT));
-                    await renderYouTubeView();
-                } catch (error) {
-                    status.textContent = error instanceof Error ? error.message : String(error);
-                    googleAuthorizationPending = false;
-                    connect.textContent = tr("Googleアカウントを接続", "Connect Google Account");
-                }
-            };
-            actions.prepend(connect);
-            return;
-        }
-
-        let connectedChannelTitle: string | null = null;
-        let connectedChannelId: string | null = null;
-        try {
-            const channel = await getYouTubeChannelCapabilities();
-            connectedChannelTitle = channel.channelTitle;
-            connectedChannelId = channel.channelId;
-        } catch (error) {
-            console.warn("Could not identify the connected YouTube channel:", error);
-        }
-        const connectedChannel = document.createElement("div");
-        connectedChannel.className = "recording-share-modal-subtitle";
-        connectedChannel.style.padding = "10px 12px";
-        connectedChannel.style.border = "1px solid #4b5563";
-        connectedChannel.style.borderRadius = "8px";
-        if (connectedChannelId) {
-            const channelUrl = `https://www.youtube.com/channel/${encodeURIComponent(connectedChannelId)}`;
-            const channelLabel = document.createElement("span");
-            channelLabel.textContent = tr(
-                `アップロード先: ${connectedChannelTitle || connectedChannelId}（チャンネルID: ${connectedChannelId}）`,
-                `Upload destination: ${connectedChannelTitle || connectedChannelId} (Channel ID: ${connectedChannelId})`,
-            );
-            const openChannel = document.createElement("button");
-            openChannel.type = "button";
-            openChannel.className = "recording-share-link";
-            openChannel.style.marginLeft = "8px";
-            openChannel.textContent = tr("チャンネルを確認", "View Channel");
-            openChannel.onclick = () => void open(channelUrl);
-            connectedChannel.append(channelLabel, openChannel);
-            status.textContent = tr("接続先チャンネルを確認しました。", "Connected channel confirmed.");
-        } else {
-            connectedChannel.textContent = tr(
-                "接続中のYouTubeチャンネルを確認できませんでした。再接続するか、YouTubeチャンネルが作成済みか確認してください。",
-                "The connected YouTube channel could not be identified. Reconnect Google or confirm that the account has a YouTube channel.",
-            );
-            status.textContent = connectedChannel.textContent;
-        }
-
-        let replayAuth: Awaited<ReturnType<typeof getReplayShareAuthStatus>> = {
-            authenticated: false,
-            google: false,
-            anonymous: false,
-            uid: null,
-            displayName: null,
-            email: null,
-            photoURL: null,
-        };
-
-        const titleInput = document.createElement("input");
-        titleInput.className = "recording-share-input";
-        let generatedDefaults = { title: defaultTitle.slice(0, 100), description: "" };
-        if (recording.metadata && "Metadata" in recording.metadata) {
-            generatedDefaults = await buildYouTubeUploadDefaults(recording.metadata.Metadata, getChampionNameById, { isClip: isClipUpload });
-        }
-        titleInput.value = generatedDefaults.title;
-        titleInput.maxLength = 100;
-        titleInput.placeholder = tr("タイトル（1〜100文字）", "Title (1–100 characters)");
-        const description = document.createElement("textarea");
-        description.className = "recording-share-input recording-share-textarea";
-        description.maxLength = 5000;
-        description.placeholder = tr("説明（任意、5,000文字まで）", "Description (optional, up to 5,000 characters)");
-        description.value = generatedDefaults.description;
-        const privacyStatus = document.createElement("select");
-        privacyStatus.className = "recording-share-input";
-        privacyStatus.innerHTML = currentLanguage === "ja"
-            ? "<option value='private'>非公開</option><option value='unlisted'>限定公開</option><option value='public'>公開</option>"
-            : "<option value='private'>Private</option><option value='unlisted'>Unlisted</option><option value='public'>Public</option>";
-        privacyStatus.value = "public";
-        const registerReplayShareLabel = document.createElement("label");
-        registerReplayShareLabel.className = "recording-share-guidelines";
-        const registerReplayShare = document.createElement("input");
-        registerReplayShare.type = "checkbox";
-        registerReplayShare.checked = true;
-        registerReplayShare.className = "recording-share-guidelines-check";
-        const registerReplayShareText = document.createElement("span");
-        registerReplayShareText.textContent = tr(
-            "試合データをDBへ登録して、YouTube URLから再生できるようにする",
-            "Publish match data so the replay can be opened from its YouTube URL",
-        );
-        registerReplayShareLabel.append(registerReplayShare, registerReplayShareText);
-        const anonymousShareLabel = document.createElement("label");
-        anonymousShareLabel.className = "recording-share-guidelines";
-        const anonymousShare = document.createElement("input");
-        anonymousShare.type = "checkbox";
-        anonymousShare.className = "recording-share-guidelines-check";
-        const anonymousShareText = document.createElement("span");
-        anonymousShareText.textContent = tr(
-            "試合データを匿名化して共有する（名前・Riotタグ・ランク・サモナーレベル・内部IDを除外）",
-            "Anonymize shared match data (remove names, Riot tags, ranks, summoner levels, and internal IDs)",
-        );
-        anonymousShareLabel.append(anonymousShare, anonymousShareText);
-        const updateReplayShareOptions = () => {
-            const enabled = registerReplayShare.checked;
-            anonymousShare.disabled = !enabled;
-            anonymousShareLabel.style.opacity = enabled ? "" : "0.55";
-        };
-        registerReplayShare.addEventListener("change", updateReplayShareOptions);
-        updateReplayShareOptions();
-        const policyLabel = document.createElement("label");
-        policyLabel.className = "recording-share-guidelines";
-        const policyAccepted = document.createElement("input");
-        policyAccepted.type = "checkbox";
-        policyAccepted.className = "recording-share-guidelines-check";
-        const privacyPolicyButton = document.createElement("button");
-        privacyPolicyButton.type = "button";
-        privacyPolicyButton.className = "recording-share-link";
-        privacyPolicyButton.textContent = tr("プライバシーポリシー", "Privacy Policy");
-        privacyPolicyButton.onclick = () => void open(currentLanguage === "ja"
-            ? "https://leaguerecord.web.app/ja/privacy.html"
-            : "https://leaguerecord.web.app/privacy.html");
-        const termsButton = document.createElement("button");
-        termsButton.type = "button";
-        termsButton.className = "recording-share-link";
-        termsButton.textContent = tr("利用規約", "Terms of Service");
-        termsButton.onclick = () => void open(currentLanguage === "ja"
-            ? "https://leaguerecord.web.app/ja/terms.html"
-            : "https://leaguerecord.web.app/terms.html");
-        const policyText = document.createElement("span");
-        if (currentLanguage === "ja") {
-            policyText.append("YouTubeアップロードに関する ", privacyPolicyButton, " と ", termsButton, " に同意します。");
-        } else {
-            policyText.append("I agree to the ", privacyPolicyButton, " and ", termsButton, " for YouTube uploads.");
-        }
-        policyLabel.append(policyAccepted, policyText);
-        const guidelinesLabel = document.createElement("label");
-        guidelinesLabel.className = "recording-share-guidelines";
-        const guidelinesConfirmed = document.createElement("input");
-        guidelinesConfirmed.type = "checkbox";
-        guidelinesConfirmed.className = "recording-share-guidelines-check";
-        const guidelinesText = document.createElement("span");
-        guidelinesText.textContent = tr(
-            "投稿する動画がYouTubeコミュニティガイドラインに準拠していることを確認しました。",
-            "I confirm that this video complies with the YouTube Community Guidelines.",
-        );
-        guidelinesLabel.append(guidelinesConfirmed, guidelinesText);
-        const note = document.createElement("div");
-        note.className = "recording-share-modal-subtitle";
-        note.textContent = tr(
-            "元の録画またはクリップを再エンコードせず、その解像度のままYouTubeへ送信します。試合データのDB登録は任意です。YouTube側のHD処理には時間がかかる場合があります。",
-            "The original recording or clip is uploaded at its current resolution without re-encoding. Publishing match data is optional. YouTube HD processing may take some time.",
-        );
-        const thumbnailEligibilityHelp = document.createElement("div");
-        thumbnailEligibilityHelp.className = "recording-youtube-requirements";
-        thumbnailEligibilityHelp.hidden = true;
-        const thumbnailEligibilityText = document.createElement("span");
-        thumbnailEligibilityText.textContent = tr(
-            "YouTube Studio → 設定 → チャンネル → 機能の利用資格で、カスタムサムネイルの要件を満たしてください。",
-            "In YouTube Studio, open Settings → Channel → Feature eligibility and complete the requirements for custom thumbnails.",
-        );
-        const openYouTubeStudio = document.createElement("button");
-        openYouTubeStudio.type = "button";
-        openYouTubeStudio.className = "recording-share-link recording-youtube-studio-link";
-        openYouTubeStudio.textContent = tr("YouTube Studioを開く", "Open YouTube Studio");
-        openYouTubeStudio.onclick = () => void open("https://studio.youtube.com/");
-        thumbnailEligibilityHelp.append(thumbnailEligibilityText, openYouTubeStudio);
-        const updateThumbnailEligibilityHelp = (error: unknown) => {
-            const message = error instanceof Error ? error.message : String(error ?? "");
-            thumbnailEligibilityHelp.hidden = !(
-                /カスタムサムネイル/u.test(message)
-                || /custom\s+thumbnail/iu.test(message)
-                || /thumbnail[^.]*enabled/iu.test(message)
-            );
-        };
-        const existingVideoUrl = document.createElement("input");
-        existingVideoUrl.className = "recording-share-input";
-        existingVideoUrl.placeholder = tr("登録済みYouTube動画のURL（試合データのみ更新）", "Existing YouTube video URL (update match data only)");
-        const republishMetadata = document.createElement("button");
-        republishMetadata.className = "recording-share-option";
-        republishMetadata.type = "button";
-        republishMetadata.textContent = tr("既存動画へ試合データを登録", "Publish Match Data for Existing Video");
-        republishMetadata.onclick = async () => {
-            let youtubeVideoId: string;
-            try {
-                youtubeVideoId = parseYouTubeVideoId(existingVideoUrl.value);
-            } catch (error) {
-                status.textContent = error instanceof Error ? error.message : String(error);
-                return;
-            }
-            if (!await ensureReplayShareAuth()) return;
-            if (!window.confirm(tr(
-                "YouTube動画は変更せず、この録画の試合データだけをFirestoreへ登録・更新します。続行しますか？",
-                "This will publish or update only this recording's match data in Firestore without changing the YouTube video. Continue?",
-            ))) return;
-            republishMetadata.disabled = true;
-            status.textContent = tr("試合データを登録しています…", "Publishing match data…");
-            try {
-                const share = await prepareReplayShare(recording.metadata, youtubeVideoId, {
-                    anonymizePlayers: anonymousShare.checked,
-                });
-                await publishReplayShare(share);
-                rememberYouTubeUpload(videoId, youtubeVideoId);
-                status.textContent = tr("既存YouTube動画の試合データを更新しました。", "Updated match data for the existing YouTube video.");
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                status.textContent = message.includes("Firestoreへの登録が拒否")
-                    ? tr(
-                        "この共有データは別のFirebase認証で登録されています。Firebase Consoleで該当する replays 文書を削除してから、もう一度登録してください。",
-                        "This shared replay belongs to another Firebase identity. Delete the corresponding replays document in Firebase Console, then try again.",
-                    )
-                    : message;
-            } finally {
-                republishMetadata.disabled = false;
-            }
-        };
-        const upload = document.createElement("button");
-        upload.className = "recording-share-option recording-share-upload";
-        upload.type = "button";
-        upload.textContent = tr("アップロードを開始", "Start Upload");
-        const cancel = document.createElement("button");
-        cancel.className = "recording-share-cancel";
-        cancel.type = "button";
-        cancel.textContent = tr("キャンセル", "Cancel");
-        cancel.style.display = "none";
-        const openVideo = document.createElement("button");
-        openVideo.className = "recording-share-option";
-        openVideo.type = "button";
-        openVideo.textContent = tr("YouTubeで開く", "Open in YouTube");
-        openVideo.style.display = "none";
-        const retryThumbnail = document.createElement("button");
-        retryThumbnail.className = "recording-share-option";
-        retryThumbnail.type = "button";
-        retryThumbnail.textContent = tr("サムネイル設定を再試行", "Retry Thumbnail");
-        retryThumbnail.style.display = "none";
-        const previewThumbnail = document.createElement("button");
-        previewThumbnail.className = "recording-share-option";
-        previewThumbnail.type = "button";
-        previewThumbnail.textContent = tr("サムネイルをプレビュー", "Preview Thumbnail");
-        let customThumbnailPath: string | null = null;
-        let skipThumbnail = false;
-        const thumbnailPicker = document.createElement("div");
-        thumbnailPicker.style.display = "flex";
-        thumbnailPicker.style.gap = "8px";
-        thumbnailPicker.style.alignItems = "center";
-        thumbnailPicker.style.flexWrap = "wrap";
-        const thumbnailPathDisplay = document.createElement("input");
-        thumbnailPathDisplay.className = "recording-thumbnail-path";
-        thumbnailPathDisplay.readOnly = true;
-        thumbnailPathDisplay.placeholder = tr("自動生成サムネイルを使用", "Use automatically generated thumbnail");
-        thumbnailPathDisplay.style.flex = "1";
-        thumbnailPathDisplay.style.background = "#4b5563";
-        thumbnailPathDisplay.style.color = "#ffffff";
-        thumbnailPathDisplay.style.border = "1px solid #6b7280";
-        const browseThumbnail = document.createElement("button");
-        browseThumbnail.type = "button";
-        browseThumbnail.className = "recording-share-option";
-        browseThumbnail.textContent = tr("参照…", "Browse…");
-        browseThumbnail.onclick = async () => {
-            const selected = await chooseYouTubeThumbnail();
-            if (!selected) return;
-            skipThumbnail = false;
-            customThumbnailPath = selected;
-            thumbnailPathDisplay.value = selected;
-            previewThumbnail.disabled = false;
-            thumbnailPreviewImage.hidden = true;
-            previewThumbnail.textContent = tr("サムネイルをプレビュー", "Preview Thumbnail");
-        };
-        const clearThumbnail = document.createElement("button");
-        clearThumbnail.type = "button";
-        clearThumbnail.className = "recording-share-option";
-        clearThumbnail.textContent = tr("自動生成に戻す", "Use Automatic Thumbnail");
-        clearThumbnail.onclick = () => {
-            skipThumbnail = false;
-            customThumbnailPath = null;
-            thumbnailPathDisplay.value = "";
-            thumbnailPathDisplay.placeholder = tr("自動生成サムネイルを使用", "Use automatically generated thumbnail");
-            previewThumbnail.disabled = false;
-            thumbnailPreviewImage.hidden = true;
-            previewThumbnail.textContent = tr("サムネイルをプレビュー", "Preview Thumbnail");
-        };
-        const noThumbnail = document.createElement("button");
-        noThumbnail.type = "button";
-        noThumbnail.className = "recording-share-option recording-thumbnail-none";
-        noThumbnail.textContent = tr("サムネイルなし", "No Thumbnail");
-        noThumbnail.onclick = () => {
-            skipThumbnail = true;
-            customThumbnailPath = null;
-            thumbnailPathDisplay.value = tr("サムネイルを設定しません", "No thumbnail will be applied");
-            previewThumbnail.disabled = true;
-            thumbnailPreviewImage.hidden = true;
-            status.textContent = tr(
-                "サムネイルなしでYouTubeへアップロードします。",
-                "The video will be uploaded without applying a thumbnail.",
-            );
-        };
-        thumbnailPicker.append(thumbnailPathDisplay, browseThumbnail, clearThumbnail, noThumbnail);
-        const thumbnailPreviewImage = document.createElement("img");
-        thumbnailPreviewImage.alt = tr("YouTubeサムネイルのプレビュー", "YouTube thumbnail preview");
-        thumbnailPreviewImage.hidden = true;
-        thumbnailPreviewImage.style.width = "100%";
-        thumbnailPreviewImage.style.aspectRatio = "16 / 9";
-        thumbnailPreviewImage.style.objectFit = "contain";
-        thumbnailPreviewImage.style.borderRadius = "10px";
-        thumbnailPreviewImage.style.background = "#0b0e14";
-        previewThumbnail.onclick = async () => {
-            previewThumbnail.disabled = true;
-            status.textContent = tr("サムネイルのプレビューを作成しています…", "Generating thumbnail preview…");
-            try {
-                const preview = await previewYouTubeThumbnail(recording.metadata, {
-                    isClip: isClipUpload,
-                    customThumbnailPath,
-                });
-                thumbnailPreviewImage.src = preview.dataUrl;
-                thumbnailPreviewImage.hidden = false;
-                status.textContent = tr(
-                    `サムネイルのプレビューを作成しました（${Math.ceil(preview.bytes / 1024)}KB）。`,
-                    `Thumbnail preview generated (${Math.ceil(preview.bytes / 1024)} KB).`,
-                );
-                previewThumbnail.textContent = tr("プレビューを更新", "Refresh Preview");
-            } catch (error) {
-                status.textContent = error instanceof Error ? error.message : String(error);
-            } finally {
-                previewThumbnail.disabled = false;
-            }
-        };
-        const uploadedVideoId = document.createElement("div");
-        uploadedVideoId.className = "recording-share-uploaded-id";
-        uploadedVideoId.hidden = true;
-        const uploadedVideoIdLabel = document.createElement("span");
-        uploadedVideoIdLabel.textContent = tr("YouTube動画ID", "YouTube Video ID");
-        const uploadedVideoIdValue = document.createElement("code");
-        const copyVideoId = document.createElement("button");
-        copyVideoId.type = "button";
-        copyVideoId.className = "recording-share-copy-id";
-        copyVideoId.textContent = tr("IDをコピー", "Copy ID");
-        copyVideoId.addEventListener("click", async () => {
-            const id = uploadedVideoIdValue.textContent || "";
-            if (!id) return;
-            try {
-                await writeText(id);
-                copyVideoId.textContent = tr("コピーしました", "Copied");
-                window.setTimeout(() => { copyVideoId.textContent = tr("IDをコピー", "Copy ID"); }, 1500);
-            } catch {
-                status.textContent = tr("動画IDをコピーできませんでした。", "Could not copy the video ID.");
-            }
-        });
-        uploadedVideoId.append(uploadedVideoIdLabel, uploadedVideoIdValue, copyVideoId);
-        const disconnect = document.createElement("button");
-        disconnect.className = "recording-share-option";
-        disconnect.type = "button";
-        disconnect.textContent = tr("Google接続を解除", "Disconnect Google");
-        disconnect.onclick = async () => {
-            disconnect.disabled = true;
-            status.textContent = tr("Google接続を解除しています…", "Disconnecting Google…");
-            try {
-                await signOutReplayShareAuth();
-                await signOutFromYouTube();
-                window.dispatchEvent(new Event(YOUTUBE_AUTH_CHANGED_EVENT));
-                await renderYouTubeView();
-            } catch (error) {
-                status.textContent = error instanceof Error ? error.message : String(error);
-                disconnect.disabled = false;
-            }
-        };
-        let poller: ReturnType<typeof setInterval> | null = null;
-        let uploadHasStarted = false;
-        let shouldPublishMetadata = false;
-        let replayShareState: "idle" | "publishing" | "published" | "not_requested" | "unavailable" | "failed" = "idle";
-        let thumbnailState: "idle" | "setting" | "set" | "failed" = "idle";
-        let completedJob: YouTubeUploadJob | null = null;
-        const normalizedSourceName = (value: string) => value.replace(/\\/g, "/").split("/").pop()?.replace(/\.(mp4|webm)$/i, "") ?? "";
-        const jobBelongsToRecording = (job: YouTubeUploadJob) => (
-            job.sourceVideoId === videoId
-            || (Boolean(job.fileName) && normalizedSourceName(job.fileName!) === normalizedSourceName(videoId))
-        );
-        const stopPolling = () => { if (poller) clearInterval(poller); poller = null; };
-        const ensureReplayShareAuth = async (): Promise<boolean> => {
-            status.textContent = tr(
-                "試合データを登録するため、FirebaseへGoogleアカウントを接続しています…",
-                "Connecting your Google account to Firebase to publish match data…",
-            );
-            try {
-                // Firebase can retain a different Google account after the
-                // desktop YouTube session changes. Always synchronize with
-                // the current YouTube credential before storing ownerUid.
-                await connectReplayShareGoogle(await getYouTubeFirebaseIdToken());
-                replayAuth = await getReplayShareAuthStatus();
-                if (!replayAuth.google) {
-                    throw new Error(tr(
-                        "FirebaseのGoogle認証を確認できませんでした。",
-                        "Could not verify Google authentication in Firebase.",
-                    ));
-                }
-                return true;
-            } catch (error) {
-                status.textContent = tr("試合データを登録できません。", "Could not publish match data. ")
-                    + (error instanceof Error ? error.message : String(error));
-                return false;
-            }
-        };
-        const setThumbnailForJob = async (job: YouTubeUploadJob): Promise<boolean> => {
-            if (!job.youtubeVideoId || thumbnailState === "setting") return false;
-            thumbnailState = "setting";
-            retryThumbnail.style.display = "none";
-            updateThumbnailEligibilityHelp(null);
-            try {
-                status.textContent = tr("サムネイルを生成して設定しています…", "Generating and applying the thumbnail…");
-                await setYouTubeThumbnail(job.youtubeVideoId, recording.metadata, { isClip: isClipUpload, customThumbnailPath });
-                thumbnailState = "set";
-                return true;
-            } catch (error) {
-                thumbnailState = "failed";
-                retryThumbnail.style.display = "";
-                console.warn("Failed to set YouTube thumbnail:", error);
-                updateThumbnailEligibilityHelp(error);
-                status.textContent = tr(
-                    "動画のアップロードは完了しましたが、サムネイルを設定できませんでした。",
-                    "The video was uploaded, but the thumbnail could not be applied. ",
-                ) + (error instanceof Error ? error.message : String(error));
-                return false;
-            }
-        };
-        const publishMetadata = async (job: YouTubeUploadJob) => {
-            if (replayShareState === "publishing" || replayShareState === "published") return;
-            completedJob = job;
-            replayShareState = "publishing";
-            status.textContent = tr(
-                "YouTubeへのアップロードが完了しました。試合データを登録しています…",
-                "YouTube upload completed. Publishing match data…",
-            );
-            try {
-                const share = await prepareReplayShare(recording.metadata, job.youtubeVideoId, {
-                    anonymizePlayers: anonymousShare.checked,
-                });
-                await publishReplayShare(share);
-                replayShareState = "published";
-                status.textContent = tr(
-                    "YouTubeへのアップロードと試合データの登録が完了しました。",
-                    "YouTube upload and match-data publishing completed.",
-                );
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                if (message.includes("共有できる試合データがありません")) {
-                    replayShareState = "unavailable";
-                    status.textContent = tr(
-                        "YouTubeへのアップロードは完了しました。この動画には共有できる試合データがありません。",
-                        "YouTube upload completed, but this video has no match data that can be shared.",
-                    );
-                    return;
-                }
-                replayShareState = "failed";
-                status.textContent = tr(
-                    "YouTubeへのアップロードは完了しましたが、試合データを登録できませんでした。",
-                    "YouTube upload completed, but match data could not be published. ",
-                ) + message;
-                upload.textContent = tr("試合データの登録を再試行", "Retry Match Data");
-                upload.disabled = false;
-            }
-        };
-        const finishCompletedUpload = async (job: YouTubeUploadJob) => {
-            completedJob = job;
-            const thumbnailFailed = job.thumbnailStatus === "failed";
-            const thumbnailSkipped = job.thumbnailStatus === "skipped";
-            if (thumbnailFailed) {
-                thumbnailState = "failed";
-                retryThumbnail.style.display = "";
-                updateThumbnailEligibilityHelp(job.thumbnailError);
-            }
-            if (shouldPublishMetadata) {
-                await publishMetadata(job);
-                if (replayShareState === "published") {
-                    status.textContent = thumbnailFailed
-                        ? tr(
-                            "動画のアップロードと試合データ登録は完了しました。サムネイルは設定できませんでした。",
-                            "The video upload and match-data publishing completed, but the thumbnail could not be applied.",
-                        )
-                        : thumbnailSkipped
-                        ? tr(
-                            "YouTubeへのアップロードと試合データ登録が完了しました。サムネイルは設定していません。",
-                            "YouTube upload and match-data publishing completed without a thumbnail.",
-                        )
-                        : tr(
-                            "YouTubeへのアップロード、サムネイル設定、試合データ登録が完了しました。",
-                            "YouTube upload, thumbnail setup, and match-data publishing completed.",
-                        );
-                }
-                return;
-            }
-            replayShareState = "not_requested";
-            status.textContent = thumbnailFailed
-                ? tr(
-                    "動画のアップロードは完了しましたが、サムネイルは設定できませんでした。試合データは登録していません。",
-                    "The video upload completed, but the thumbnail could not be applied. Match data was not published.",
-                )
-                : thumbnailSkipped && job.processingStatus === "pending"
-                ? tr(
-                    "サムネイルなしで動画をアップロードしました。YouTube側では動画処理が引き続き保留中です。",
-                    "The video was uploaded without a thumbnail. YouTube is still processing the video.",
-                )
-                : thumbnailSkipped
-                ? tr(
-                    "サムネイルなしでYouTubeへのアップロードが完了しました。試合データは登録していません。",
-                    "YouTube upload completed without a thumbnail. Match data was not published.",
-                )
-                : job.processingStatus === "pending"
-                ? tr(
-                    "動画とサムネイルのアップロードが完了しました。YouTube側では動画処理が引き続き保留中です。",
-                    "Video and thumbnail upload completed. YouTube is still processing the video.",
-                )
-                : tr(
-                    "YouTubeへのアップロードとサムネイル設定が完了しました。試合データは登録していません。",
-                    "YouTube upload and thumbnail setup completed. Match data was not published.",
-                );
-        };
-        retryThumbnail.onclick = async () => {
-            if (!completedJob) return;
-            retryThumbnail.disabled = true;
-            thumbnailState = "idle";
-            const succeeded = await setThumbnailForJob(completedJob);
-            retryThumbnail.disabled = false;
-            if (succeeded) {
-                retryThumbnail.style.display = "none";
-                status.textContent = tr("サムネイルを設定しました。", "Thumbnail applied.");
-            }
-        };
-        const showJob = (job: YouTubeUploadJob) => {
-            // The first status poll can race the IPC command and still be
-            // idle. Keep the optimistic "preparing" state in that case.
-            if (job.state === "idle" && uploadHasStarted) return;
-            if (job.state !== "completed" || replayShareState === "idle") {
-                status.textContent = formatUploadProgress(job);
-            }
-            updateThumbnailEligibilityHelp(job.thumbnailError || (job.state === "failed" ? job.error : null));
-            const inFlight = ["thumbnail_preparing", "preparing", "uploading", "thumbnail_uploading", "processing"].includes(job.state);
-            if (inFlight) uploadHasStarted = true;
-            upload.disabled = inFlight;
-            cancel.style.display = inFlight ? "" : "none";
-            if (job.youtubeVideoId && job.youtubeUrl && jobBelongsToRecording(job)) {
-                openVideo.style.display = "";
-                openVideo.onclick = () => void open(job.youtubeUrl!);
-                uploadedVideoIdValue.textContent = job.youtubeVideoId;
-                uploadedVideoId.hidden = false;
-                rememberYouTubeUpload(videoId, job.youtubeVideoId);
-                completedJob = job;
-                if (job.thumbnailStatus === "failed" || (job.state === "failed" && job.thumbnailStatus !== "skipped")) {
-                    retryThumbnail.style.display = "";
-                }
-            }
-            if (job.state === "completed" && job.youtubeUrl) {
-                openVideo.style.display = "";
-                openVideo.onclick = () => void open(job.youtubeUrl!);
-                if (job.youtubeVideoId) {
-                    uploadedVideoIdValue.textContent = job.youtubeVideoId;
-                    uploadedVideoId.hidden = false;
-                }
-                if (job.youtubeVideoId && jobBelongsToRecording(job)) {
-                    rememberYouTubeUpload(videoId, job.youtubeVideoId);
-                }
-                if (uploadHasStarted && job.youtubeVideoId && jobBelongsToRecording(job) && replayShareState === "idle") {
-                    void finishCompletedUpload(job);
-                } else if (!uploadHasStarted && replayShareState === "idle" && job.youtubeVideoId && jobBelongsToRecording(job)) {
-                    completedJob = job;
-                    replayShareState = "failed";
-                    status.textContent = tr(
-                        "YouTubeへのアップロードは完了しています。試合データの登録を再試行できます。",
-                        "The YouTube upload is complete. You can retry publishing match data.",
-                    );
-                    upload.textContent = tr("試合データの登録を再試行", "Retry Match Data");
-                    upload.disabled = false;
-                }
-            }
-            if (uploadHasStarted && !inFlight) stopPolling();
-        };
-        upload.onclick = async () => {
-            if (replayShareState === "failed" && completedJob) {
-                upload.disabled = true;
-                upload.textContent = tr("試合データを登録しています…", "Publishing Match Data…");
-                await publishMetadata(completedJob);
-                if (replayShareState !== "failed") upload.style.display = "none";
-                return;
-            }
-            if (!(["private", "unlisted", "public"] as const).includes(privacyStatus.value as "private" | "unlisted" | "public")) {
-                status.textContent = tr("公開設定を選択してください。", "Select a visibility setting.");
-                return;
-            }
-            if (!policyAccepted.checked) {
-                status.textContent = tr(
-                    "プライバシーポリシーと利用規約への同意を確認してください。",
-                    "Confirm your agreement to the Privacy Policy and Terms of Service.",
-                );
-                return;
-            }
-            if (!guidelinesConfirmed.checked) {
-                status.textContent = tr(
-                    "YouTubeコミュニティガイドライン遵守を確認してください。",
-                    "Confirm compliance with the YouTube Community Guidelines.",
-                );
-                return;
-            }
-            if (registerReplayShare.checked && !await ensureReplayShareAuth()) return;
-            const privacyLabel = privacyStatus.selectedOptions[0]?.textContent || privacyStatus.value;
-            const channelLabel = connectedChannelTitle || connectedChannelId || tr("接続中のYouTubeチャンネル", "the connected YouTube channel");
-            if (!window.confirm(tr(
-                `${channelLabel} へアップロードします。\n\nタイトル: ${titleInput.value || defaultTitle}\n公開設定: ${privacyLabel}\n\n「OK」を選ぶとアップロードを開始します。`,
-                `Upload to ${channelLabel}.\n\nTitle: ${titleInput.value || defaultTitle}\nVisibility: ${privacyLabel}\n\nSelect OK to start uploading.`,
-            ))) return;
-            upload.disabled = true;
-            uploadHasStarted = true;
-            shouldPublishMetadata = registerReplayShare.checked;
-            showJob({ state: "thumbnail_preparing" });
-            try {
-                void startYouTubeUpload(videoId, {
-                    title: titleInput.value,
-                    description: description.value,
-                    madeForKids: false,
-                    privacyStatus: privacyStatus.value as "private" | "unlisted" | "public",
-                    policyAccepted: policyAccepted.checked,
-                    communityGuidelinesConfirmed: guidelinesConfirmed.checked,
-                }, {
-                    metadata: recording.metadata,
-                    isClip: isClipUpload,
-                    customThumbnailPath,
-                    skip: skipThumbnail,
-                })
-                    .then(showJob)
-                    .catch((error) => {
-                        showJob({ state: "failed", error: error instanceof Error ? error.message : String(error) });
-                        upload.disabled = false;
-                    });
-                poller = setInterval(() => { void getYouTubeUploadJob().then(showJob).catch(() => {}); }, 400);
-            } catch (error) {
-                status.textContent = error instanceof Error ? error.message : String(error);
-                upload.disabled = false;
-            }
-        };
-        cancel.onclick = () => { void cancelYouTubeUpload().then(showJob); };
-        actions.prepend(upload, cancel, previewThumbnail, retryThumbnail, openVideo, disconnect);
-        content.append(title, status, connectedChannel, thumbnailEligibilityHelp, thumbnailPicker, thumbnailPreviewImage, titleInput, description, privacyStatus, registerReplayShareLabel, anonymousShareLabel, policyLabel, guidelinesLabel, note, existingVideoUrl, republishMetadata, uploadedVideoId, actions);
-        const existing = await getYouTubeUploadJob();
-        showJob(existing);
+        options.append(xButton, discordButton);
+        content.append(title, options, cancelButton);
     };
 
     const renderXView = () => {
-        panel.classList.add("recording-share-modal-compact");
         content.replaceChildren();
         const videoPath = getRecordingMp4Path(videoId);
         const fileName = basename(videoPath);
@@ -1332,7 +443,6 @@ async function showShareModal(recording: Recording): Promise<void> {
     };
 
     const renderDiscordView = () => {
-        panel.classList.add("recording-share-modal-compact");
         content.replaceChildren();
         const videoPath = getRecordingMp4Path(videoId);
         const fileName = basename(videoPath);
@@ -1613,14 +723,9 @@ export function createRecordingSidebarItem(input: {
             const totalCS = meta.stats.totalMinionsKilled + meta.stats.neutralMinionsKilled;
             const csPerMin = calcCsPerMin(totalCS, durationSec);
             const statsCol = createEl("div", {}, { class: "sidebar-stats" });
-            const csSpan = createEl("span", {}, { class: "sidebar-cs" });
-            csSpan.append(
-                createEl("span", {}, { class: "sidebar-cs-total" }, `${totalCS} CS`),
-                createEl("span", {}, { class: "sidebar-cs-per-minute" }, `(${csPerMin}/m)`),
-            );
             statsCol.append(
                 createEl("span", {}, { class: "sidebar-kda" }, kda),
-                csSpan,
+                createEl("span", {}, { class: "sidebar-cs" }, `${totalCS} CS (${csPerMin}/m)`),
                 createEl("span", {}, { class: `sidebar-result ${resultClass}` }, result),
             );
             if (meta.lpDiff !== undefined && meta.lpDiff !== null && meta.queue?.isRanked) {
@@ -1912,11 +1017,13 @@ export function createRecordingSidebarItem(input: {
 
     const li = createEl("li", {
         onclick: () => {
+            if (recording.isRecording) return;
             if (recording.videoExists) onVideo(recording.videoId);
             else console.log("Video file no longer exists for this recording.");
         },
     }, { id: recording.videoId, class: liClass }) as HTMLElement;
     li.dataset.videoId = recording.videoId;
+    li.dataset.recording = String(recording.isRecording);
 
     const favoriteBtn = createEl("span", {
         onclick: (e: MouseEvent) => {
@@ -1931,14 +1038,9 @@ export function createRecordingSidebarItem(input: {
                     else if ("NoData" in recording.metadata) recording.metadata.NoData.favorite = fav;
                 }
                 const badgeContainer = li.querySelector(".sidebar-badges");
-                if (!fav) {
-                    // A recording may have multiple badge containers while its
-                    // metadata is loading. Remove every favorite marker so a
-                    // stale one cannot survive an unfavorite action.
-                    li.querySelectorAll(".sidebar-favorite-badge").forEach((badge) => badge.remove());
-                } else if (badgeContainer) {
+                if (badgeContainer) {
                     const existingFavoriteBadge = badgeContainer.querySelector(".sidebar-favorite-badge");
-                    if (!existingFavoriteBadge) {
+                    if (fav && !existingFavoriteBadge) {
                         badgeContainer.append(
                             createEl(
                                 "span",
@@ -1947,6 +1049,8 @@ export function createRecordingSidebarItem(input: {
                                 "\u2605",
                             ),
                         );
+                    } else if (!fav && existingFavoriteBadge) {
+                        existingFavoriteBadge.remove();
                     }
                 }
                 if (filterStar && !fav && onRefreshForStarUnfavorite) onRefreshForStarUnfavorite();
@@ -1961,7 +1065,7 @@ export function createRecordingSidebarItem(input: {
     const shareBtn = createEl("span", {
         onclick: (e: MouseEvent) => {
             e.stopPropagation();
-            void showShareModal(recording);
+            void showShareModal(recording.videoId);
         },
     }, { class: "share", title: tooltipText("共有", "Share") }, "\u21AA");
     const replayButtons = hasReplayGameId(recording)
@@ -1979,8 +1083,15 @@ export function createRecordingSidebarItem(input: {
         li.dataset.hasMetadata = hasSidebarMetadata ? "true" : "false";
         li.append(...displayContent);
     }
-    li.append(actionsDiv);
-    syncYouTubeUploadControls(li);
+    if (recording.isRecording) {
+        li.append(createEl("span", {}, {
+            class: "sidebar-recording-badge",
+            title: tooltipText("録画中", "Recording"),
+            "aria-label": tooltipText("録画中", "Recording"),
+        }, "REC"));
+    } else {
+        li.append(actionsDiv);
+    }
     scheduleImageLoadForItem?.(li);
     return li;
 }

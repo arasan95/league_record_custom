@@ -30,6 +30,10 @@ impl SettingsFile {
 pub struct SettingsWrapper(RwLock<Settings>);
 
 impl SettingsWrapper {
+    pub fn close_to_tray(&self) -> bool {
+        self.0.read().unwrap().close_to_tray
+    }
+
     pub fn inner(&self) -> Settings {
         self.0.read().unwrap().clone()
     }
@@ -52,7 +56,13 @@ impl SettingsWrapper {
         let Ok(json) = fs::read_to_string(settings_file) else {
             return;
         };
-        let mut settings = serde_json::from_str::<Settings>(json.as_str()).unwrap_or_default();
+        let mut settings = match serde_json::from_str::<Settings>(&json) {
+            Ok(settings) => settings,
+            Err(error) => {
+                log::error!("Failed to read settings; kept current settings: {error}");
+                return;
+            }
+        };
 
         // if recordings_folder is relative the path gets appened to the system video directory
         if settings.recordings_folder.is_relative() {
@@ -80,14 +90,11 @@ impl SettingsWrapper {
         *self.0.write().unwrap() = settings;
         // write parsed settings back to file so the internal settings and the content of the file stay in sync
         // to avoid confusing the user when editing the file
-        self.write_to_file(settings_file);
+        if let Err(error) = self.write_to_file(settings_file) { log::error!("Settings save failed: {error}"); }
     }
 
-    pub fn write_to_file(&self, settings_path: &Path) {
-        let json = serde_json::to_string_pretty(&*self.0.read().unwrap()).unwrap();
-        if let Err(e) = fs::write(settings_path, json) {
-            log::error!("failed to write settings.json: {e}");
-        }
+    pub fn write_to_file(&self, settings_path: &Path) -> anyhow::Result<()> {
+        crate::util::write_json_atomically(settings_path, &*self.0.read().unwrap())
     }
 
     pub fn let_user_edit_settings(app_handle: &AppHandle) {
@@ -146,8 +153,9 @@ impl SettingsWrapper {
 
         // check if UI window needs to be updated
         let recordings_path = self.get_recordings_path();
-        if recordings_path != old_recordings_path {
-            filewatcher::replace(&app_handle, &recordings_path);
+        let clips_path = self.get_clips_path();
+        if recordings_path != old_recordings_path || clips_path != old_clips_path {
+            filewatcher::replace(&app_handle, [&recordings_path, &clips_path]);
             if let Err(e) = app_handle.send_event(AppEvent::RecordingsChanged { payload: () }) {
                 log::error!("failed to emit 'recordings_changed' event: {e}");
             }
@@ -314,10 +322,6 @@ impl SettingsWrapper {
         true
     }
 
-    pub fn set_settings(&self, settings: Settings) {
-        *self.0.write().unwrap() = settings;
-    }
-
     pub fn get_settings(&self) -> Settings {
         self.0.read().unwrap().clone()
     }
@@ -423,6 +427,7 @@ pub struct Settings {
     pub application_audio_tracks: Vec<ApplicationAudioTrackSetting>,
 
     pub autostart: bool,
+    pub close_to_tray: bool,
     pub max_recording_age_days: Option<u64>,
     pub max_recordings_size_gb: Option<u64>,
     pub confirm_delete: bool,
@@ -527,6 +532,7 @@ impl Default for Settings {
             ],
 
             autostart: DEFAULT_AUTOSTART,
+            close_to_tray: false,
             max_recording_age_days: DEFAULT_MAX_RECORDING_AGE_DAYS,
             max_recordings_size_gb: DEFAULT_MAX_RECORDINGS_SIZE_GB,
             confirm_delete: DEFAULT_CONFIRM_DELETE,
@@ -682,6 +688,7 @@ impl<'de> Deserialize<'de> for Settings {
                         "autoSelectRecording" => {
                             settings.auto_select_recording = map.next_value().unwrap_or(DEFAULT_AUTO_SELECT_RECORDING);
                         }
+                        "closeToTray" => settings.close_to_tray = map.next_value().unwrap_or(false),
                         "autoPopupOnEnd" => {
                             settings.auto_popup_on_end = map.next_value().unwrap_or(DEFAULT_AUTO_POPUP_ON_END);
                         }
@@ -868,5 +875,20 @@ impl Default for MarkerFlags {
             herald: true,
             baron: true,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Settings;
+
+    #[test]
+    fn close_to_tray_defaults_to_quit_and_round_trips_when_enabled() {
+        let existing: Settings = serde_json::from_str("{}").unwrap();
+        assert!(!existing.close_to_tray);
+
+        let enabled: Settings = serde_json::from_str(r#"{"closeToTray":true}"#).unwrap();
+        assert!(enabled.close_to_tray);
+        assert_eq!(serde_json::to_value(enabled).unwrap()["closeToTray"], true);
     }
 }

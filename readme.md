@@ -2,8 +2,6 @@
 
 [English](readme.md) | [日本語](README_ja.md)
 
-[Official website](https://leaguerecord.web.app/) · [Features](https://leaguerecord.web.app/features.html) · [Release notes](https://leaguerecord.web.app/releases.html) · [Pre-release](https://leaguerecord.web.app/preview.html)
-
 **Note**: This project is a customized version based on [LeagueRecord](https://github.com/FFFFFFFXXXXXXX/league_record).
 This project is a customized clone of LeagueRecord, based on [v2.1.1](https://github.com/FFFFFFFXXXXXXX/league_record/releases/tag/v2.1.1).
 All modifications and new features have been built upon this version.
@@ -14,30 +12,25 @@ All modifications and new features have been built upon this version.
 The following changes have been implemented in this version:
 
 - UI: Modified user interface and aesthetics.
-- Manual Recording: Start/Stop recording manually via hotkeys.
+- Manual Recording: Start or stop recording from the system tray or with hotkeys.
 - Status Visibility: Taskbar icon changes to reflect the current recording status.
 - Game Mode Filtering: Option to record only specific modes (Ranked, ARAM, Arena, etc.).
 - Playback Control: Automatically Play, Stop, or Select recordings based on game status.
-- Video Tools: A-B Loop repeat and clip creation (FFmpeg is prepared automatically on first use).
+- Video Tools: A-B loop playback and clip creation.
 - Configuration: Expanded hotkey and general settings.
 - Tooltip: Tooltip data is extracted from local WAD files, so tooltips stay compatible with the latest patch.
 
 ## Download
 
-**[Download the latest LeagueRecord release](https://leaguerecord.web.app/)**
+**[Download LeagueRecord from the official website](https://leaguerecord.web.app/)**
 
-or browse all versions: [GitHub Releases](https://github.com/arasan95/league_record_custom/releases)
+The Windows installer includes FFmpeg for creating short clips from your recordings.
 
-FFmpeg is distributed as a separate release asset and cached under the app data folder, so app updates do not reinstall it when the FFmpeg SHA256 has not changed.
-
-## YouTube OAuth (developers)
-
-The official installer includes the maintainer's Desktop OAuth credentials, so ordinary users do not need Google Cloud configuration. See [docs/youtube_oauth.md](docs/youtube_oauth.md) for source-build configuration, PKCE and token-storage details, and the official release procedure. A Desktop client secret cannot be kept confidential in a distributed executable, so PKCE protects user authorization independently of that packaged credential.
+[Browse all versions on GitHub Releases](https://github.com/arasan95/league_record_custom/releases)
 
 ## FFmpeg Notes
 
-For regular use, the app-local FFmpeg runtime is selected automatically.
-Manual FFmpeg replacement is only needed for maintainers working in `src-tauri/resources/tools/ffmpeg/`.
+Automatic app updates reuse the FFmpeg copy already saved in LeagueRecord’s app data folder.
 
 ## How to Use
 
@@ -204,20 +197,6 @@ There is a release for Windows-x64, but you can build the project on your own.
 
 In order to build the project you need to have the [nightly](https://rust-lang.github.io/rustup/concepts/channels.html#working-with-nightly-rust) Rust toolchain and [Bun](https://bun.com) installed.  
 From the root folder of the project run `bun install` and then `bun x tauri dev` to run the project in debug mode or `bun x tauri build` to build in release-mode and create the installer.
-
-In order to package the compiled files into a standalone archive, run one of the following commands after a successful `bun x tauri build`:
-
-```bash
-# outputs 'LeagueRecord.tar.gz' in the project root folder
-tar -czv -f LeagueRecord.tar.gz LICENSE.txt licenses -C ./src-tauri/target/ libobs -C ./release/ LeagueRecord.exe
-```
-
-or
-
-```bash
-# outputs 'LeagueRecord.zip' in the project root folder
-cd src-tauri/target/release && 7z a -tzip ../../../LeagueRecord.zip LeagueRecord.exe ../libobs licenses LICENSE.txt && cd ../../..
-```
 
 ## License
 

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, strum_macros::IntoStaticStr, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AppEvent {
+    RecordingPhaseChanged { payload: RecordingStatus },
     RecordingsChanged { payload: () },
     MetadataChanged { payload: Vec<String> },
     MarkerflagsChanged { payload: () },
@@ -13,7 +14,19 @@ pub enum AppEvent {
     ManualRecordingStopped,
     GameDetected,
     GameStarted,
+    RecordingFailed { payload: String },
+    RecordingMetadataSaveFailed { payload: String },
     RecordingFinished { payload: (String, bool) },
+}
+
+#[cfg_attr(test, derive(specta::Type))]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RecordingStatus {
+    Idle,
+    Preparing,
+    Recording,
+    Stopping,
 }
 
 pub trait EventManager {
@@ -27,6 +40,9 @@ impl EventManager for tauri::AppHandle {
         use AppEvent::*;
 
         match &event {
+            RecordingPhaseChanged { payload } => {
+                self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), payload)?
+            }
             RecordingsChanged { payload } => {
                 self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), payload)?
             }
@@ -45,6 +61,9 @@ impl EventManager for tauri::AppHandle {
             }
             GameDetected => self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), ())?,
             GameStarted => self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), ())?,
+            RecordingFailed { payload } | RecordingMetadataSaveFailed { payload } => {
+                self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), payload)?
+            }
             RecordingFinished { payload } => {
                 self.emit_to(EventTarget::webview_window(AppWindow::Main), (&event).into(), payload)?
             }

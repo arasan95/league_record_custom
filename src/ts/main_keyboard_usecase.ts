@@ -32,7 +32,6 @@ type LoopState = {
 export function createKeyboardHandlers(input: {
     player: PlayerLike;
     ui: UiLike;
-    hasActivePlayback?: () => boolean;
     matchesAction: (event: KeyboardEvent, action: string) => boolean;
     getLoopState: () => LoopState;
     setLoopState: (patch: Partial<LoopState>) => void;
@@ -45,7 +44,6 @@ export function createKeyboardHandlers(input: {
     const {
         player,
         ui,
-        hasActivePlayback,
         matchesAction,
         getLoopState,
         setLoopState,
@@ -60,12 +58,6 @@ export function createKeyboardHandlers(input: {
     let isSteppingBackward = false;
     let activeStepBackwardInterval: number | null = null;
     let originalPlaybackRate = 1.0;
-    let pendingSeekTarget: number | null = null;
-    let pendingSeekTimer: number | null = null;
-    let seekTargetResetTimer: number | null = null;
-    let pendingSeekDirty = false;
-    let lastSeekCommitAt = 0;
-    const seekCommitIntervalMs = 80;
 
     const getSelfMarkersSorted = () => {
         const markers = [...player.markers().getMarkers()];
@@ -75,64 +67,6 @@ export function createKeyboardHandlers(input: {
                 return markerClass.includes("lane-self") || markerClass.includes("self-marker");
             })
             .sort((a, b) => a.time - b.time);
-    };
-
-    const clearSeekTargetResetTimer = () => {
-        if (seekTargetResetTimer !== null) {
-            clearTimeout(seekTargetResetTimer);
-            seekTargetResetTimer = null;
-        }
-    };
-
-    const clampSeekTarget = (target: number): number => {
-        const duration = (player as any).duration?.();
-        const clampedMin = Math.max(0, target);
-        return typeof duration === "number" && Number.isFinite(duration) && duration > 0
-            ? Math.min(clampedMin, duration)
-            : clampedMin;
-    };
-
-    const seekTo = (target: number) => {
-        window.dispatchEvent(new CustomEvent("lr:seek-requested", { detail: { target, method: "currentTime" } }));
-        player.currentTime(target);
-    };
-
-    const commitPendingSeek = () => {
-        if (pendingSeekTimer !== null) {
-            clearTimeout(pendingSeekTimer);
-            pendingSeekTimer = null;
-        }
-        if (pendingSeekTarget === null || !pendingSeekDirty) return;
-
-        const target = clampSeekTarget(pendingSeekTarget);
-        pendingSeekTarget = target;
-        pendingSeekDirty = false;
-        seekTo(target);
-        lastSeekCommitAt = performance.now();
-
-        clearSeekTargetResetTimer();
-        seekTargetResetTimer = setTimeout(() => {
-            pendingSeekTarget = null;
-            pendingSeekDirty = false;
-            seekTargetResetTimer = null;
-        }, 250) as unknown as number;
-    };
-
-    const queueRelativeSeek = (deltaSeconds: number) => {
-        const base = pendingSeekTarget ?? player.currentTime() ?? 0;
-        pendingSeekTarget = clampSeekTarget(base + deltaSeconds);
-        pendingSeekDirty = true;
-
-        const now = performance.now();
-        const elapsed = now - lastSeekCommitAt;
-        if (elapsed >= seekCommitIntervalMs) {
-            commitPendingSeek();
-            return;
-        }
-
-        if (pendingSeekTimer === null) {
-            pendingSeekTimer = setTimeout(commitPendingSeek, seekCommitIntervalMs - elapsed) as unknown as number;
-        }
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
@@ -158,12 +92,6 @@ export function createKeyboardHandlers(input: {
             event.preventDefault();
             event.stopPropagation();
         }
-
-        if ((matchesAction(event, "seekForward") || matchesAction(event, "seekBackward")) && pendingSeekTarget !== null) {
-            commitPendingSeek();
-            event.preventDefault();
-            event.stopPropagation();
-        }
     };
 
     const handleKeyDown = async (event: KeyboardEvent) => {
@@ -178,7 +106,7 @@ export function createKeyboardHandlers(input: {
             }
             return;
         }
-        if (!(hasActivePlayback?.() ?? ui.getActiveVideoId() !== null)) return;
+        if (ui.getActiveVideoId() === null) return;
 
         let handled = false;
 
@@ -219,10 +147,10 @@ export function createKeyboardHandlers(input: {
             }
             handled = true;
         } else if (matchesAction(event, "seekForward")) {
-            queueRelativeSeek(5);
+            player.currentTime((player.currentTime() ?? 0) + 5);
             handled = true;
         } else if (matchesAction(event, "seekBackward")) {
-            queueRelativeSeek(-5);
+            player.currentTime((player.currentTime() ?? 0) - 5);
             handled = true;
         } else if (matchesAction(event, "volUp")) {
             player.volume((player.volume() ?? 0) + 0.1);
@@ -315,8 +243,6 @@ export function createKeyboardHandlers(input: {
 
         if (handled) {
             event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
         }
     };
 

@@ -1,7 +1,6 @@
 ﻿/* Scoreboard Overlay - Mapped to Grid Area */
 .scoreboard {
     grid-area: st-scoreboard;
-    --scoreboard-video-fit-snap-offset: 24px;
     display: flex;
     flex-direction: row; 
     gap: 0; 
@@ -11,10 +10,6 @@
     z-index: 15;
     background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); /* Subtle backing */
     padding-bottom: 5px;
-    /* When auto-zoomed for a narrow window, keep the remaining board centered
-       instead of anchoring it to the left edge. */
-    align-self: center;
-    min-width: 0;
 }
 
 .scoreboard-center {
@@ -67,7 +62,6 @@
     padding: 2px;
     border-radius: 4px;
     flex: 1; 
-    min-width: 0;
 }
 
 .team-100 { /* Blue Team */
@@ -102,7 +96,6 @@
     background-color: rgba(0, 0, 0, 0.3);
     border-radius: 2px;
     height: 30px; /* Reduced to 30px (~80% of 36px) */
-    min-width: 0;
 }
 
 /* --- Icons & Stats --- */
@@ -286,6 +279,7 @@
     padding-bottom: 0; 
     z-index: 20;
     transition: height 0.1s; /* Smooth transition */
+    container: scoreboard / inline-size;
 }
 
 .scoreboard.collapsed {
@@ -497,7 +491,6 @@
     border-radius: 0;
     flex: 1; 
     background-color: transparent; 
-    position: relative;
 }
 
 /* Remove borders from teams in spectator mode */
@@ -513,31 +506,6 @@
     border-left: none !important; /* Explicitly remove left border */
     background: transparent; 
     box-shadow: 4px 0 15px rgba(255, 35, 69, 0.5), inset -10px 0 20px rgba(255, 35, 69, 0.1); 
-}
-
-/* Keep the colored team edges visible above long player names or other row
-   content that reaches the outside edge of the board. */
-.team-100::after,
-.team-200::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    z-index: 2;
-    pointer-events: none;
-}
-
-.team-100::after {
-    /* Overlay the existing 3px border instead of adding another stripe
-       inside the scoreboard. */
-    left: -3px;
-    background: #0acbe6;
-}
-
-.team-200::after {
-    right: -3px;
-    background: #ff2345;
 }
 
 /* Keep player row styling */
@@ -713,10 +681,6 @@
     flex-shrink: 0;
 }
 
-body.hide-honor-votes .honor-heart-icon {
-    display: none;
-}
-
 /* Remove old order rules */
 
 /* Old gold-diff styles removed */
@@ -794,4 +758,90 @@ body.hide-honor-votes .honor-heart-icon {
 .player-row.dnd-drop-target {
     box-shadow: 0 0 0 2px #4fb6ff inset, 0 0 8px rgba(79, 182, 255, 0.45);
     background-color: rgba(79, 182, 255, 0.12);
+}
+
+
+/* Keep the gold difference centered as the outside columns run out of room. */
+.scoreboard > .team {
+    flex: 1 1 0;
+    min-inline-size: 0;
+    overflow: clip;
+}
+
+.scoreboard > .scoreboard-center {
+    flex: 0 0 auto;
+}
+
+.scoreboard .player-row,
+.scoreboard .team-header {
+    box-sizing: border-box;
+    inline-size: 100%;
+    min-inline-size: 0;
+}
+
+.scoreboard .team-100 > :is(.player-row, .team-header) {
+    align-self: flex-end;
+}
+
+.scoreboard .team-200 > :is(.player-row, .team-header) {
+    align-self: flex-start;
+}
+
+.scoreboard .player-name,
+.scoreboard .player-name-text {
+    min-inline-size: 0;
+}
+
+.scoreboard .player-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@container scoreboard (max-width: 1000px) {
+    .scoreboard .player-name {
+        display: none;
+    }
+
+    .scoreboard .player-row {
+        --scoreboard-slot: clamp(18px, 2.65cqi, 26px);
+        --scoreboard-icon: calc(var(--scoreboard-slot) - 2px);
+        --scoreboard-gap: clamp(1px, calc(0.6cqi - 3px), 3px);
+        min-inline-size: max-content;
+        gap: var(--scoreboard-gap);
+    }
+
+    .scoreboard .player-row > * {
+        margin-inline: 0;
+    }
+
+    .scoreboard :is(.items-grid, .trinket-container) {
+        inline-size: max-content;
+        min-inline-size: max-content;
+        gap: var(--scoreboard-gap) !important;
+    }
+
+    .scoreboard :is(.item-slot, .champ-icon-wrap, .champ-icon) {
+        inline-size: var(--scoreboard-slot);
+        block-size: var(--scoreboard-slot);
+    }
+
+    .scoreboard :is(.item-icon, .trinket-icon, .spell-icon, .rune-icon) {
+        inline-size: var(--scoreboard-icon);
+        block-size: var(--scoreboard-icon);
+    }
+
+    .scoreboard .runes {
+        inline-size: var(--scoreboard-icon);
+    }
+
+    .scoreboard .kda {
+        inline-size: clamp(52px, 7cqi, 70px);
+        min-inline-size: 0;
+    }
+
+    .scoreboard .cs-stat {
+        inline-size: clamp(22px, 3cqi, 26px);
+        min-inline-size: 0;
+    }
 }

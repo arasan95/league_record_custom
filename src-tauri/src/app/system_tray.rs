@@ -1,11 +1,11 @@
 use tauri::menu::{Menu, MenuBuilder, MenuEvent, MenuItemBuilder};
 use tauri::tray::{MouseButton, TrayIcon, TrayIconBuilder, TrayIconEvent};
-use tauri::{async_runtime, AppHandle, Manager, Wry};
+use tauri::{AppHandle, Manager, Wry};
 
 use super::{AppWindow, WindowManager};
-use crate::constants::{self, menu_item, EXIT_SUCCESS};
+use crate::constants::{self, menu_item};
 use crate::recorder::LeagueRecorder;
-use crate::state::{SettingsWrapper, Shutdown, TrayState};
+use crate::state::{CurrentlyRecording, RecordingPhase, SettingsWrapper, TrayState};
 
 pub trait SystemTrayManager {
     fn init_tray_menu(&self);
@@ -13,8 +13,7 @@ pub trait SystemTrayManager {
     #[allow(dead_code)]
     fn set_tray_menu_update_available(&self, update_button: bool);
 
-    fn set_tray_menu_recording(&self, recording: bool);
-    fn set_tray_menu_preparing(&self, preparing: bool);
+    fn refresh_recording_tray(&self);
 }
 
 fn recording_icon_filled_rgba() -> (Vec<u8>, u32, u32) {
@@ -74,23 +73,7 @@ fn handle_system_tray_menu_event(app_handle: &AppHandle, event: MenuEvent) {
         menu_item::STOP_RECORDING => app_handle.state::<LeagueRecorder>().manual_stop(),
         menu_item::SETTINGS => SettingsWrapper::let_user_edit_settings(app_handle),
         menu_item::OPEN => app_handle.open_window(AppWindow::Main),
-        menu_item::QUIT => {
-            app_handle
-                .webview_windows()
-                .into_values()
-                .for_each(|window| _ = window.close());
-
-            async_runtime::spawn({
-                let app_handle = app_handle.clone();
-                async move {
-                    log::info!("Shutting down via tray");
-                    app_handle.state::<LeagueRecorder>().stop().await;
-
-                    app_handle.state::<Shutdown>().set();
-                    app_handle.exit(EXIT_SUCCESS);
-                }
-            });
-        }
+        menu_item::QUIT => super::request_shutdown(app_handle),
         // menu_item::UPDATE => app_handle.update(),
         _ => {}
     }
@@ -120,58 +103,41 @@ impl SystemTrayManager for AppHandle {
             .unwrap();
     }
 
-    fn set_tray_menu_recording(&self, recording: bool) {
-        self.state::<TrayState>().set_recording(recording);
-        if recording {
-            self.state::<TrayState>().set_preparing(false);
+    fn refresh_recording_tray(&self) {
+        let Some(tray) = self.tray_by_id(constants::TRAY_ID) else { return };
+        let phase = self.state::<CurrentlyRecording>().phase();
+        if let Err(error) = tray.set_menu(Some(create_tray_menu(self))) {
+            log::warn!("Failed to refresh recording tray menu: {error}");
         }
-
-        let tray = self.tray_by_id(constants::TRAY_ID).unwrap();
-        tray.set_menu(Some(create_tray_menu(self))).unwrap();
-
-        if recording {
-            let (rgba, width, height) = recording_icon_filled_rgba();
-            let icon = tauri::image::Image::new(&rgba, width, height);
-            if let Err(e) = tray.set_icon(Some(icon)) {
-                log::error!("failed to set recording icon: {e}");
+        let icon = match phase {
+            RecordingPhase::Idle => self.default_window_icon().cloned(),
+            RecordingPhase::Recording(_) => {
+                let (rgba, width, height) = recording_icon_filled_rgba();
+                Some(tauri::image::Image::new_owned(rgba, width, height))
             }
-        } else if let Some(icon) = self.default_window_icon() {
-            if let Err(e) = tray.set_icon(Some(icon.clone())) {
-                log::error!("failed to reset tray icon: {e}");
+            _ => {
+                let (rgba, width, height) = recording_icon_outline_rgba();
+                Some(tauri::image::Image::new_owned(rgba, width, height))
             }
-        }
-    }
-
-    fn set_tray_menu_preparing(&self, preparing: bool) {
-        self.state::<TrayState>().set_preparing(preparing);
-        if preparing {
-            self.state::<TrayState>().set_recording(false);
-        }
-
-        let tray = self.tray_by_id(constants::TRAY_ID).unwrap();
-        tray.set_menu(Some(create_tray_menu(self))).unwrap();
-
-        if preparing {
-            let (rgba, width, height) = recording_icon_outline_rgba();
-            let icon = tauri::image::Image::new(&rgba, width, height);
-            if let Err(e) = tray.set_icon(Some(icon)) {
-                log::error!("failed to set preparing icon: {e}");
-            }
-        } else if !self.state::<TrayState>().recording() {
-            if let Some(icon) = self.default_window_icon() {
-                if let Err(e) = tray.set_icon(Some(icon.clone())) {
-                    log::error!("failed to reset tray icon: {e}");
-                }
-            }
+        };
+        if let Err(error) = tray.set_icon(icon) {
+            log::warn!("Failed to refresh recording tray icon: {error}");
         }
     }
+
 }
 
 fn create_tray_menu(app_handle: &AppHandle) -> Menu<Wry> {
     let tray_state = app_handle.state::<TrayState>();
-    let recording = tray_state.recording();
-    let preparing = tray_state.preparing();
+    let phase = app_handle.state::<CurrentlyRecording>().phase();
+    let recording = matches!(phase, RecordingPhase::Recording(_));
+    let preparing = matches!(phase, RecordingPhase::Preparing(_) | RecordingPhase::Stopping(_));
     let update_available = tray_state.update_available();
+    let recording_label = match phase {
+        RecordingPhase::Preparing(_) => "Preparing…",
+        RecordingPhase::Stopping(_) => "Stopping…",
+        _ => "Recording",
+    };
 
     let settings = MenuItemBuilder::new("Settings")
         .id(menu_item::SETTINGS)
@@ -200,7 +166,7 @@ fn create_tray_menu(app_handle: &AppHandle) -> Menu<Wry> {
 
     let tray_menu = if update_available {
         MenuBuilder::new(app_handle)
-            .check(menu_item::RECORDING, "Recording")
+            .check(menu_item::RECORDING, recording_label)
             .separator()
             .item(&start_recording)
             .item(&stop_recording)
@@ -212,7 +178,7 @@ fn create_tray_menu(app_handle: &AppHandle) -> Menu<Wry> {
             .item(&update)
     } else {
         MenuBuilder::new(app_handle)
-            .check(menu_item::RECORDING, "Recording")
+            .check(menu_item::RECORDING, recording_label)
             .separator()
             .item(&start_recording)
             .item(&stop_recording)

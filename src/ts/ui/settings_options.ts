@@ -1,8 +1,8 @@
 import type { Settings } from "../bindings";
-import type { Language } from "../i18n";
+import type { Language, getText as translate } from "../i18n";
 import { createLabeledSwitch, type LabeledSwitch, type UiCreateEl } from "./settings_primitives";
 
-type GetText = (lang: Language, key: any) => string;
+type GetText = typeof translate;
 
 type ModeSwitch = {
     container: HTMLDivElement;
@@ -37,6 +37,7 @@ type GameModeSwitchMap = {
 
 type OtherSwitchMap = {
     autostart: LabeledSwitch;
+    closeToTray: LabeledSwitch;
     autoplayVideo: LabeledSwitch;
     autoStopPlayback: LabeledSwitch;
     autoSelectRecording: LabeledSwitch;
@@ -163,6 +164,7 @@ export function createSettingsOptionsSections(
     ]) as HTMLDivElement;
 
     const otherSwitches: OtherSwitchMap = {
+        closeToTray: createLabeledSwitch(createEl, getText(lang, "closeToTray"), settings.closeToTray),
         autostart: createLabeledSwitch(createEl, getText(lang, "autostart"), settings.autostart),
         autoplayVideo: createLabeledSwitch(createEl, getText(lang, "autoplay"), settings.autoplayVideo),
         autoStopPlayback: createLabeledSwitch(createEl, getText(lang, "autoStop"), settings.autoStopPlayback),
@@ -171,7 +173,7 @@ export function createSettingsOptionsSections(
         developerMode: createLabeledSwitch(createEl, getText(lang, "devMode"), settings.developerMode),
         playRecordingSounds: createLabeledSwitch(createEl, getText(lang, "playSounds"), settings.playRecordingSounds ?? false),
         keepVideoJsonOnAutoDelete: createLabeledSwitch(createEl, getText(lang, "keepVideoJsonOnAutoDelete"), settings.keepVideoJsonOnAutoDelete ?? false),
-        autoDeleteClips: createLabeledSwitch(createEl, getText(lang, "autoDeleteClips" as any), (settings as any).autoDeleteClips ?? false),
+        autoDeleteClips: createLabeledSwitch(createEl, getText(lang, "autoDeleteClips"), (settings as any).autoDeleteClips ?? false),
     };
 
     const createLinkInputLabel = (text: string): HTMLDivElement =>
@@ -180,7 +182,7 @@ export function createSettingsOptionsSections(
     const matchHistoryUrlInput = createEl("input", {}, {
         class: "settings-input",
         type: "text",
-        placeholder: "e.g. https://www.deeplol.gg/summoner/jp/{q}",
+        placeholder: `${getText(lang, "linkExample")}: https://www.deeplol.gg/summoner/jp/{q}`,
         value: settings.matchHistoryBaseUrl || "",
         style: "flex: 1;",
     }) as HTMLInputElement;
@@ -191,6 +193,7 @@ export function createSettingsOptionsSections(
         style: "grid-column: 1 / -1;",
     }, [
         createEl("div", {}, { class: "settings-grid", style: "grid-template-columns: 1fr; gap: 10px;" }, [
+            otherSwitches.closeToTray.container,
             otherSwitches.autostart.container,
             otherSwitches.autoplayVideo.container,
             otherSwitches.autoStopPlayback.container,
@@ -207,100 +210,102 @@ export function createSettingsOptionsSections(
     const scoreboardLinksHint = createEl("div", {}, {
         class: "settings-group-styled",
         style: "grid-column: 1 / -1; font-size: 0.85em; color: #aaa; margin-bottom: 15px; padding: 10px; background: rgba(50,50,50,0.5); border: 1px dashed #666;",
-    }, getText(lang, "scoreboardLinksHint" as any) || "Tags: {id}=LeeSin, {name}=Lee Sin, {name_}=Lee_Sin, {nameEsc}=Lee%20Sin");
+    }, `${getText(lang, "linkExample")}: {id}=LeeSin, {name}=Lee Sin, {name_}=Lee_Sin, {nameEsc}=Lee%20Sin`);
 
     const trackingUrlContainer = createEl("div", {}, { class: "settings-group full-width", style: "border: none; padding: 0; background: none;" }, [
         createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "trackingUrl")),
         createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, getText(lang, "trackingUrlExample")),
         createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "trackingUrlHint")),
-        createLinkInputLabel(getText(lang, "primaryLinkUrl" as any)),
+        createLinkInputLabel(getText(lang, "primaryLinkUrl")),
         matchHistoryUrlInput,
     ]) as HTMLDivElement;
     const matchHistorySubUrlInput = createEl("input", {}, {
         class: "settings-input",
         type: "text",
-        placeholder: getText(lang, "alternateLinkUrl" as any),
+        placeholder: getText(lang, "alternateLinkUrl"),
         value: (settings as any).matchHistorySubUrl || "",
         style: "flex: 1; margin-top: 6px;",
     }) as HTMLInputElement;
     trackingUrlContainer.append(
-        createLinkInputLabel(getText(lang, "alternateLinkUrl" as any)),
+        createLinkInputLabel(getText(lang, "alternateLinkUrl")),
     );
     trackingUrlContainer.append(matchHistorySubUrlInput);
 
     const championWikiUrlInput = createEl("input", {}, {
         class: "settings-input",
         type: "text",
-        placeholder: "e.g. https://wiki.leagueoflegends.com/en-us/{name_}",
+        placeholder: `${getText(lang, "linkExample")}: https://wiki.leagueoflegends.com/en-us/{name_}`,
         value: settings.championWikiBaseUrl || "https://wiki.leagueoflegends.com/en-us/{name_}",
         style: "flex: 1;",
     }) as HTMLInputElement;
     const championWikiUrlContainer = createEl("div", {}, { class: "settings-group full-width", style: "border: none; padding: 0; background: none; margin-top: 10px;" }, [
         createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "championWikiUrl")),
-        createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, getText(lang, "championWikiUrlExample")),
+        createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, `${getText(lang, "linkExample")}: https://wiki.leagueoflegends.com/en-us/{name_}`),
         createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "championWikiUrlHint")),
-        createLinkInputLabel(getText(lang, "primaryLinkUrl" as any)),
+        createLinkInputLabel(getText(lang, "primaryLinkUrl")),
         championWikiUrlInput,
     ]) as HTMLDivElement;
     const championWikiSubUrlInput = createEl("input", {}, {
         class: "settings-input",
         type: "text",
-        placeholder: getText(lang, "alternateLinkUrl" as any),
+        placeholder: getText(lang, "alternateLinkUrl"),
         value: (settings as any).championWikiSubUrl || "",
         style: "flex: 1; margin-top: 6px;",
     }) as HTMLInputElement;
     championWikiUrlContainer.append(
-        createLinkInputLabel(getText(lang, "alternateLinkUrl" as any)),
+        createLinkInputLabel(getText(lang, "alternateLinkUrl")),
         championWikiSubUrlInput,
     );
 
     const championMatchupUrlInput = createEl("input", {}, {
         class: "settings-input",
         type: "text",
-        placeholder: "e.g. https://dpm.lol/champions/{My}/matchups?opponent={Opponent}",
+        placeholder: `${getText(lang, "linkExample")}: https://dpm.lol/champions/{My}/matchups?opponent={Opponent}`,
         value: settings.championMatchupUrl || "",
         style: "flex: 1;",
     }) as HTMLInputElement;
     const championMatchupUrlContainer = createEl("div", {}, { class: "settings-group full-width", style: "border: none; padding: 0; background: none; margin-top: 10px;" }, [
         createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "championMatchupUrl")),
         createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "championMatchupUrlHint")),
-        createLinkInputLabel(getText(lang, "primaryLinkUrl" as any)),
+        createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, `${getText(lang, "linkExample")}: https://dpm.lol/champions/{My}/matchups?opponent={Opponent}`),
+        createLinkInputLabel(getText(lang, "primaryLinkUrl")),
         championMatchupUrlInput,
     ]) as HTMLDivElement;
     const championMatchupSubUrlInput = createEl("input", {}, {
         class: "settings-input",
         type: "text",
-        placeholder: getText(lang, "alternateLinkUrl" as any),
+        placeholder: getText(lang, "alternateLinkUrl"),
         value: (settings as any).championMatchupSubUrl || "",
         style: "flex: 1; margin-top: 6px;",
     }) as HTMLInputElement;
     championMatchupUrlContainer.append(
-        createLinkInputLabel(getText(lang, "alternateLinkUrl" as any)),
+        createLinkInputLabel(getText(lang, "alternateLinkUrl")),
         championMatchupSubUrlInput,
     );
 
     const championBuildUrlInput = createEl("input", {}, {
         class: "settings-input",
         type: "text",
-        placeholder: "e.g. https://dpm.lol/champions/{q}/build",
+        placeholder: `${getText(lang, "linkExample")}: https://dpm.lol/champions/{q}/build`,
         value: settings.championBuildUrl || "",
         style: "flex: 1;",
     }) as HTMLInputElement;
     const championBuildUrlContainer = createEl("div", {}, { class: "settings-group full-width", style: "border: none; padding: 0; background: none; margin-top: 10px;" }, [
         createEl("label", {}, { style: "display:block; margin-bottom: 5px; color: #ddd; font-weight: bold;" }, getText(lang, "championBuildUrl")),
         createEl("div", {}, { style: "font-size: 0.8em; color: #00d2ff; margin-bottom: 5px;" }, getText(lang, "championBuildUrlHint")),
-        createLinkInputLabel(getText(lang, "primaryLinkUrl" as any)),
+        createEl("div", {}, { style: "font-size: 0.8em; color: #aaa; margin-bottom: 5px;" }, `${getText(lang, "linkExample")}: https://dpm.lol/champions/{q}/build`),
+        createLinkInputLabel(getText(lang, "primaryLinkUrl")),
         championBuildUrlInput,
     ]) as HTMLDivElement;
     const championBuildSubUrlInput = createEl("input", {}, {
         class: "settings-input",
         type: "text",
-        placeholder: getText(lang, "alternateLinkUrl" as any),
+        placeholder: getText(lang, "alternateLinkUrl"),
         value: (settings as any).championBuildSubUrl || "",
         style: "flex: 1; margin-top: 6px;",
     }) as HTMLInputElement;
     championBuildUrlContainer.append(
-        createLinkInputLabel(getText(lang, "alternateLinkUrl" as any)),
+        createLinkInputLabel(getText(lang, "alternateLinkUrl")),
         championBuildSubUrlInput,
     );
 

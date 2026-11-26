@@ -1,5 +1,4 @@
 import { commands } from "../bindings";
-import type { Settings } from "../bindings";
 
 export function bindSidebarResizeHandle(params: {
     sidebarContainer: HTMLDivElement | null;
@@ -44,7 +43,6 @@ export async function loadInitialUiSettings(params: {
     setMaxStorageGb: (maxStorageGb: number) => void;
     setScoreboardScale: (scoreboardScale: number | null) => void;
     setCurrentLanguage: (language: string) => void;
-    applyDisplayPreferences?: (settings: Settings) => void;
 }): Promise<void> {
     const {
         setScrollFrameStepModifier,
@@ -52,7 +50,6 @@ export async function loadInitialUiSettings(params: {
         setMaxStorageGb,
         setScoreboardScale,
         setCurrentLanguage,
-        applyDisplayPreferences,
     } = params;
 
     try {
@@ -74,7 +71,6 @@ export async function loadInitialUiSettings(params: {
         if (s.language) {
             setCurrentLanguage(s.language);
         }
-        applyDisplayPreferences?.(s);
     } catch (err) {
         console.error("Failed to load settings:", err);
     }

@@ -40,7 +40,6 @@ function buildPairDiffsFromVisibleRowOrder(
 export function applyScoreboardLiveSnapshot(params: {
     timeline: { getStateAt: (participantId: number, timestampMs: number) => any };
     playerCurrentTimeSec: number;
-    recordingOffset: number;
     currentGameVersion: string;
     scoreboardRefs: ScoreboardRefsMap;
     goldTimeline: GoldFrame[];
@@ -69,7 +68,6 @@ export function applyScoreboardLiveSnapshot(params: {
     const {
         timeline,
         playerCurrentTimeSec,
-        recordingOffset,
         currentGameVersion,
         scoreboardRefs,
         goldTimeline,
@@ -96,7 +94,7 @@ export function applyScoreboardLiveSnapshot(params: {
         team200HeraldText,
     } = params;
 
-    const currentTime = (playerCurrentTimeSec + recordingOffset) * 1000 + 2000;
+    const currentTime = playerCurrentTimeSec * 1000 + 2000;
     const gameVersion = currentGameVersion || getCurrentPatchVersion();
 
     const itemGoldMap = updateScoreboardItemsAndGold({

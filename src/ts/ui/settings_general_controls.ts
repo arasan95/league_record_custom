@@ -1,8 +1,8 @@
 import type { Settings } from "../bindings";
-import type { Language } from "../i18n";
+import type { Language, getText as translate } from "../i18n";
 import { type UiCreateEl } from "./settings_primitives";
 
-type GetText = (lang: Language, key: any) => string;
+type GetText = typeof translate;
 
 type CreateSettingsGeneralControlsInput = {
     createEl: UiCreateEl;
@@ -74,16 +74,16 @@ export function createSettingsGeneralControls({
     const langSelect = createEl("select", {}, { class: "settings-select" }) as HTMLSelectElement;
     const languages = [
         { value: "en", label: "English" },
-        { value: "ja", label: "Japanese" },
-        { value: "zh", label: "Chinese" },
-        { value: "ko", label: "Korean" },
-        { value: "vi", label: "Vietnamese" },
-        { value: "pt", label: "Portuguese" },
-        { value: "es", label: "Spanish" },
-        { value: "fr", label: "French" },
+        { value: "ja", label: "日本語" },
+        { value: "zh", label: "简体中文" },
+        { value: "ko", label: "한국어" },
+        { value: "vi", label: "Tiếng Việt" },
+        { value: "pt", label: "Português" },
+        { value: "es", label: "Español" },
+        { value: "fr", label: "Français" },
         { value: "de", label: "Deutsch" },
-        { value: "ru", label: "Russian" },
-        { value: "tr", label: "Turkish" },
+        { value: "ru", label: "Русский" },
+        { value: "tr", label: "Türkçe" },
         { value: "pl", label: "Polski" },
         { value: "it", label: "Italiano" },
     ];
@@ -159,14 +159,14 @@ export function createSettingsGeneralControls({
     ]) as HTMLDivElement;
 
     const resolutions = [
-        { label: "Auto (Window)", value: "" },
-        { label: "720p height (match window ratio)", value: "1280x720p" },
-        { label: "1080p height (match window ratio)", value: "1920x1080p" },
-        { label: "1440p height (match window ratio)", value: "2560x1440p" },
-        { label: "2160p height (match window ratio)", value: "3840x2160p" },
+        { label: getText(lang, "autoWindow"), value: "" },
+        { label: "720p", value: "1280x720p" },
+        { label: "1080p", value: "1920x1080p" },
+        { label: "1440p", value: "2560x1440p" },
+        { label: "2160p (4K)", value: "3840x2160p" },
         { label: "2560x1080 (21:9)", value: "2560x1080p" },
         { label: "3440x1440 (21:9)", value: "3440x1440p" },
-        { label: "2880p height (match window ratio)", value: "5120x2880p" },
+        { label: "2880p (5K)", value: "5120x2880p" },
     ];
     const resSelect = createEl("select", {}, { class: "settings-select" }) as HTMLSelectElement;
     resolutions.forEach((res) => {
@@ -197,12 +197,12 @@ export function createSettingsGeneralControls({
 
     const audioSelect = createEl("select", {}, { class: "settings-select" }) as HTMLSelectElement;
     const audioOptions = [
-        { value: "NONE", label: "None" },
-        { value: "APPLICATION", label: "Application" },
-        { value: "SYSTEM", label: "System" },
-        { value: "ALL", label: "System + Mic" },
-        { value: "SEPARATED", label: "Separated (Game/System/Mic)" },
-        { value: "APPLICATIONS3", label: "3 Apps to 3 Tracks" },
+        { value: "NONE", label: getText(lang, "settingNone") },
+        { value: "APPLICATION", label: getText(lang, "audioApplication") },
+        { value: "SYSTEM", label: getText(lang, "audioSystem") },
+        { value: "ALL", label: getText(lang, "audioSystemMic") },
+        { value: "SEPARATED", label: getText(lang, "audioSeparated") },
+        { value: "APPLICATIONS3", label: getText(lang, "audioThreeApps") },
     ];
     audioOptions.forEach((a) => {
         const opt = createEl("option", {}, { value: a.value }, a.label) as HTMLOptionElement;
@@ -220,7 +220,7 @@ export function createSettingsGeneralControls({
         const currentVolume = Number.isFinite(current.volumePercent) ? Math.max(0, Math.min(100, Number(current.volumePercent))) : 100;
 
         const appSelect = createEl("select", {}, { class: "settings-select", style: "min-width: 220px; flex: 1;" }) as HTMLSelectElement;
-        appSelect.append(createEl("option", {}, { value: "" }, "Choose running app") as HTMLOptionElement);
+        appSelect.append(createEl("option", {}, { value: "" }, getText(lang, "chooseRunningApp")) as HTMLOptionElement);
         if (currentApp) {
             appSelect.append(createEl("option", {}, { value: currentApp, selected: "true" }, currentApp) as HTMLOptionElement);
         }
@@ -228,7 +228,7 @@ export function createSettingsGeneralControls({
         const enabledToggle = createEl("button", {}, { class: "btn-browse", type: "button", style: "margin-left: 0; min-width: 78px;" }) as HTMLButtonElement;
         const setEnabledVisual = (enabled: boolean) => {
             enabledToggle.dataset.enabled = enabled ? "1" : "0";
-            enabledToggle.textContent = enabled ? "ON" : "OFF";
+            enabledToggle.textContent = getText(lang, enabled ? "settingOn" : "settingOff");
             enabledToggle.style.borderColor = enabled ? "#3fb950" : "#666";
             enabledToggle.style.color = enabled ? "#3fb950" : "#aaa";
         };
@@ -262,7 +262,7 @@ export function createSettingsGeneralControls({
         volumeInput.oninput = () => syncVolume(volumeInput.value);
 
         const row = createEl("div", {}, { style: "display: flex; flex-wrap: wrap; gap: 8px; align-items: center;" }, [
-            createEl("span", {}, { style: "min-width: 72px; color: #ddd; font-weight: 600;" }, `Track ${outputTrackNo}`),
+            createEl("span", {}, { style: "min-width: 72px; color: #ddd; font-weight: 600;" }, getText(lang, "audioTrack").replace("{number}", String(outputTrackNo))),
             appSelect,
             enabledToggle,
             volumeRange,
@@ -277,12 +277,12 @@ export function createSettingsGeneralControls({
             appAudioTrackControls.forEach((control) => {
                 const selected = control.appSelect.value;
                 control.appSelect.innerHTML = "";
-                control.appSelect.append(createEl("option", {}, { value: "" }, "Choose running app") as HTMLOptionElement);
+                control.appSelect.append(createEl("option", {}, { value: "" }, getText(lang, "chooseRunningApp")) as HTMLOptionElement);
                 uniqueApps.forEach((app) => {
                     control.appSelect.append(createEl("option", {}, { value: app }, app) as HTMLOptionElement);
                 });
                 if (selected && !uniqueApps.includes(selected)) {
-                    control.appSelect.append(createEl("option", {}, { value: selected }, `${selected} (not running)`) as HTMLOptionElement);
+                    control.appSelect.append(createEl("option", {}, { value: selected }, getText(lang, "audioNotRunning").replace("{app}", () => selected)) as HTMLOptionElement);
                 }
                 control.appSelect.value = selected || "";
             });
@@ -298,7 +298,7 @@ export function createSettingsGeneralControls({
     ) as HTMLDivElement;
     const applicationAudioTracksGroup = createGroup(
         createEl,
-        "Application Audio Tracks",
+        getText(lang, "applicationAudioTracks"),
         applicationAudioTracksContainer,
         true,
     );
@@ -313,25 +313,26 @@ export function createSettingsGeneralControls({
         class: "settings-input",
         type: "number",
         min: "0",
-        placeholder: "Unlimited",
+        placeholder: getText(lang, "unlimited"),
         value: settings.maxRecordingAgeDays === null ? "" : settings.maxRecordingAgeDays.toString(),
     }) as HTMLInputElement;
     const maxSizeInput = createEl("input", {}, {
         class: "settings-input",
         type: "number",
         min: "0",
-        placeholder: "Unlimited",
+        placeholder: getText(lang, "unlimited"),
         value: settings.maxRecordingsSizeGb === null ? "" : settings.maxRecordingsSizeGb.toString(),
     }) as HTMLInputElement;
 
     const clearCacheBtn = createEl("button", {
         onclick: async () => {
-            if (confirm("Clear image and item cache? This will re-download assets on next use.")) {
+            if (confirm(getText(lang, "clearCacheConfirm"))) {
                 try {
                     await onClearCache();
-                    alert("Cache cleared successfully.");
+                    alert(getText(lang, "clearCacheSuccess"));
                 } catch (e) {
-                    alert("Failed to clear cache: " + e);
+                    console.error("Failed to clear cache:", e);
+                    alert(getText(lang, "clearCacheError"));
                 }
             }
         },
@@ -350,7 +351,7 @@ export function createSettingsGeneralControls({
             applicationAudioTracksGroup,
             maxAgeGroup: createGroup(createEl, getText(lang, "maxAge"), maxAgeInput),
             maxSizeGroup: createGroup(createEl, getText(lang, "maxSize"), maxSizeInput),
-            troubleshootingGroup: createGroup(createEl, "Troubleshooting", clearCacheBtn as HTMLElement, true),
+            troubleshootingGroup: createGroup(createEl, getText(lang, "troubleshooting"), clearCacheBtn as HTMLElement, true),
         },
         refs: {
             langSelect,

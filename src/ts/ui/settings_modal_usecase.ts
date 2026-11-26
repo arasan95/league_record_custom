@@ -1,15 +1,13 @@
 import { commands, type Settings } from "../bindings";
-import { invoke } from "../platform/core";
+import { invoke } from "@tauri-apps/api/core";
 import { saveKeybinds, saveMouseConfig } from "../keybinds";
 import type { Language } from "../i18n";
 import { createSettingsTabButton, switchSettingsTab } from "./settings_primitives";
 import { createSettingsAboutTabContent } from "./settings_about";
 import { createSettingsHotkeysTabContent } from "./settings_hotkeys";
-import { createSettingsDisplayTabContent } from "./settings_display";
 import { createSettingsOptionsSections } from "./settings_options";
 import { createSettingsGeneralControls } from "./settings_general_controls";
 import { buildSettingsPayload } from "./settings_save_payload";
-import { createSettingsAccountTabContent } from "./settings_account";
 
 export function showSettingsModalView(input: {
     settings: Settings;
@@ -26,7 +24,6 @@ export function showSettingsModalView(input: {
     onScrollModifierChange: (modifier: string | null) => void;
     onReloadKeybinds: () => void;
     updateAutoButtons: (s: Settings) => void;
-    applyDisplayPreferences: (s: Settings) => void;
 }): void {
     const {
         settings,
@@ -43,18 +40,15 @@ export function showSettingsModalView(input: {
         onScrollModifierChange,
         onReloadKeybinds,
         updateAutoButtons,
-        applyDisplayPreferences,
     } = input;
 
-    const selectedLanguage = ((settings as any).language || "en") as Language;
-    const lang = (selectedLanguage === "ja" ? "ja" : "en") as Language;
-    const localizedGetText = (_language: any, key: any): string => getText(lang, key);
+    const lang = ((settings as any).language || "en") as Language;
     const closeSettingsModal = () => hideModal();
     const generalControls = createSettingsGeneralControls({
         createEl,
         settings,
-        lang: selectedLanguage,
-        getText: localizedGetText,
+        lang,
+        getText,
         onLanguageChanged: (newLang) => {
             (settings as any).language = newLang;
             modalContent.innerHTML = "";
@@ -82,45 +76,24 @@ export function showSettingsModalView(input: {
         lang,
         settings,
         currentBinds,
-        getText: localizedGetText,
+        getText,
         onScrollModifierChange,
-    });
-
-    const { displayTabContent, getDisplayPreferences } = createSettingsDisplayTabContent({
-        createEl,
-        settings,
-        lang,
-        getText: localizedGetText,
     });
 
     const settingsOptions = createSettingsOptionsSections(
         createEl,
         settings,
         lang,
-        localizedGetText,
+        getText,
     );
-    displayTabContent.querySelector<HTMLElement>(".settings-content-wrapper")?.prepend(
-        settingsOptions.markerFlagsTitle,
-        settingsOptions.markerFlagsContent,
-    );
-    const scoreboardLinksTabContent = createEl("div", {}, { class: "settings-tab-content settings-scroll-container hidden" });
-    const scoreboardLinksWrapper = createEl("div", {}, { class: "settings-content-wrapper" });
-    const scoreboardLinksGrid = createEl("div", {}, { class: "settings-grid" });
-    scoreboardLinksGrid.append(
-        settingsOptions.scoreboardLinksTitle,
-        settingsOptions.scoreboardLinksContent,
-    );
-    scoreboardLinksWrapper.append(scoreboardLinksGrid);
-    scoreboardLinksTabContent.append(scoreboardLinksWrapper);
 
     const aboutTabContent = createSettingsAboutTabContent({
         createEl,
         lang,
         settings,
-        getText: localizedGetText,
+        getText,
         onShowUpdateModal,
     });
-    const accountTabContent = createSettingsAccountTabContent({ createEl, lang });
 
     generalGrid.append(
         generalControls.groups.languageGroup,
@@ -136,56 +109,49 @@ export function showSettingsModalView(input: {
         generalControls.groups.maxSizeGroup,
     );
     generalGrid.append(
+        settingsOptions.markerFlagsTitle,
+        settingsOptions.markerFlagsContent,
         settingsOptions.gameModesTitle,
         settingsOptions.gameModesContent,
         settingsOptions.switchesTitle,
         settingsOptions.switchesContent,
+        settingsOptions.scoreboardLinksTitle,
+        settingsOptions.scoreboardLinksContent,
         generalControls.groups.troubleshootingGroup,
     );
 
-    const tabContents = {
-        general: generalTabContent,
-        display: displayTabContent,
-        scoreboardLinks: scoreboardLinksTabContent,
-        hotkeys: hotkeysTabContent,
-        account: accountTabContent,
-        about: aboutTabContent,
-    };
-    let tabButtons: Parameters<typeof switchSettingsTab>[1];
-    const activateTab = (tabName: Parameters<typeof switchSettingsTab>[0]) => {
-        switchSettingsTab(tabName, tabButtons, tabContents);
-    };
-    const btnGeneral = createSettingsTabButton(createEl, getText(lang, "tabGeneral"), true, () => activateTab("general"));
-    const btnDisplay = createSettingsTabButton(createEl, getText(lang, "tabDisplay"), false, () => activateTab("display"));
-    const btnScoreboardLinks = createSettingsTabButton(createEl, getText(lang, "scoreboardLinks"), false, () => activateTab("scoreboardLinks"));
-    const btnHotkeys = createSettingsTabButton(createEl, getText(lang, "tabHotkeys"), false, () => activateTab("hotkeys"));
-    const btnAccount = createSettingsTabButton(createEl, lang === "ja" ? "アカウント" : "Account", false, () => activateTab("account"));
-    const btnAbout = createSettingsTabButton(createEl, getText(lang, "tabAbout" as any) || "About", false, () => activateTab("about"));
-    tabButtons = {
-        general: btnGeneral,
-        display: btnDisplay,
-        scoreboardLinks: btnScoreboardLinks,
-        hotkeys: btnHotkeys,
-        account: btnAccount,
-        about: btnAbout,
-    };
+    const btnGeneral = createSettingsTabButton(createEl, getText(lang, "tabGeneral"), true, () => {
+        switchSettingsTab("general", { general: btnGeneral, hotkeys: btnHotkeys, about: btnAbout }, {
+            general: generalTabContent,
+            hotkeys: hotkeysTabContent,
+            about: aboutTabContent,
+        });
+    });
+    const btnHotkeys = createSettingsTabButton(createEl, getText(lang, "tabHotkeys"), false, () => {
+        switchSettingsTab("hotkeys", { general: btnGeneral, hotkeys: btnHotkeys, about: btnAbout }, {
+            general: generalTabContent,
+            hotkeys: hotkeysTabContent,
+            about: aboutTabContent,
+        });
+    });
+    const btnAbout = createSettingsTabButton(createEl, getText(lang, "tabAbout"), false, () => {
+        switchSettingsTab("about", { general: btnGeneral, hotkeys: btnHotkeys, about: btnAbout }, {
+            general: generalTabContent,
+            hotkeys: hotkeysTabContent,
+            about: aboutTabContent,
+        });
+    });
 
-    const tabsHeading = createEl("div", {}, { class: "settings-tabs-heading" }, getText(lang, "settingsTitle"));
-    const tabsContainer = createEl("div", {}, { class: "settings-tabs" }, [tabsHeading, btnGeneral, btnDisplay, btnScoreboardLinks, btnHotkeys, btnAccount, btnAbout]);
-    const panelsContainer = createEl("div", {}, { class: "settings-panels" }, [
+    const tabsContainer = createEl("div", {}, { class: "settings-tabs" }, [btnGeneral, btnHotkeys, btnAbout]);
+    const modalBody = createEl("div", {}, { style: "display: flex; flex-direction: column; overflow: hidden; flex: 1;" }, [
+        tabsContainer,
         generalTabContent,
-        displayTabContent,
-        scoreboardLinksTabContent,
         hotkeysTabContent,
-        accountTabContent,
         aboutTabContent,
-    ]);
-    const modalBody = createEl("div", {}, { class: "settings-modal-body" }, [
-        panelsContainer,
     ]);
 
     const saveBtn = createEl("button", {
-        onclick: () => {
+        onclick: async () => {
             const { highlightHotkeyValue, startRecHotkeyValue, stopRecHotkeyValue } = getBackendHotkeyValues();
             const newSettings: Settings = buildSettingsPayload({
                 base: settings,
@@ -241,6 +207,7 @@ export function showSettingsModalView(input: {
                 },
                 otherSwitches: {
                     autostart: settingsOptions.refs.otherSwitches.autostart.input.checked,
+                    closeToTray: settingsOptions.refs.otherSwitches.closeToTray.input.checked,
                     autoplayVideo: settingsOptions.refs.otherSwitches.autoplayVideo.input.checked,
                     autoStopPlayback: settingsOptions.refs.otherSwitches.autoStopPlayback.input.checked,
                     autoSelectRecording: settingsOptions.refs.otherSwitches.autoSelectRecording.input.checked,
@@ -250,41 +217,34 @@ export function showSettingsModalView(input: {
                     keepVideoJsonOnAutoDelete: settingsOptions.refs.otherSwitches.keepVideoJsonOnAutoDelete.input.checked,
                     autoDeleteClips: settingsOptions.refs.otherSwitches.autoDeleteClips.input.checked,
                 },
-                displayPreferences: getDisplayPreferences(),
             });
 
-            saveKeybinds(pendingBinds);
-            saveMouseConfig(pendingMouseConfig);
-            onReloadKeybinds();
-            updateAutoButtons(newSettings);
-            applyDisplayPreferences(newSettings);
-            closeSettingsModal();
-            void saveCallback(newSettings)
-                .then(() => {
-                    (window as any)._developerModeEnabled = newSettings.developerMode;
-                })
-                .catch((error) => {
-                    console.error("Failed to save settings:", error);
-                });
+            (saveBtn as HTMLButtonElement).disabled = true;
+            try {
+                await saveCallback(newSettings);
+                saveKeybinds(pendingBinds);
+                saveMouseConfig(pendingMouseConfig);
+                onReloadKeybinds();
+                updateAutoButtons(newSettings);
+                closeSettingsModal();
+            } catch (error) {
+                console.error("Failed to save settings:", error);
+                alert(getText(lang, "settingsSaveFailed"));
+            } finally {
+                (saveBtn as HTMLButtonElement).disabled = false;
+            }
         },
     }, { class: "btn-save" }, getText(lang, "save"));
 
     const cancelBtn = createEl("button", { onclick: closeSettingsModal }, { class: "btn-cancel" }, getText(lang, "cancel"));
     const actions = createEl("div", {}, { class: "settings-actions" }, [cancelBtn, saveBtn]);
-    const header = createEl("div", {}, { class: "settings-header" }, [
+    const content = createEl("div", {}, { id: "settings-modal-content" }, [
         createEl("h2", {}, { style: "text-align: center; margin-top: 5px; margin-bottom: 0px; font-size: 1.2em;" }, getText(lang, "settingsTitle")),
         createEl("div", {}, { style: "text-align: center; margin-bottom: 10px; color: #888; font-size: 0.8em;" }, `Patch ${currentPatchVersion}`),
-    ]);
-    const content = createEl("div", {}, { id: "settings-modal-content" }, [
-        header,
         modalBody,
         actions,
     ]);
-    const layout = createEl("div", {}, { class: "settings-modal-layout" }, [
-        tabsContainer,
-        content,
-    ]);
 
     modalContent.classList.add("settings-mode");
-    showModal(layout);
+    showModal(content);
 }

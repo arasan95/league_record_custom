@@ -14,7 +14,7 @@ export function getVideoBaseName(videoId: string): string {
 export function videoIdsMatch(a: string, b: string): boolean {
     const na = normalizeVideoId(a);
     const nb = normalizeVideoId(b);
-    return na === nb || getVideoBaseName(na) === getVideoBaseName(nb);
+    return na === nb || ((!na.includes("/") || !nb.includes("/")) && getVideoBaseName(na) === getVideoBaseName(nb));
 }
 
 export function toAssetPath(path: string): string {

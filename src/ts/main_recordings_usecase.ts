@@ -1,7 +1,10 @@
-import type { Recording } from "./bindings";
-import { invoke } from "./platform/core";
+import { join } from "@tauri-apps/api/path";
+import { commands } from "./bindings";
+import { playNotificationSound } from "./util";
+import { videoIdsMatch } from "./main_video_id_usecase";
+import type { Recording, RecordingSnapshot } from "./bindings";
+import { invoke } from "@tauri-apps/api/core";
 import { beginSidebarImageRun, waitForSidebarImageRun } from "./ui/recording_sidebar_item_usecase";
-import { freezeProbeLog, isFreezeProbeEnabled, measureFreezeProbeSync } from "./freeze_probe";
 const PERF_LOG_ENABLED = false;
 
 type UiSidebarLike = {
@@ -31,7 +34,7 @@ function nextFrame(): Promise<void> {
 }
 
 async function sendPerfToBackend(line: string): Promise<void> {
-    if (!PERF_LOG_ENABLED && !isFreezeProbeEnabled()) return;
+    if (!PERF_LOG_ENABLED) return;
     try {
         await invoke("perf_log", { message: line });
     } catch {
@@ -42,8 +45,7 @@ async function sendPerfToBackend(line: string): Promise<void> {
 export async function refreshSidebar(input: {
     ui: UiSidebarLike;
     forceUpdateIds?: string[];
-    getRecordingsList: () => Promise<Recording[]>;
-    getRecordingsSize: () => Promise<number>;
+    getRecordingsSnapshot: () => Promise<RecordingSnapshot | null>;
     setVideo: (videoId: string | null) => void | Promise<void>;
     toggleFavorite: (videoId: string) => Promise<boolean | null>;
     showRenameModal: (videoId: string) => void | Promise<void>;
@@ -54,8 +56,7 @@ export async function refreshSidebar(input: {
     const {
         ui,
         forceUpdateIds = [],
-        getRecordingsList,
-        getRecordingsSize,
+        getRecordingsSnapshot,
         setVideo,
         toggleFavorite,
         showRenameModal,
@@ -63,26 +64,23 @@ export async function refreshSidebar(input: {
         handleDeleteVideoOnly,
     } = input;
 
+    const dataFetchStarted = perfNowMs();
+    const snapshot = await getRecordingsSnapshot();
+    if (!snapshot) return [];
+    const { recordings, sizeGb: recordingsSize } = snapshot;
     const activeVideoId = ui.getActiveVideoId();
     const imageRunId = beginSidebarImageRun();
-    const dataFetchStarted = perfNowMs();
-    const [recordings, recordingsSize] = await Promise.all([getRecordingsList(), getRecordingsSize()]);
     const dataFetchMs = perfNowMs() - dataFetchStarted;
     const renderStarted = perfNowMs();
-    measureFreezeProbeSync(
-        "sidebar:updateSideBar(sync-dom)",
-        () => ui.updateSideBar(
-            recordingsSize,
-            recordings,
-            setVideo,
-            toggleFavorite,
-            showRenameModal,
-            showDeleteModal,
-            handleDeleteVideoOnly,
-            forceUpdateIds,
-        ),
-        { recordings: recordings.length, forceUpdateIds: forceUpdateIds.length },
-        80,
+    ui.updateSideBar(
+        recordingsSize,
+        recordings,
+        setVideo,
+        toggleFavorite,
+        showRenameModal,
+        showDeleteModal,
+        handleDeleteVideoOnly,
+        forceUpdateIds,
     );
     const renderSyncMs = perfNowMs() - renderStarted;
 
@@ -104,16 +102,6 @@ export async function refreshSidebar(input: {
         const timedOut = imageStats.pendingItems > 0;
         const line = `[perf] sidebar_gui_complete total=${totalMs.toFixed(1)}ms data=${dataFetchMs.toFixed(1)}ms render_sync=${renderSyncMs.toFixed(1)}ms paint=${paintMs.toFixed(1)}ms images_wait=${imagesMs.toFixed(1)}ms img_items=${imageStats.totalItems} img_items_done=${imageStats.completedItems} img_items_pending=${imageStats.pendingItems} img_resolve_ms=${imageStats.resolveMs.toFixed(1)}ms img_dom_ms=${imageStats.domLoadMs.toFixed(1)}ms img_resolve_count=${imageStats.resolveCount} img_load_count=${imageStats.loadCount} img_error_count=${imageStats.errorCount} timed_out=${timedOut ? 1 : 0} force_ids=${forceUpdateIds.length} recordings=${recordings.length}`;
         if (PERF_LOG_ENABLED) console.log(line);
-        freezeProbeLog("sidebar:complete", {
-            totalMs: Number(totalMs.toFixed(1)),
-            dataMs: Number(dataFetchMs.toFixed(1)),
-            renderSyncMs: Number(renderSyncMs.toFixed(1)),
-            paintMs: Number(paintMs.toFixed(1)),
-            imagesWaitMs: Number(imagesMs.toFixed(1)),
-            imgItems: imageStats.totalItems,
-            imgPending: imageStats.pendingItems,
-            recordings: recordings.length,
-        }, renderSyncMs >= 80 || totalMs >= 500);
         await sendPerfToBackend(line);
 
         if (timedOut) {
@@ -172,4 +160,60 @@ export function retrySidebarUpdateLoop(input: {
             });
         }
     }, delayMs);
+}
+
+
+export function createRecordingRefresh(refresh: () => Promise<unknown>) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let running = false;
+    let queued = false;
+    async function flush() {
+        if (running) {
+            queued = true;
+            return;
+        }
+        running = true;
+        try {
+            do {
+                queued = false;
+                await refresh();
+            } while (queued);
+        } finally {
+            running = false;
+        }
+    }
+
+    function schedule(delay = 120) {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+            void flush().catch(error => console.error("Could not refresh recordings:", error));
+        }, delay);
+    }
+    return { flush, schedule };
+}
+
+export async function handleRecordingFinished(
+    [videoId, manual]: [string, boolean],
+    input: {
+        scheduleRefresh: (delay: number) => void;
+        getActiveId: () => string | null;
+        loadMetadata: (id: string) => Promise<boolean>;
+        scheduleMetadataRetry: (id: string) => void;
+        setVideo: (id: string) => Promise<void>;
+        popup: () => void;
+    },
+) {
+    input.scheduleRefresh(2500);
+    const settings = await commands.getSettings();
+    const path = /[\\/]/.test(videoId) ? videoId : await join(settings.recordingsFolder, videoId);
+    if (!manual && settings.playRecordingSounds) playNotificationSound("stop");
+    if (!manual && settings.autoPopupOnEnd) input.popup();
+    if (!manual && settings.autoSelectRecording) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    const activeId = input.getActiveId();
+    if (activeId && videoIdsMatch(activeId, path)) {
+        if (!(await input.loadMetadata(activeId)) && !manual) input.scheduleMetadataRetry(activeId);
+    }
+    if (!manual && settings.autoSelectRecording) await input.setVideo(path);
 }

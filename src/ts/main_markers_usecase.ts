@@ -38,7 +38,6 @@ export type EventType =
     | "TFT-Round";
 
 type MarkerLane = "blue" | "red" | "self";
-export type TowerLane = "TOP" | "MID" | "BOT";
 type ChampionKillMarkerType = "Kill" | "Death" | "Assist";
 type OtherMarkerType = Exclude<EventType, ChampionKillMarkerType> | "Highlight";
 type TeamId = 100 | 200;
@@ -61,7 +60,6 @@ export type MarkerDetail =
         lane: MarkerLane;
         timestampMs: number;
         label: string;
-        towerLane?: TowerLane;
     };
 
 export type BuiltMarkers = {
@@ -336,7 +334,6 @@ export function buildMarkers(
         label: string,
         markerEventDelay = eventDelay,
         extraClass = "",
-        towerLane?: TowerLane,
     ) => {
         const id = nextDetailId++;
         markers.push(createMarker(timestampMs, recordingOffset, markerType as EventType, lane, markerEventDelay, id, extraClass));
@@ -347,7 +344,6 @@ export function buildMarkers(
             lane,
             timestampMs,
             label,
-            towerLane,
         };
     };
 
@@ -361,20 +357,6 @@ export function buildMarkers(
                 return "Bot";
             default:
                 return "Unknown";
-        }
-    };
-
-    const getTowerLane = (event: Extract<GameEvent, { BuildingKill: any }>): TowerLane | undefined => {
-        const buildingType: any = event.BuildingKill.building_type as any;
-        switch (buildingType?.lane_type ?? buildingType?.laneType) {
-            case "TOP_LANE":
-                return "TOP";
-            case "MID_LANE":
-                return "MID";
-            case "BOT_LANE":
-                return "BOT";
-            default:
-                return undefined;
         }
     };
 
@@ -443,7 +425,7 @@ export function buildMarkers(
             const selfObjective = resolveSelfObjectiveMarker(event, participantId, markerFlags);
             if (selfObjective !== null) {
                 if ("BuildingKill" in event && selfObjective === "Turret") {
-                    pushOtherMarker(event.timestamp, recordingOffset, selfObjective, "self", buildTowerLabel(event), eventDelay, "", getTowerLane(event));
+                    pushOtherMarker(event.timestamp, recordingOffset, selfObjective, "self", buildTowerLabel(event));
                 } else {
                     pushOtherMarker(event.timestamp, recordingOffset, selfObjective, "self", selfObjective);
                 }
@@ -455,7 +437,7 @@ export function buildMarkers(
                     pushChampionKillMarker(event, recordingOffset, "Kill", teamLaneMarker.lane);
                 } else {
                     if ("BuildingKill" in event && teamLaneMarker.type === "Turret") {
-                        pushOtherMarker(event.timestamp, recordingOffset, teamLaneMarker.type, teamLaneMarker.lane, buildTowerLabel(event), eventDelay, "", getTowerLane(event));
+                        pushOtherMarker(event.timestamp, recordingOffset, teamLaneMarker.type, teamLaneMarker.lane, buildTowerLabel(event));
                     } else {
                         const markerType = teamLaneMarker.type as OtherMarkerType;
                         pushOtherMarker(event.timestamp, recordingOffset, markerType, teamLaneMarker.lane, markerType);

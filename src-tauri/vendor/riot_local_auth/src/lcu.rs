@@ -1,11 +1,12 @@
-use std::path::PathBuf;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
-use std::{fs, thread};
+use std::{env, fs, thread};
 
 use rustls::{ClientConfig, RootCertStore};
 use rustls_pemfile::Item;
-use ureq::Agent;
+use ureq::{serde_json, Agent};
 
 use crate::error::{Error, Result};
 use crate::{riot, Credentials};
@@ -13,6 +14,31 @@ use crate::{riot, Credentials};
 static UREQ_AGENT: OnceLock<Agent> = OnceLock::new();
 
 pub fn try_get_credentials() -> Result<Credentials> {
+    credentials_from_riot_api().or_else(|error| {
+        let override_dir = env::var_os("LEAGUE_INSTALL_DIR").map(PathBuf::from);
+        let manifest_dirs = env::var_os("PROGRAMDATA")
+            .map(|path| PathBuf::from(path).join("Riot Games/RiotClientInstalls.json"))
+            .and_then(|path| fs::File::open(path).ok())
+            .and_then(|file| serde_json::from_reader::<_, RiotInstalls>(file).ok())
+            .map(|manifest| manifest.associated_client)
+            .unwrap_or_default();
+
+        override_dir
+            .into_iter()
+            .chain(manifest_dirs.into_keys())
+            .chain([PathBuf::from(r"C:\Riot Games\League of Legends")])
+            .filter(|path| path.is_absolute() && path.join("LeagueClient.exe").is_file())
+            .find_map(|path| read_lcu_lockfile(&path).ok())
+            .ok_or(error)
+    })
+}
+
+#[derive(serde::Deserialize)]
+struct RiotInstalls {
+    associated_client: BTreeMap<PathBuf, serde::de::IgnoredAny>,
+}
+
+fn credentials_from_riot_api() -> Result<Credentials> {
     let riot_credentials = riot::try_get_credentials()?;
 
     let ureq_agent = UREQ_AGENT.get_or_init(create_ureq_agent);
@@ -35,8 +61,11 @@ pub fn try_get_credentials() -> Result<Credentials> {
         .map(|install_info| install_info.path)
         .map_err(Error::InstallInfoParse)?;
 
-    let lockfile_content = fs::read_to_string(install_path.join("lockfile"))?;
-    Credentials::try_from(lockfile_content)
+    read_lcu_lockfile(&install_path)
+}
+
+fn read_lcu_lockfile(install_path: &Path) -> Result<Credentials> {
+    Credentials::try_from(fs::read_to_string(install_path.join("lockfile"))?)
 }
 
 pub fn get_credentials_blocking() -> Result<Credentials> {

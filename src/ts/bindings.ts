@@ -20,6 +20,14 @@ async getRecordingsSize() : Promise<number> {
 async getRecordingsList() : Promise<Recording[]> {
     return await TAURI_INVOKE("get_recordings_list");
 },
+async getRecordingsSnapshot() : Promise<Result<RecordingSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_recordings_snapshot") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async openRecordingsFolder() : Promise<void> {
     await TAURI_INVOKE("open_recordings_folder");
 },
@@ -88,9 +96,9 @@ async playRecordingReplay(videoId: string) : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async createClip(videoId: string, start: number, end: number, gameAudioOnly: boolean | null, audioTrackIndex: number | null) : Promise<Result<string, string>> {
+async createClip(videoId: string, start: number, end: number, gameAudioOnly: boolean | null, audioTrackIndex: number | null, onProgress: TAURI_CHANNEL<number>) : Promise<Result<string, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("create_clip", { videoId, start, end, gameAudioOnly, audioTrackIndex }) };
+    return { status: "ok", data: await TAURI_INVOKE("create_clip", { videoId, start, end, gameAudioOnly, audioTrackIndex, onProgress }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -103,6 +111,9 @@ async getClipAudioTracks(videoId: string) : Promise<Result<ClipAudioTrack[], str
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async pickClipsFolder() : Promise<string | null> {
+    return await TAURI_INVOKE("pick_clips_folder");
 },
 async pickFfmpegPath() : Promise<string | null> {
     return await TAURI_INVOKE("pick_ffmpeg_path");
@@ -150,6 +161,22 @@ async loadScoreboardCache(videoId: string) : Promise<Result<string, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async updateChampionData() : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_champion_data") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async loadTooltipLocaleDb(locale: string) : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_tooltip_locale_db", { locale }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async checkTooltipDbUpdate() : Promise<Result<TooltipDbUpdateInfo, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("check_tooltip_db_update") };
@@ -165,6 +192,9 @@ async applyTooltipDbUpdate(expectedSha256: string) : Promise<Result<TooltipDbUpd
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async perfLog(message: string) : Promise<void> {
+    await TAURI_INVOKE("perf_log", { message });
 }
 }
 
@@ -183,7 +213,7 @@ appEvent: "app-event"
 
 /** user-defined types **/
 
-export type AppEvent = { type: "RecordingsChanged"; payload: null } | { type: "MetadataChanged"; payload: string[] } | { type: "MarkerflagsChanged"; payload: null } | { type: "RecordingStarted" } | { type: "ManualRecordingStarted" } | { type: "ManualRecordingStopped" } | { type: "GameDetected" } | { type: "GameStarted" } | { type: "RecordingFinished"; payload: [string, boolean] } | { type: "ClipProgress"; payload: { videoId: string; start: number; end: number; percent: number } }
+export type AppEvent = { type: "RecordingPhaseChanged"; payload: RecordingStatus } | { type: "RecordingsChanged"; payload: null } | { type: "MetadataChanged"; payload: string[] } | { type: "MarkerflagsChanged"; payload: null } | { type: "RecordingStarted" } | { type: "ManualRecordingStarted" } | { type: "ManualRecordingStopped" } | { type: "GameDetected" } | { type: "GameStarted" } | { type: "RecordingFailed"; payload: string } | { type: "RecordingMetadataSaveFailed"; payload: string } | { type: "RecordingFinished"; payload: [string, boolean] }
 export type ApplicationAudioTrackSetting = { application: string | null; enabled: boolean; volumePercent: number }
 export type AudioSource = 
 /**
@@ -233,10 +263,10 @@ export type ParticipantGold = { participantId: number; totalGold: number; minion
 export type Player = { gameName: string; tagLine: string; summonerId?: number | null }
 export type Position = { x: number; y: number }
 export type Queue = { id: number; name: string; isRanked: boolean }
-export type Recording = { videoId: string; metadata: MetadataFile | null; videoExists: boolean }
-export type MarkerColors = { kill: string; death: string; assist: string; structure: string; dragon: string; voidgrub: string; herald: string; baron: string };
-export type MarkerOpacities = { kill: number; death: number; assist: number; structure: number; dragon: number; voidgrub: number; herald: number; baron: number };
-export type Settings = { markerFlags: MarkerFlags; markerColors: MarkerColors; markerOpacities: MarkerOpacities; showHonorVotes: boolean; debugLog: boolean; recordingsFolder: string; clipsFolder: string; filenameFormat: string; encodingQuality: number; outputResolution: StdResolution | null; framerate: Framerate; recordAudio: AudioSource; applicationAudioTracks: ApplicationAudioTrackSetting[]; autostart: boolean; maxRecordingAgeDays: number | null; maxRecordingsSizeGb: number | null; confirmDelete: boolean; hightlightHotkey: string | null; startRecordingHotkey: string | null; stopRecordingHotkey: string | null; gameModes: string[] | null; autoplayVideo: boolean; autoStopPlayback: boolean; autoSelectRecording: boolean; autoPopupOnEnd: boolean; ffmpegPath: string | null; developerMode: boolean; matchHistoryBaseUrl: string | null; matchHistorySubUrl: string | null; scrollFrameStepModifier: string | null; scoreboardLinkModifier: string | null; scoreboardScale: number | null; playRecordingSounds: boolean; language: string; championWikiBaseUrl: string | null; championWikiSubUrl: string | null; championMatchupUrl: string | null; championMatchupSubUrl: string | null; championBuildUrl: string | null; championBuildSubUrl: string | null; checkUpdatesOnStartup: boolean; keepVideoJsonOnAutoDelete: boolean; autoDeleteClips: boolean; tftRoundOcrEnabled: boolean; tftRoundLiveOcrEnabled: boolean; tftRoundOcrRegion: TftRoundOcrRegion; tftRoundOcrIntervalSeconds: number }
+export type Recording = { videoId: string; metadata: MetadataFile | null; videoExists: boolean; isRecording: boolean }
+export type RecordingSnapshot = { recordings: Recording[]; sizeGb: number; stale: boolean }
+export type RecordingStatus = "idle" | "preparing" | "recording" | "stopping"
+export type Settings = { markerFlags: MarkerFlags; debugLog: boolean; recordingsFolder: string; clipsFolder: string; filenameFormat: string; encodingQuality: number; outputResolution: StdResolution | null; framerate: Framerate; recordAudio: AudioSource; applicationAudioTracks: ApplicationAudioTrackSetting[]; autostart: boolean; closeToTray: boolean; maxRecordingAgeDays: number | null; maxRecordingsSizeGb: number | null; confirmDelete: boolean; hightlightHotkey: string | null; startRecordingHotkey: string | null; stopRecordingHotkey: string | null; gameModes: string[] | null; autoplayVideo: boolean; autoStopPlayback: boolean; autoSelectRecording: boolean; autoPopupOnEnd: boolean; ffmpegPath: string | null; developerMode: boolean; matchHistoryBaseUrl: string | null; matchHistorySubUrl: string | null; scrollFrameStepModifier: string | null; scoreboardLinkModifier: string | null; scoreboardScale: number | null; playRecordingSounds: boolean; language: string; championWikiBaseUrl: string | null; championWikiSubUrl: string | null; championMatchupUrl: string | null; championMatchupSubUrl: string | null; championBuildUrl: string | null; championBuildSubUrl: string | null; checkUpdatesOnStartup: boolean; keepVideoJsonOnAutoDelete: boolean; autoDeleteClips: boolean; tftRoundOcrEnabled: boolean; tftRoundLiveOcrEnabled: boolean; tftRoundOcrRegion: TftRoundOcrRegion; tftRoundOcrIntervalSeconds: number }
 export type Stats = { kills: number; deaths: number; assists: number; largestMultiKill: number; neutralMinionsKilled: number; neutralMinionsKilledEnemyJungle: number; neutralMinionsKilledTeamJungle: number; totalMinionsKilled: number; visionScore: number; visionWardsBoughtInGame: number; wardsPlaced: number; wardsKilled: number; 
 /**
  * remake
@@ -348,9 +378,9 @@ export type Team = "BLUE" | "RED"
 export type TftCompanion = { contentID: string; skinID: number; species: string }
 export type TftRoundMarker = { round: string; timestamp: number }
 export type TftRoundOcrRegion = { anchor?: string; x: number; centerOffsetX?: number; y: number; width: number; height: number }
-export type TooltipDbUpdateInfo = { updateAvailable: boolean; currentSha256: string; remoteSha256: string; remoteSize: number; checkedUrl: string }
 export type TftTrait = { name: string; numUnits: number; style: number; tierCurrent: number; tierTotal: number }
 export type TftUnit = { characterId: string; name: string; rarity: number; tier: number; itemNames?: string[] }
+export type TooltipDbUpdateInfo = { updateAvailable: boolean; currentSha256: string; remoteSha256: string; remoteSize: number; checkedUrl: string }
 export type TowerType = "OUTER_TURRET" | "INNER_TURRET" | "BASE_TURRET" | "NEXUS_TURRET"
 
 /** tauri-specta globals **/
@@ -358,9 +388,9 @@ export type TowerType = "OUTER_TURRET" | "INNER_TURRET" | "BASE_TURRET" | "NEXUS
 import {
 	invoke as TAURI_INVOKE,
 	Channel as TAURI_CHANNEL,
-} from "./platform/core";
-import * as TAURI_API_EVENT from "./platform/event";
-import { type WebviewWindow as __WebviewWindow__ } from "./platform/webviewWindow";
+} from "@tauri-apps/api/core";
+import * as TAURI_API_EVENT from "@tauri-apps/api/event";
+import { type WebviewWindow as __WebviewWindow__ } from "@tauri-apps/api/webviewWindow";
 
 type __EventObj__<T> = {
 	listen: (

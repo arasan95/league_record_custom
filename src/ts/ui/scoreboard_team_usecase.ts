@@ -12,7 +12,7 @@ import {
     getSummonerSpellData,
 } from "../datadragon";
 import { getCurrentPatchVersion } from "../version";
-import { open } from "../platform/shell";
+import { open } from "@tauri-apps/plugin-shell";
 import {
     buildItemTooltipHtml,
     buildLocalChampionTooltipHtml,
@@ -539,7 +539,9 @@ export async function renderScoreboardTeam(params: {
         const goldDiv = createEl("div", {}, { class: "total-gold" }, "0") as HTMLElement;
         row.dataset.pid = p.participantId.toString();
         const nameStr = p.summonerName || (isMe ? `${data.player.gameName}#${data.player.tagLine}` : `P${p.participantId}`);
-        const name = createEl("div", {}, { class: "player-name" }, nameStr) as HTMLElement;
+        const name = createEl("div", {}, { class: "player-name" }, [
+            createEl("span", {}, { class: "player-name-text" }, nameStr),
+        ]) as HTMLElement;
         if (p.honorReceived) {
             const heartIcon = createEl("img", {
                 src: honorHeartIcon,

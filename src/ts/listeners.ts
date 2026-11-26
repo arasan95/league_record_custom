@@ -1,12 +1,12 @@
 import type { AppEvent } from "./bindings";
-import { listen, TauriEvent, type EventCallback, type UnlistenFn } from "./platform/event";
+import { listen, TauriEvent, type EventCallback, type UnlistenFn } from "@tauri-apps/api/event";
 
 export default class ListenerManager {
     private readonly unlistenFns: UnlistenFn[];
 
     constructor() {
         this.unlistenFns = [];
-        this.listen_tauri(TauriEvent.WINDOW_CLOSE_REQUESTED, () => this.unlistenFns.forEach(unlisten => unlisten()));
+        window.addEventListener("pagehide", () => this.unlistenFns.forEach(unlisten => unlisten()), { once: true });
     }
 
     public listen_app = <T extends AppEvent["type"]>(

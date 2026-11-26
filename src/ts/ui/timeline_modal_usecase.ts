@@ -1,4 +1,4 @@
-import * as clipboard from "../platform/clipboard";
+import * as clipboard from "@tauri-apps/plugin-clipboard-manager";
 
 export function showTimelineModalView(input: {
     timelineEvents: Array<{ timestamp: number; text: string }>;
@@ -35,3 +35,4 @@ export function showTimelineModalView(input: {
     );
     showModal([closeButton, timelineList, copyToClipboardButton]);
 }
+

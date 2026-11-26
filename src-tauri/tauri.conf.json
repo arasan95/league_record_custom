@@ -14,21 +14,7 @@
                             ],
                 "security":  {
                                  "assetProtocol":  {
-                                                       "scope":  [
-                                                                     "$VIDEO/**/*.json",
-                                                                     "$VIDEO/**/*.mp4",
-                                                                     "$VIDEO/**/*.png",
-                                                                     "$DOWNLOAD/**/*.json",
-                                                                     "$DOWNLOAD/**/*.mp4",
-                                                                     "$DOWNLOAD/**/*.png",
-                                                                     "$APPLOCALDATA/**/*.json",
-                                                                     "$APPLOCALDATA/**/*.mp4",
-                                                                     "$APPLOCALDATA/**/*.png",
-                                                                     "$APPDATA/**/*.json",
-                                                                     "$APPDATA/**/*.mp4",
-                                                                     "$APPDATA/**/*.png",
-                                                                     "**/*.mp4"
-                                                                 ],
+                                                       "scope": ["$APPLOCALDATA/img_cache/**"],
                                                        "enable":  true
                                                    }
                              }
@@ -68,8 +54,8 @@
                                     "comment":  "Auto-update enabled.",
                                     "pubkey":  "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERCQzZGOTU1QTUwOTJDQ0MKUldUTUxBbWxWZm5HMjRYMGxqdlNoaVVVRVJOblA5Y3hWSGl4N0dCYnd3Mlh4QmZmS01jbVFHR0oK",
                                     "endpoints":  [
-                                                      "https://github.com/arasan95/league_record_custom/releases/latest/download/latest.json"
-                                                   ],
+                                                      "https://github.com/arasan95/League_Record_custom/releases/latest/download/latest.json"
+                                                  ],
                                     "windows":  {
                                                     "installMode":  "passive"
                                                 }

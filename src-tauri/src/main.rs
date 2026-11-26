@@ -90,6 +90,7 @@ fn run_app_default() {
     let app = app
         .manage(WindowState::default())
         .manage(CurrentlyRecording::default())
+        .manage(crate::app::RecordingLibrary::default())
         .manage(TrayState::default())
         //.manage(windows_key_listener::KeyListener::new())
         .manage(Shutdown::default());
@@ -181,6 +182,7 @@ fn run_app_default() {
     let app = app.invoke_handler(tauri::generate_handler![
         commands::get_recordings_path,
         commands::get_recordings_list,
+        commands::get_recordings_snapshot,
         commands::rename_video,
         commands::get_metadata,
         commands::append_tft_round_marker,
@@ -213,6 +215,7 @@ fn run_app_default() {
         commands::get_recordings_path,
         commands::get_recordings_size,
         commands::get_recordings_list,
+        commands::get_recordings_snapshot,
         commands::open_recordings_folder,
         commands::delete_video,
         commands::delete_video_only,
@@ -275,44 +278,7 @@ fn run_app_default() {
         not(feature = "av-safe-invoke"),
         not(feature = "av-disable-tooltip-db")
     ))]
-    let app = app.invoke_handler(tauri::generate_handler![
-        commands::get_marker_flags,
-        commands::set_marker_flags,
-        commands::get_recordings_path,
-        commands::get_recordings_size,
-        commands::get_recordings_list,
-        commands::open_recordings_folder,
-        commands::delete_video,
-        commands::delete_video_only,
-        commands::rename_video,
-        commands::get_metadata,
-        commands::append_tft_round_marker,
-        commands::toggle_favorite,
-        commands::confirm_delete,
-        commands::disable_confirm_delete,
-        commands::get_settings,
-        commands::save_settings,
-        commands::pick_recordings_folder,
-        commands::get_running_applications,
-        commands::is_league_client_available,
-        commands::download_recording_replay,
-        commands::play_recording_replay,
-        commands::create_clip,
-        commands::get_clip_audio_tracks,
-        commands::pick_clips_folder,
-        commands::pick_ffmpeg_path,
-        commands::get_ffmpeg_runtime_info,
-        commands::clear_cache,
-        commands::clear_cache_for_patch_update,
-        commands::download_image,
-        commands::save_scoreboard_cache,
-        commands::load_scoreboard_cache,
-        commands::update_champion_data,
-        commands::load_tooltip_locale_db,
-        commands::check_tooltip_db_update,
-        commands::apply_tooltip_db_update,
-        commands::perf_log
-    ]);
+    let app = app.invoke_handler(commands::app_commands!(tauri::generate_handler));
 
     #[cfg(all(
         not(feature = "av-no-invoke"),
@@ -334,6 +300,7 @@ fn run_app_default() {
         commands::get_recordings_path,
         commands::get_recordings_size,
         commands::get_recordings_list,
+        commands::get_recordings_snapshot,
         commands::open_recordings_folder,
         commands::delete_video,
         commands::delete_video_only,
@@ -383,6 +350,7 @@ fn run_app_default() {
         commands::get_recordings_path,
         commands::get_recordings_size,
         commands::get_recordings_list,
+        commands::get_recordings_snapshot,
         commands::delete_video,
         commands::delete_video_only,
         commands::rename_video,
@@ -407,6 +375,13 @@ fn run_app_default() {
     let app = app;
 
     #[cfg(not(feature = "av-no-setup"))]
+    let app = app.register_asynchronous_uri_scheme_protocol("recording", |ctx, request, responder| {
+        let app = ctx.app_handle().clone();
+        let is_main = ctx.webview_label() == "Main";
+        tauri::async_runtime::spawn_blocking(move || {
+            responder.respond(app::playback::serve(&app, is_main, request));
+        });
+    });
     let app = app.setup(|app| app.app_handle().setup().map_err(anyhow::Error::into));
 
     #[cfg(feature = "av-no-setup")]

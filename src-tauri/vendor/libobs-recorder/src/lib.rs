@@ -167,7 +167,7 @@ impl Recorder {
         }
         match self.recorder.send(IpcCommand::Exit) {
             IpcResponse::Ok => {
-                self.recorder.drain_logs();
+                self.recorder.drain_logs().map_err(|error| Box::new(Error::Io(error)))?;
                 Ok(())
             }
             IpcResponse::Err(e) => Err(Box::new(Error::ExitFailed(self, e))),

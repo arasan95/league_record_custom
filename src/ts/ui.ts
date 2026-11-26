@@ -1,12 +1,12 @@
 import type videojs from "video.js";
 import type { ContentDescriptor } from "video.js/dist/types/utils/dom";
-import type { WebviewWindow } from "./platform/webviewWindow";
-import { getCurrentWebviewWindow } from "./platform/webviewWindow";
+import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { commands, type GameMetadata, type GoldFrame, type MarkerFlags, type Recording, type Settings, type Participant, type GameEvent } from "./bindings";
 import { ensureItemDataLoaded, ensureTftDataLoaded, getChampionEnglishNameByIdSync, getChampionLocalizedNameByIdSync, getGameModeByQueueId } from "./datadragon";
 import { getCurrentPatchVersion } from "./version";
 import { InventoryTimeline } from "./timeline";
-import { currentKeybinds, reloadKeybinds } from "./main";
+import type { createKeybindSettings } from "./keybinds";
 import { isFavorite } from "./util";
 import { getText } from "./i18n";
 import { showSettingsModalView } from "./ui/settings_modal_usecase";
@@ -26,8 +26,6 @@ import { bindFrameStepWheelHandler } from "./ui/frame_step_wheel_usecase";
 import { buildErrorModalContent, hideModalView, isModalOpen, showModalView } from "./ui/modal_primitives_usecase";
 import { applyMarkerFlags, bindChangeHandler, readMarkerFlags, setBigPlayButtonVisibility, setToggleChecked } from "./ui/ui_controls_usecase";
 import { bindSidebarResizeHandle, loadInitialUiSettings } from "./ui/ui_bootstrap_usecase";
-import { applyDisplayPreferences } from "./ui/display_preferences";
-import { setUiLanguage } from "./ui_locale";
 import { prepareScoreboardView, renderScoreboardMainRows } from "./ui/scoreboard_render_flow_usecase";
 import { applyScoreboardTickFlow } from "./ui/scoreboard_tick_flow_usecase";
 import { clearVideoMetadataView } from "./ui/video_metadata_view_usecase";
@@ -129,57 +127,22 @@ export default class UI {
     private sidebarContainer: HTMLDivElement | null = null;
     private scoreboardEl: HTMLElement | null = null;
     private scoreboardScale: number | null = null;
-    private pendingScoreboardHeight: { targetHeight: number; baseHeight: number } | null = null;
 
     public setSidebarWidth(newWidth: number) {
         applySidebarWidthLayout(this.sidebarContainer, newWidth);
     }
 
     public setScoreboardHeight(targetHeight: number, baseHeight: number) {
-        if (!this.scoreboardEl) {
-            this.pendingScoreboardHeight = { targetHeight, baseHeight };
-            return;
-        }
-        const collapseThreshold = 80;
-        if (targetHeight < collapseThreshold) {
-            // Below the smallest usable size, hide the board while keeping its
-            // resize handle available. Store a sub-threshold scale so the
-            // collapsed state survives a resize or scoreboard re-render.
-            this.scoreboardEl.classList.add("collapsed");
-            (this.scoreboardEl.style as any).zoom = ((collapseThreshold - 1) / baseHeight).toFixed(3);
-            return;
-        }
+        if (!this.scoreboardEl) return;
+        if (targetHeight < 80) targetHeight = 80;
         this.scoreboardEl.classList.remove("collapsed");
         this.scoreboardEl.style.removeProperty("height");
 
-        let requestedZoom = targetHeight / baseHeight;
-        requestedZoom = Math.max(requestedZoom, 0.05);
-        requestedZoom = Math.min(requestedZoom, 1.4);
+        let newZoom = targetHeight / baseHeight;
+        newZoom = Math.max(newZoom, 0.2); 
+        newZoom = Math.min(newZoom, 1.5);
 
-        // Keep manual resizing responsive while preventing the board from
-        // taking over most of the player area.
-        (this.scoreboardEl.style as any).zoom = requestedZoom.toFixed(3);
-    }
-
-    private flushPendingScoreboardHeight() {
-        if (!this.pendingScoreboardHeight || !this.scoreboardEl) return;
-        const pending = this.pendingScoreboardHeight;
-        this.pendingScoreboardHeight = null;
-        this.setScoreboardHeight(pending.targetHeight, pending.baseHeight);
-    }
-
-    private stabilizeVideoLayout() {
-        const main = document.getElementById("main");
-        const playerEl = this.player?.el?.() as HTMLElement | undefined;
-        if (!main || !playerEl) return;
-
-        playerEl.style.minHeight = "0";
-        playerEl.style.height = "";
-
-        requestAnimationFrame(() => {
-            this.player?.trigger?.("componentresize");
-            this.player?.trigger?.("resize");
-        });
+        (this.scoreboardEl.style as any).zoom = newZoom.toFixed(3);
     }
 
     public checkWindowSize() {
@@ -247,7 +210,7 @@ export default class UI {
     private frameDuration: number = 1/60; // Default to 60fps
     private readonly vjs: typeof videojs;
 
-    constructor(vjs: typeof videojs) {
+    constructor(vjs: typeof videojs, private readonly keybinds: ReturnType<typeof createKeybindSettings>) {
         this.vjs = vjs;
 
         this.modal = document.querySelector<HTMLDivElement>("#modal")!;
@@ -403,9 +366,7 @@ export default class UI {
             },
             setCurrentLanguage: (language) => {
                 this.currentLanguage = language;
-                setUiLanguage(language);
             },
-            applyDisplayPreferences,
         });
     }
 
@@ -515,10 +476,6 @@ export default class UI {
         forceUpdateIds: string[] = []
     ) => {
         const activeVideoId = this.getActiveVideoId();
-        // Metadata writes (such as toggling a favorite) are observed by the
-        // recording watcher and cause this list to be reinserted. Preserve the
-        // reader's position instead of allowing scroll anchoring to nudge it.
-        const sidebarScrollTop = this.sidebar.scrollTop;
         this.lastRecordingsSizeGb = recordingsSizeGb;
         this.lastRecordings = recordings;
         this.lastOnVideo = onVideo;
@@ -580,10 +537,6 @@ export default class UI {
         if (activeVideoId) {
             this.setActiveVideoId(activeVideoId);
         }
-        this.sidebar.scrollTop = sidebarScrollTop;
-        requestAnimationFrame(() => {
-            this.sidebar.scrollTop = sidebarScrollTop;
-        });
     };
 
     public createRecordingItem = (
@@ -769,6 +722,11 @@ export default class UI {
     };
 
     public clearVideoMetadata() {
+        this.metadataRenderId++;
+        this.timeline = null;
+        this.scoreboardEl = null;
+        this.currentQueueId = 0;
+        this.player?.off("timeupdate", this.updateTimelineItems);
         this.setTftMode(false);
         clearVideoMetadataView({
             emptyEl: this.vjs.dom.emptyEl,
@@ -780,9 +738,8 @@ export default class UI {
         (this.player.el() as HTMLElement).classList.toggle("lr-tft-mode", enabled);
     }
 
-    public async setVideoDescriptionMetadata(data: GameMetadata) {
+    public async setVideoDescriptionMetadata(data: GameMetadata, isCurrent: () => boolean) {
         this.metadataRenderId++;
-        this.currentQueueId = data.queue?.id ?? 0;
 
         console.log("Setting Video Description Metadata", data);
 
@@ -798,18 +755,22 @@ export default class UI {
         );
         const isTftMatch = isTftByQueue || hasTftParticipantData;
 
-        this.currentGameVersion = data.gameVersion || (await getCurrentPatchVersion());
-        await ensureItemDataLoaded(this.currentGameVersion);
+        const gameVersion = data.gameVersion || (await getCurrentPatchVersion());
+        await ensureItemDataLoaded(gameVersion);
         if (isTftMatch) {
             await ensureTftDataLoaded();
         }
 
+        const isRenderValid = () => isCurrent() && this.metadataRenderId === currentRenderId;
+        if (!isRenderValid()) return;
+        this.currentQueueId = data.queue?.id ?? 0;
+        this.currentGameVersion = gameVersion;
         resetScoreboardRuntimeState(this, data);
 
         this.setTftMode(isTftMatch);
         const playerEl = this.player.el() as HTMLElement;
         playerEl.classList.toggle("lr-tft-mode", isTftMatch);
-        this.timeline = new InventoryTimeline(this.events, data.participants, undefined);
+        this.timeline = new InventoryTimeline(this.events, data.participants.map(p => p.participantId), undefined, data.participants);
 
         const prepared = prepareScoreboardView({
             data,
@@ -848,7 +809,6 @@ export default class UI {
             return;
         }
         this.scoreboardEl = prepared.scoreboardEl;
-        this.flushPendingScoreboardHeight();
 
         const rendered = await renderScoreboardMainRows({
             data,
@@ -856,7 +816,7 @@ export default class UI {
             sorted200: prepared.sorted200,
             currentGameVersion: this.currentGameVersion,
             currentRenderId,
-            isRenderValid: () => this.metadataRenderId === currentRenderId,
+            isRenderValid,
             createEl: this.vjs.dom.createEl,
             csRefs: this.csRefs,
             kdaRefs: this.kdaRefs,
@@ -866,29 +826,17 @@ export default class UI {
             playerEl: prepared.playerEl,
             controlBarEl: this.player.controlBar.el() as HTMLElement,
         });
-        if (!rendered) return;
+        if (!rendered || !isRenderValid()) return;
 
-        // Rows are mounted asynchronously, so calculate the width fit once the
-        // fixed-width icons and both teams are present.
-        this.checkWindowSize();
-        this.stabilizeVideoLayout();
         this.player.off("timeupdate", this.updateTimelineItems);
         this.player.on("timeupdate", this.updateTimelineItems);
     }
 
     private updateTimelineItems = () => {
-          if (!this.timeline || !this.player) return;
+         if (!this.timeline || !this.player) return;
 
-          const diagnose = (() => {
-              try {
-                  return window.localStorage.getItem("lr.seekDiagnostics") === "1";
-              } catch {
-                  return false;
-              }
-          })();
-          const startedAt = diagnose ? performance.now() : 0;
-          const currentTime = this.player.currentTime?.() ?? 0;
-          const duration = this.player.duration?.();
+         const currentTime = this.player.currentTime?.() ?? 0;
+         const duration = this.player.duration?.();
          const hasStarted =
              typeof this.player.hasStarted === "function" ? Boolean(this.player.hasStarted()) : false;
          const keepFinalSnapshotWhileIdle =
@@ -942,15 +890,9 @@ export default class UI {
              dragonTimerIcon: this.dragonTimerIcon,
              monoVoidgrub,
              monoHerald,
-              monoBaron,
-              monoDrake,
-          });
-          if (startedAt) {
-              const elapsed = performance.now() - startedAt;
-              if (elapsed > 8) {
-                  console.log(`[seek-diagnostics] scoreboard timeupdate ${elapsed.toFixed(1)}ms current=${currentTime.toFixed(3)}`);
-              }
-          }
+             monoBaron,
+             monoDrake,
+         });
     };
 
     public showBigPlayButton = (show: boolean) => {
@@ -983,7 +925,7 @@ export default class UI {
         });
     };
 
-    public showMarkerFlags = (_show: boolean) => {
+    public showMarkerFlags = (show: boolean) => {
     };
 
     public updateAutoStopBtn = (enabled: boolean) => {
@@ -1012,7 +954,6 @@ export default class UI {
 
     public setCurrentLanguage = (language: string) => {
         this.currentLanguage = language;
-        setUiLanguage(language);
     };
 
     public showSettingsModal = (
@@ -1028,19 +969,18 @@ export default class UI {
             hideModal: this.hideModal,
             getText,
             currentPatchVersion: getCurrentPatchVersion(),
-            currentBinds: currentKeybinds,
+            currentBinds: this.keybinds.getKeybinds(),
             reopenWithLanguage: () => this.showSettingsModal(settings, saveCallback),
             onShowUpdateModal: (update, langCode) => this.showUpdateModal(update, langCode),
             onScrollModifierChange: (modifier) => {
                 this.scrollFrameStepModifier = modifier ?? "Shift";
             },
-            onReloadKeybinds: reloadKeybinds,
+            onReloadKeybinds: this.keybinds.reload,
             updateAutoButtons: (newSettings) => {
                 this.updateAutoStopBtn(newSettings.autoStopPlayback);
                 this.updateAutoPlayBtn(newSettings.autoplayVideo);
                 this.updateAutoSelectBtn(newSettings.autoSelectRecording);
             },
-            applyDisplayPreferences,
         });
     };
 

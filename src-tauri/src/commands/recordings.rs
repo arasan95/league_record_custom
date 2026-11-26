@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::process::Command;
@@ -7,25 +6,14 @@ use riot_datatypes::{GameId, MatchId};
 use serde_json::json;
 use shaco::ingame::IngameClient;
 use shaco::rest::LcuRestClient;
-use tauri::{AppHandle, State};
+use tauri::{async_runtime, AppHandle, Manager, State};
 use tokio::time::{sleep, Duration};
 
-use crate::app::{action, RecordingManager};
+use crate::app::{action, AppEvent, EventManager, Recording, RecordingLibrary, RecordingSnapshot};
 use crate::recorder::{MetadataFile, TftRoundMarker};
 use crate::state::{CurrentlyRecording, MarkerFlags, SettingsFile, SettingsWrapper};
-use crate::util::compare_time;
 
-use super::path_guard::resolve_existing_video_base;
-const PERF_LOG_ENABLED: bool = false;
-
-#[cfg_attr(test, derive(specta::Type))]
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Recording {
-    video_id: String,
-    metadata: Option<MetadataFile>,
-    video_exists: bool,
-}
+use crate::app::recording_paths::resolve_existing_video_base;
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
@@ -41,7 +29,7 @@ pub fn set_marker_flags(
     settings_file: State<SettingsFile>,
 ) {
     settings.set_marker_flags(marker_flags);
-    settings.write_to_file(settings_file.get());
+    if let Err(error) = settings.write_to_file(settings_file.get()) { log::error!("Settings save failed: {error}"); }
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -52,86 +40,38 @@ pub fn get_recordings_path(settings: State<SettingsWrapper>) -> PathBuf {
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub fn get_recordings_size(app_handle: AppHandle) -> f32 {
-    let started_at = std::time::Instant::now();
-    let mut size = 0;
-    let mut file_count = 0usize;
-    for file in app_handle.get_recordings() {
-        file_count += 1;
-        if let Ok(metadata) = std::fs::metadata(file.with_extension("mp4")) {
-            size += metadata.len();
+pub async fn get_recordings_snapshot(app_handle: AppHandle) -> Result<RecordingSnapshot, String> {
+    async_runtime::spawn_blocking(move || {
+        let settings = app_handle.state::<SettingsWrapper>().get_settings();
+        let active = app_handle.state::<CurrentlyRecording>().get();
+        let library = app_handle.state::<RecordingLibrary>();
+        let roots = [settings.recordings_folder, settings.clips_folder];
+        let result = library.refresh(roots.clone(), active.as_deref());
+        if library.watcher_needs_restart(result.as_ref().map_or(true, |snapshot| snapshot.stale)) {
+            crate::filewatcher::replace(&app_handle, [&roots[0], &roots[1]]);
         }
-        if let Ok(metadata) = std::fs::metadata(file.with_extension("json")) {
-            size += metadata.len();
-        }
-    }
-    let elapsed_ms = started_at.elapsed().as_secs_f64() * 1000.0;
-    if PERF_LOG_ENABLED {
-        log::info!(
-            "[perf] get_recordings_size: {:.1}ms (records={})",
-            elapsed_ms,
-            file_count
-        );
-        println!(
-            "[perf] get_recordings_size: {:.1}ms (records={})",
-            elapsed_ms, file_count
-        );
-    }
-    size as f32 / 1_000_000_000.0
+        result
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub fn get_recordings_list(app_handle: AppHandle) -> Vec<Recording> {
-    let started_at = std::time::Instant::now();
-    let mut recordings = app_handle.get_recordings();
-    recordings.sort_by(|a, b| compare_time(a, b).unwrap_or(Ordering::Equal));
-    let scanned = recordings.len();
+pub async fn get_recordings_size(app_handle: AppHandle) -> f32 {
+    get_recordings_snapshot(app_handle)
+        .await
+        .map(|snapshot| snapshot.size_gb)
+        .unwrap_or_default()
+}
 
-    let mut ret = Vec::new();
-    for path in recordings {
-        if let Some(video_id) = path.to_str().map(|s| s.to_string()) {
-            let mut mp4_path = path.clone();
-            mp4_path.set_extension("mp4");
-            let video_exists = mp4_path.exists();
-
-            // Keep list loading fast: avoid parsing heavy timeline/event payloads.
-            match action::get_recording_metadata_for_list(&path) {
-                Ok(metadata) => {
-                    ret.push(Recording {
-                        video_id,
-                        metadata: Some(metadata),
-                        video_exists,
-                    });
-                }
-                Err(e) => {
-                    println!("Error parsing {}: {}", video_id, e);
-                    ret.push(Recording {
-                        video_id,
-                        metadata: None,
-                        video_exists,
-                    });
-                }
-            }
-        }
-    }
-
-    let elapsed_ms = started_at.elapsed().as_secs_f64() * 1000.0;
-    if PERF_LOG_ENABLED {
-        log::info!(
-            "[perf] get_recordings_list: {:.1}ms (scanned={}, returned={})",
-            elapsed_ms,
-            scanned,
-            ret.len()
-        );
-        println!(
-            "[perf] get_recordings_list: {:.1}ms (scanned={}, returned={})",
-            elapsed_ms,
-            scanned,
-            ret.len()
-        );
-    }
-    ret
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub async fn get_recordings_list(app_handle: AppHandle) -> Vec<Recording> {
+    get_recordings_snapshot(app_handle)
+        .await
+        .map(|snapshot| snapshot.recordings)
+        .unwrap_or_default()
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -309,7 +249,7 @@ pub async fn play_recording_replay(video_id: String, state: State<'_, SettingsWr
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub fn rename_video(video_id: String, new_video_id: String, state: State<SettingsWrapper>) -> bool {
+pub fn rename_video(video_id: String, new_video_id: String, state: State<SettingsWrapper>, app: AppHandle) -> bool {
     let recording = match resolve_existing_video_base(&video_id, &state) {
         Ok(path) => path,
         Err(e) => {
@@ -318,15 +258,19 @@ pub fn rename_video(video_id: String, new_video_id: String, state: State<Setting
         }
     };
 
-    action::rename_recording(recording, new_video_id).unwrap_or_else(|e| {
+    let renamed = action::rename_recording(recording, new_video_id).unwrap_or_else(|e| {
         log::error!("failed to rename video: {e}");
         false
-    })
+    });
+    if renamed {
+        notify_recordings_changed(&app);
+    }
+    renamed
 }
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub fn delete_video(video_id: String, state: State<SettingsWrapper>) -> bool {
+pub fn delete_video(video_id: String, state: State<SettingsWrapper>, app: AppHandle) -> bool {
     let recording = match resolve_existing_video_base(&video_id, &state) {
         Ok(path) => path,
         Err(e) => {
@@ -336,7 +280,10 @@ pub fn delete_video(video_id: String, state: State<SettingsWrapper>) -> bool {
     };
 
     match action::delete_recording(recording) {
-        Ok(_) => true,
+        Ok(_) => {
+            notify_recordings_changed(&app);
+            true
+        }
         Err(e) => {
             log::error!("failed to delete video: {e}");
             false
@@ -346,7 +293,7 @@ pub fn delete_video(video_id: String, state: State<SettingsWrapper>) -> bool {
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub fn delete_video_only(video_id: String, state: State<SettingsWrapper>) -> bool {
+pub fn delete_video_only(video_id: String, state: State<SettingsWrapper>, app: AppHandle) -> bool {
     let recording = match resolve_existing_video_base(&video_id, &state) {
         Ok(path) => path,
         Err(e) => {
@@ -356,7 +303,10 @@ pub fn delete_video_only(video_id: String, state: State<SettingsWrapper>) -> boo
     };
 
     match action::delete_video_file_only(recording) {
-        Ok(_) => true,
+        Ok(_) => {
+            notify_recordings_changed(&app);
+            true
+        }
         Err(e) => {
             log::error!("failed to delete video file only: {e}");
             false
@@ -364,11 +314,68 @@ pub fn delete_video_only(video_id: String, state: State<SettingsWrapper>) -> boo
     }
 }
 
+fn notify_recordings_changed(app: &AppHandle) {
+    if let Err(error) = app.send_event(AppEvent::RecordingsChanged { payload: () }) {
+        log::warn!("Could not refresh the recording library: {error}");
+    }
+}
+
+fn allow_metadata_retry(path: &std::path::Path) -> bool {
+    use std::{collections::BTreeMap, sync::Mutex, time::Instant};
+    static ATTEMPTS: Mutex<BTreeMap<PathBuf, Instant>> = Mutex::new(BTreeMap::new());
+    let mut attempts = ATTEMPTS.lock().unwrap_or_else(|error| error.into_inner());
+    let now = Instant::now();
+    attempts.retain(|_, earlier| now.duration_since(*earlier) < Duration::from_secs(15));
+    if attempts.contains_key(path) {
+        return false;
+    }
+    attempts.insert(path.to_owned(), now);
+    true
+}
+
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub fn get_metadata(video_id: String, state: State<SettingsWrapper>) -> Option<MetadataFile> {
-    let path = resolve_existing_video_base(&video_id, &state).ok()?;
-    action::get_recording_metadata(&path, false).ok()
+pub async fn get_metadata(video_id: String, app_handle: AppHandle) -> Option<MetadataFile> {
+    let app = app_handle.clone();
+    let (path, metadata, active) = async_runtime::spawn_blocking(move || {
+        let state = app.state::<SettingsWrapper>();
+        let path = resolve_existing_video_base(&video_id, &state).ok()?;
+        let active = app.state::<CurrentlyRecording>().get().is_some_and(|active| {
+            crate::app::recording_paths::recording_file(&path, "mp4") == active
+        });
+        let metadata = action::get_recording_metadata(&path, false).ok()?;
+        Some((path, metadata, active))
+    }).await.ok()??;
+
+    let MetadataFile::Deferred(deferred) = &metadata else { return Some(metadata) };
+    if active || !deferred.participants.is_empty() || !allow_metadata_retry(&path) {
+        return Some(metadata);
+    }
+    let Ok(Ok(mut recovered)) = tokio::time::timeout(
+        Duration::from_secs(3),
+        crate::recorder::process_data(
+            deferred.ingame_time_rec_start_offset, deferred.match_id.clone(), Vec::new(),
+        ),
+    ).await else { return Some(metadata) };
+
+    let saved = async_runtime::spawn_blocking(move || {
+        action::update_recording_metadata(&path, |current| {
+            if let MetadataFile::Deferred(latest) = current {
+                if latest.participants.is_empty() {
+                    recovered.favorite = latest.favorite;
+                    recovered.highlights = std::mem::take(&mut latest.highlights);
+                    recovered.tft_round_markers = std::mem::take(&mut latest.tft_round_markers);
+                    *current = MetadataFile::Metadata(recovered);
+                }
+            }
+            current.clone()
+        })
+    }).await;
+    if let Ok(Ok(recovered)) = saved {
+        notify_recordings_changed(&app_handle);
+        return Some(recovered);
+    }
+    Some(metadata)
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -416,12 +423,11 @@ pub async fn append_tft_round_marker(
 pub fn toggle_favorite(video_id: String, state: State<SettingsWrapper>) -> Option<bool> {
     let path = resolve_existing_video_base(&video_id, &state).ok()?;
 
-    let mut metadata = action::get_recording_metadata(&path, false).ok()?;
-    let favorite = !metadata.is_favorite();
-    metadata.set_favorite(favorite);
-    action::save_recording_metadata(&path, &metadata).ok()?;
-
-    Some(favorite)
+    action::update_recording_metadata(&path, |metadata| {
+        let favorite = !metadata.is_favorite();
+        metadata.set_favorite(favorite);
+        favorite
+    }).ok()
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -434,7 +440,7 @@ pub fn confirm_delete(settings: State<SettingsWrapper>) -> bool {
 #[tauri::command]
 pub fn disable_confirm_delete(settings: State<SettingsWrapper>, settings_file: State<SettingsFile>) {
     settings.set_confirm_delete(false);
-    settings.write_to_file(settings_file.get());
+    if let Err(error) = settings.write_to_file(settings_file.get()) { log::error!("Settings save failed: {error}"); }
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -451,8 +457,9 @@ pub async fn save_settings(
     settings_file: State<'_, SettingsFile>,
     app_handle: AppHandle,
 ) -> Result<(), ()> {
-    state.set_settings(settings);
-    state.write_to_file(settings_file.get());
+    crate::util::write_json_atomically(settings_file.get(), &settings).map_err(|error| {
+        log::error!("Settings save failed: {error}");
+    })?;
     state.update_from_file(settings_file.get(), &app_handle);
     Ok(())
 }
@@ -532,14 +539,10 @@ pub async fn get_running_applications() -> Vec<String> {
 }
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub async fn save_scoreboard_cache(
-    video_id: String,
-    content: String,
-    state: State<'_, SettingsWrapper>,
-) -> Result<(), String> {
+pub async fn save_scoreboard_cache(video_id: String, content: String) -> Result<(), String> {
     use std::io::Write;
 
-    let video_path = resolve_existing_video_base(&video_id, &state)?;
+    let video_path = PathBuf::from(&video_id);
     let cache_path = video_path.with_extension("sb.json");
 
     let mut file = std::fs::File::create(&cache_path).map_err(|e| e.to_string())?;
@@ -549,11 +552,8 @@ pub async fn save_scoreboard_cache(
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
-pub async fn load_scoreboard_cache(
-    video_id: String,
-    state: State<'_, SettingsWrapper>,
-) -> Result<String, String> {
-    let video_path = resolve_existing_video_base(&video_id, &state)?;
+pub async fn load_scoreboard_cache(video_id: String) -> Result<String, String> {
+    let video_path = PathBuf::from(&video_id);
     let cache_path = video_path.with_extension("sb.json");
 
     if !cache_path.exists() {

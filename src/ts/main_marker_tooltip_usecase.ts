@@ -1,9 +1,6 @@
 import type { Participant } from "./bindings";
 import { getChampionIconUrlById } from "./datadragon";
 import type { MarkerDetail } from "./main_markers_usecase";
-import topLaneIcon from "../assets/icon/icon-position-top.png";
-import middleLaneIcon from "../assets/icon/icon-position-middle.png";
-import bottomLaneIcon from "../assets/icon/icon-position-bottom.png";
 
 type Input = {
     playerElement: HTMLElement | null;
@@ -112,14 +109,6 @@ function setChampChipIcon(chip: HTMLElement, iconUrl: string) {
         return;
     }
     if (img.src !== iconUrl) img.src = iconUrl;
-}
-
-function getTowerLaneIcon(lane: "TOP" | "MID" | "BOT"): string {
-    switch (lane) {
-        case "TOP": return topLaneIcon;
-        case "MID": return middleLaneIcon;
-        case "BOT": return bottomLaneIcon;
-    }
 }
 
 export function initializeMarkerHoverTooltips(input: Input): void {
@@ -262,18 +251,6 @@ export function initializeMarkerHoverTooltips(input: Input): void {
 
             const labelRow = document.createElement("div");
             labelRow.className = "lr-marker-tooltip-type";
-            if (detail.markerType === "Turret" && detail.towerLane) {
-                const laneIcon = document.createElement("img");
-                laneIcon.className = "lr-marker-tower-lane-icon";
-                laneIcon.src = getTowerLaneIcon(detail.towerLane);
-                laneIcon.alt = detail.towerLane;
-                labelRow.appendChild(laneIcon);
-
-                const laneText = document.createElement("span");
-                laneText.className = "lr-marker-tower-lane-name";
-                laneText.textContent = detail.towerLane;
-                labelRow.appendChild(laneText);
-            }
             const typeText = document.createElement("span");
             typeText.textContent = detail.label;
             labelRow.appendChild(typeText);

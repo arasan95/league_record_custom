@@ -1,94 +1,39 @@
+/* Custom Title Bar Styles */
 :root {
-  --titlebar-height: 32px;
-  --titlebar-bg: #000000;
+  --titlebar-height: 30px;
+  --titlebar-bg: #2c2f3e; /* Default dark background */
   --titlebar-color: #ffffff;
-  --hover-bg: #2a2a2a;
-  --close-hover-bg: #c42b1c;
+  --hover-bg: #7b7b7b;
+  --close-hover-bg: #e81123;
 }
 
-body {
-  margin: 0;
-  height: 100vh !important;
-  max-height: 100vh !important;
-  overflow: hidden;
-  display: flex !important;
-  flex-direction: column !important;
-}
-
-#titlebar-hover-zone {
-  display: none;
+#titlebar {
+  height: var(--titlebar-height);
+  background: #1a1a1a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: 2px;
-  z-index: 1100;
-  pointer-events: none;
-  background: transparent;
-}
-
-#titlebar {
-  position: relative;
-  height: var(--titlebar-height);
-  min-height: var(--titlebar-height);
-  flex: 0 0 var(--titlebar-height);
-  background: var(--titlebar-bg);
-  color: var(--titlebar-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  z-index: 1200;
-  transition: height 140ms ease-out, min-height 140ms ease-out, opacity 120ms ease-out;
-  border-bottom: 1px solid #111;
-  -webkit-app-region: drag;
-  user-select: none;
-  overflow: hidden;
-  opacity: 1;
-}
-
-body.titlebar-autohide #titlebar {
-  height: 1px;
-  min-height: 1px;
-  flex-basis: 1px;
-  border-bottom: 0;
-  opacity: 0.06;
-}
-
-body.titlebar-autohide #titlebar-hover-zone {
-  display: block;
-}
-
-body.titlebar-autohide.titlebar-revealed #titlebar {
-  height: var(--titlebar-height);
-  min-height: var(--titlebar-height);
-  flex-basis: var(--titlebar-height);
-  border-bottom: 1px solid #111;
-  opacity: 1;
+  z-index: 1000;
 }
 
 .titlebar-drag-region {
-  flex: 1;
+  flex-grow: 1;
   height: 100%;
   display: flex;
   align-items: center;
-  padding-left: 12px;
+  padding-left: 10px;
   font-family: "Segoe UI", sans-serif;
   font-size: 12px;
-  letter-spacing: 0.2px;
-}
-
-.titlebar-app-icon {
-  width: 18px;
-  height: 18px;
-  margin-right: 7px;
-  object-fit: contain;
-  pointer-events: none;
+  color: var(--titlebar-color);
 }
 
 .titlebar-buttons {
   display: flex;
   height: 100%;
-  -webkit-app-region: no-drag;
 }
 
 .titlebar-button {
@@ -97,45 +42,9 @@ body.titlebar-autohide.titlebar-revealed #titlebar {
   align-items: center;
   width: 46px;
   height: 100%;
-  border: 0;
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--titlebar-color);
-  font-size: 12px;
   cursor: default;
-}
-
-.titlebar-hide-toggle {
-  width: 72px;
-  font-family: "Segoe UI", sans-serif;
-  font-size: 12px;
-  font-weight: 400;
-  letter-spacing: 0.2px;
-}
-
-.titlebar-window-control {
-  width: 42px;
-}
-
-.titlebar-window-icon {
-  width: 17px;
-  height: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
-  transition: transform 120ms ease-out;
-}
-
-.titlebar-button:hover .titlebar-window-icon {
-  transform: scale(1.08);
-}
-
-.titlebar-button:focus-visible {
-  outline: 2px solid #77b7ff;
-  outline-offset: -3px;
+  color: var(--titlebar-color);
+  transition: background-color 0.1s;
 }
 
 .titlebar-button:hover {
@@ -146,54 +55,22 @@ body.titlebar-autohide.titlebar-revealed #titlebar {
   background-color: var(--close-hover-bg);
 }
 
+.titlebar-icon {
+  width: 10px;
+  height: 10px;
+  filter: invert(1); /* Make icons white */
+}
+
+/* Adjust main content to not be hidden behind fixed title bar */
 #container {
+  /* Custom titlebar is disabled, so reset to full window filling */
   top: 0 !important;
   left: 0;
   width: 100%;
-  height: auto !important;
-  max-height: none !important;
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
+  height: 100vh !important; /* Force Viewport Height */
   margin: 0 !important;
   padding: 0;
   overflow: hidden;
   box-sizing: border-box;
   z-index: 1;
-  grid-template-rows: minmax(0, 1fr) !important;
-}
-
-body.titlebar-autohide #container {
-  height: auto !important;
-  max-height: none !important;
-}
-
-#main {
-  height: 100% !important;
-  min-height: 0 !important;
-  max-height: 100% !important;
-}
-
-#server-nav,
-#sidebar {
-  height: 100% !important;
-  min-height: 0 !important;
-  max-height: 100% !important;
-}
-
-#main > .video-js,
-#main > #video_player {
-  flex: 1 1 0 !important;
-  height: auto !important;
-  min-height: 0 !important;
-  max-height: 100% !important;
-}
-
-.video-js .vjs-tech {
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-}
-
-.scoreboard,
-.video-js .vjs-control-bar {
-  flex: 0 0 auto !important;
 }
