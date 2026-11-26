@@ -1,0 +1,20 @@
+name: Build clip FFmpeg
+description: Build and verify the standalone FFmpeg runtime for the Windows installer
+runs:
+  using: composite
+  steps:
+    - name: Build and test the clip runtime
+      shell: pwsh
+      run: |
+        # The full tools generate and inspect synthetic test recordings. They are never packaged.
+        if (!(Get-Command ffmpeg -ErrorAction SilentlyContinue) -or !(Get-Command ffprobe -ErrorAction SilentlyContinue)) {
+          choco install ffmpeg -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install the reference FFmpeg.' }
+        }
+        ./src-tauri/resources/tools/ffmpeg/build.ps1 -ReferenceFfmpeg ffmpeg
+    - name: Verify managed runtime replacement
+      shell: pwsh
+      working-directory: src-tauri
+      run: |
+        $env:LEAGUERECORD_TEST_CLIP_FFMPEG = (Resolve-Path target/clip-ffmpeg/ffmpeg.exe).Path
+        cargo test --locked verified_replacement_removes_only_managed_helpers -- --ignored

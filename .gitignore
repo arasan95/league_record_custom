@@ -58,6 +58,11 @@ tmp
 docs
 TOOLTIP_HANDOVER_JA.md
 tools
+!/src-tauri/resources/tools/
+/src-tauri/resources/tools/ffmpeg/*
+!/src-tauri/resources/tools/ffmpeg/*.ps1
+!/src-tauri/resources/tools/ffmpeg/build.sh
+!/src-tauri/resources/tools/ffmpeg/README.md
 .markdownlint.json
 tooltip_exports
 

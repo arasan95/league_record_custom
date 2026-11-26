@@ -49,6 +49,8 @@ pub struct ClipAudioTrack {
 const FFMPEG_DIR_NAME: &str = "ffmpeg";
 const FFMPEG_ARCHIVE_NAME: &str = "ffmpeg-windows-x64.zip";
 const FFMPEG_PROVENANCE_NAME: &str = "ffmpeg-provenance.json";
+const CLIP_FFMPEG_SOURCE: &str = "LeagueRecord clip-only FFmpeg";
+static FFMPEG_PROVISIONING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 fn app_local_ffmpeg_dir(app_handle: &AppHandle) -> Option<PathBuf> {
     app_handle
@@ -174,12 +176,101 @@ fn is_allowed_ffmpeg_runtime_file(path: &Path) -> bool {
 }
 
 fn write_ffmpeg_provenance(path: &Path, provenance: &FfmpegProvenance) -> Result<(), String> {
-    fs::write(
-        path,
-        serde_json::to_string_pretty(provenance)
-            .map_err(|e| format!("Failed to serialize FFmpeg provenance: {}", e))?,
-    )
-    .map_err(|e| format!("Failed to write FFmpeg provenance: {}", e))
+    crate::util::write_json_atomically(path, provenance).map_err(|e| format!("Failed to write FFmpeg provenance: {e}"))
+}
+
+fn install_clip_ffmpeg(source: &Path, target_dir: &Path, desired: &FfmpegProvenance) -> Result<(), String> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT_STAGE: AtomicU64 = AtomicU64::new(0);
+
+    if desired.source_name != CLIP_FFMPEG_SOURCE
+        || desired.sha256.len() != 64
+        || !desired.sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err("Invalid bundled clip FFmpeg provenance".into());
+    }
+    // Avoid changing files through a symlink or Windows directory junction.
+    for dir in target_dir.ancestors().take(3) {
+        let metadata = match fs::symlink_metadata(dir) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(format!("Failed to inspect FFmpeg runtime directory: {error}")),
+        };
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            if metadata.file_attributes() & 0x400 != 0 {
+                return Err(format!("FFmpeg runtime directory is redirected: {}", dir.display()));
+            }
+        }
+        if !metadata.is_dir() {
+            return Err(format!("Invalid FFmpeg runtime directory: {}", dir.display()));
+        }
+    }
+    fs::create_dir_all(target_dir).map_err(|e| format!("Failed to create FFmpeg runtime directory: {e}"))?;
+    let target = target_dir.join("ffmpeg.exe");
+    let provenance_path = target_dir.join(FFMPEG_PROVENANCE_NAME);
+    if !local_ffmpeg_matches(&target, desired) {
+        let stage = target_dir.join(format!(
+            "ffmpeg-{}-{}.tmp.exe",
+            std::process::id(),
+            NEXT_STAGE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let mut output = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&stage)
+            .map_err(|e| format!("Failed to stage bundled clip FFmpeg: {e}"))?;
+        let result = (|| {
+            let mut input = fs::File::open(source).map_err(|e| format!("Failed to open bundled clip FFmpeg: {e}"))?;
+            std::io::copy(&mut input, &mut output)
+                .and_then(|_| output.sync_all())
+                .map_err(|e| format!("Failed to copy bundled clip FFmpeg: {e}"))?;
+            drop(output);
+            if !local_ffmpeg_matches(&stage, desired) {
+                return Err("Bundled clip FFmpeg did not match expected SHA-256".into());
+            }
+            if !clip_ffmpeg_starts(&stage) {
+                return Err("Bundled clip FFmpeg did not start".into());
+            }
+            fs::rename(&stage, &target).map_err(|e| format!("Failed to activate bundled clip FFmpeg: {e}"))
+        })();
+        if let Err(error) = result {
+            let _ = fs::remove_file(stage);
+            return Err(error);
+        }
+    } else if !clip_ffmpeg_starts(&target) {
+        return Err("App-local clip FFmpeg did not start".into());
+    }
+    write_ffmpeg_provenance(&provenance_path, desired)?;
+    for name in ["ffprobe.exe", "ffplay.exe"] {
+        if let Err(error) = fs::remove_file(target_dir.join(name)) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                log::warn!("Failed to remove legacy app-local {name}: {error}");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn clip_ffmpeg_starts(path: &Path) -> bool {
+    let mut command = Command::new(path);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        if let Some(root) = std::env::var_os("SystemRoot") {
+            let root = PathBuf::from(root);
+            let Ok(path) = std::env::join_paths([root.join("System32"), root]) else {
+                return false;
+            };
+            command.env("PATH", path);
+        }
+    }
+    command
+        .arg("-version")
+        .output()
+        .is_ok_and(|output| output.status.success() && output.stdout.starts_with(b"ffmpeg version "))
 }
 
 fn copy_resource_ffmpeg_to_app_local(app_handle: &AppHandle, desired: &FfmpegProvenance) -> Result<bool, String> {
@@ -303,6 +394,36 @@ fn install_ffmpeg_archive(app_handle: &AppHandle, desired: &FfmpegProvenance, by
 }
 
 async fn ensure_app_local_ffmpeg(app_handle: &AppHandle) -> Result<(), String> {
+    let _provisioning = FFMPEG_PROVISIONING.lock().await;
+    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        let bundle = resource_dir.join("tools").join("ffmpeg-clip");
+        let source = bundle.join("ffmpeg.exe");
+        if source.is_file() {
+            if app_handle
+                .try_state::<SettingsWrapper>()
+                .and_then(|settings| settings.ffmpeg_path())
+                .is_some_and(|path| !path.trim().is_empty())
+            {
+                return Ok(());
+            }
+            let desired: FfmpegProvenance = read_json_file(&bundle.join(FFMPEG_PROVENANCE_NAME))
+                .ok_or_else(|| "Missing bundled clip FFmpeg provenance".to_owned())?;
+            let target_dir = app_local_ffmpeg_dir(app_handle)
+                .ok_or_else(|| "Failed to resolve AppLocalData directory".to_owned())?;
+            if read_installed_ffmpeg_provenance(app_handle).is_some_and(|installed| {
+                installed.source_name == CLIP_FFMPEG_SOURCE && installed.sha256 == desired.sha256
+            }) && target_dir.join("ffmpeg.exe").is_file()
+                && !target_dir.join("ffprobe.exe").exists()
+                && !target_dir.join("ffplay.exe").exists()
+            {
+                return Ok(());
+            }
+            return tauri::async_runtime::spawn_blocking(move || install_clip_ffmpeg(&source, &target_dir, &desired))
+                .await
+                .map_err(|error| format!("FFmpeg provisioning task failed: {error}"))?;
+        }
+    }
+
     let Some(desired) = read_desired_ffmpeg_provenance(app_handle) else {
         return Ok(());
     };
@@ -333,7 +454,13 @@ pub async fn prepare_ffmpeg_runtime(app_handle: AppHandle) -> Result<(), String>
 }
 
 fn ffmpeg_version_line(ffmpeg_cmd: &str) -> Option<String> {
-    let output = Command::new(ffmpeg_cmd).arg("-version").output().ok()?;
+    let mut command = Command::new(ffmpeg_cmd);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let output = command.arg("-version").output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -648,4 +775,98 @@ async fn clear_cache_inner(app_handle: AppHandle, include_tooltip_cache: bool) -
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod ffmpeg_install_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    struct TestInstall(PathBuf);
+
+    impl TestInstall {
+        fn new() -> Self {
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let root = std::env::temp_dir().join(format!(
+                "leaguerecord-ffmpeg-test-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            fs::create_dir(&root).unwrap();
+            let install = Self(root);
+            fs::create_dir_all(install.managed()).unwrap();
+            for name in ["ffmpeg.exe", "ffplay.exe", "ffprobe.exe", "keep.dll"] {
+                fs::write(install.managed().join(name), b"previous runtime").unwrap();
+            }
+            fs::write(install.0.join("ffprobe.exe"), b"external runtime").unwrap();
+            install
+        }
+
+        fn managed(&self) -> PathBuf {
+            self.0.join("tools").join("ffmpeg")
+        }
+    }
+
+    impl Drop for TestInstall {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn provenance(sha256: String) -> FfmpegProvenance {
+        FfmpegProvenance {
+            source_name: CLIP_FFMPEG_SOURCE.into(),
+            source_url: String::new(),
+            version: String::new(),
+            license: "LGPL-2.1-or-later".into(),
+            sha256,
+            download_url: None,
+            archive_sha256: None,
+            fetched_at: String::new(),
+            notes: None,
+        }
+    }
+
+    #[test]
+    fn failed_replacement_leaves_existing_ffmpeg_and_helpers() {
+        let install = TestInstall::new();
+        let source = install.0.join("candidate.exe");
+        fs::write(&source, b"not a Windows executable").unwrap();
+        assert!(
+            install_clip_ffmpeg(&source, &install.managed(), &provenance("a".repeat(64)))
+                .unwrap_err()
+                .contains("SHA-256")
+        );
+        assert!(
+            install_clip_ffmpeg(&source, &install.managed(), &provenance(file_sha256(&source).unwrap()))
+                .unwrap_err()
+                .contains("did not start")
+        );
+        for name in ["ffmpeg.exe", "ffplay.exe", "ffprobe.exe", "keep.dll"] {
+            assert_eq!(fs::read(install.managed().join(name)).unwrap(), b"previous runtime");
+        }
+        assert_eq!(fs::read_dir(install.managed()).unwrap().count(), 4);
+    }
+
+    #[test]
+    #[ignore = "requires LEAGUERECORD_TEST_CLIP_FFMPEG with the built runtime"]
+    fn verified_replacement_removes_only_managed_helpers() {
+        let install = TestInstall::new();
+        let source = PathBuf::from(std::env::var_os("LEAGUERECORD_TEST_CLIP_FFMPEG").unwrap());
+        let desired = provenance(file_sha256(&source).unwrap());
+        for _ in 0..2 {
+            install_clip_ffmpeg(&source, &install.managed(), &desired).unwrap();
+            assert_eq!(
+                file_sha256(&install.managed().join("ffmpeg.exe")).unwrap(),
+                desired.sha256
+            );
+            let saved: FfmpegProvenance =
+                read_json_file(&install.managed().join(FFMPEG_PROVENANCE_NAME)).unwrap();
+            assert_eq!(saved.sha256, desired.sha256);
+            assert!(!install.managed().join("ffplay.exe").exists());
+            assert!(!install.managed().join("ffprobe.exe").exists());
+            assert!(install.managed().join("keep.dll").exists());
+            assert!(install.0.join("ffprobe.exe").exists());
+        }
+    }
 }

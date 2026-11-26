@@ -272,18 +272,18 @@
     list-style: none;
     font-size: 14px;
     color: #ccc;
-    background-color: #303030;
+    background-color: #000000; /* Black background for separation */
     overflow-y: auto;
     overflow-x: hidden; /* Prevent horizontal scrollbar */
 }
 
-/* Sidebar scrollbar */
+/* Specific Scrollbar for Sidebar - Black Background */
 #sidebar #sidebar-content::-webkit-scrollbar {
     width: 11px; /* Increased to accommodate borders */
 }
 
 #sidebar #sidebar-content::-webkit-scrollbar-track {
-    background-color: #303030;
+    background-color: #000000 !important;
     border-left: 1px solid transparent; /* Left spacing */
     border-right: 1px solid transparent; /* Right spacing */
     background-clip: padding-box; /* Clip background to padding box */
@@ -304,7 +304,7 @@
     cursor: pointer;
     transition: background-color 0.1s;
     border-radius: 8px; /* Rounded corners for each item */
-    margin-bottom: 4px;
+    margin-bottom: 4px; /* Gap between items (shows black background) */
     background-color: #1e1e1e; /* Item background */
     overflow: hidden; /* Clip ::before bar to rounded corners */
     /* Removed border-left, using ::before for the bar */

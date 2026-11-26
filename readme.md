@@ -31,6 +31,8 @@ The Windows installer includes FFmpeg for creating short clips from your recordi
 ## FFmpeg Notes
 
 Automatic app updates reuse the FFmpeg copy already saved in LeagueRecord’s app data folder.
+For releases that bundle the smaller, clip-only build, run the normal Windows installer over your existing installation to switch to it.
+These releases also provide the FFmpeg license and corresponding source archive.
 
 ## Future updates
 

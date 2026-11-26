@@ -1,21 +1,13 @@
 {
     "notes": [
         "[日本語]",
-        "- 録画が始まらない、映像が黒くなる、ゲームを途中で閉じると録画の終了に失敗する問題を修正しました。",
-        "- スコアボードが表示されないことがある問題を修正し、ウィンドウが狭いときも見やすくしました。",
-        "- 録画中の動画に、サイドバーで赤い REC マークを表示するようにしました。",
-        "- クリップ作成の進み具合が分かるようになり、保存が終わると控えめな音で知らせます。",
-        "- 右上の × を押したときに、アプリを終了するか、システムトレイに格納するかを選べるようになりました。",
-        "- 設定画面の翻訳を見直しました。",
-        "- 更新後に以前の録画が一覧に出ない問題を修正し、サイドバーの背景をグレーに戻しました。",
+        "- Windows インストーラーを大幅に軽量化しました。通常のインストーラーにはクリップ作成に必要な機能が入り、追加のダウンロードなしで使えます。",
+        "- 録画一覧の背景を黒に戻しました。",
+        "- 自動更新では保存済みの FFmpeg を使います。軽量版に切り替える場合は、通常のインストーラーで上書きしてください。",
         "",
         "[English]",
-        "- Fixed issues that could prevent recording from starting, produce a black screen, or cause a recording error when exiting a game early.",
-        "- Fixed cases where the scoreboard did not appear and made it easier to read in narrow windows.",
-        "- Added a red REC badge in the sidebar for recordings in progress.",
-        "- Clip creation now shows progress and plays a quiet sound when the clip is saved.",
-        "- You can now choose whether the close button quits the app or hides it in the system tray.",
-        "- Improved translations in the settings screen.",
-        "- Fixed missing recordings after an update and restored the gray sidebar background."
+        "- Significantly reduced the Windows installer size. The standard installer still includes everything needed to create clips without an additional download.",
+        "- Restored the black background in the recordings list.",
+        "- Automatic updates reuse the installed FFmpeg. Run the standard installer over your current installation to switch to the smaller build."
     ]
 }
