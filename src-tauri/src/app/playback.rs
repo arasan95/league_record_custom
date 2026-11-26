@@ -39,11 +39,8 @@ pub fn serve(app: &AppHandle, is_main: bool, request: Request<Vec<u8>>) -> Respo
     let Ok(path) = percent_encoding::percent_decode_str(path).decode_utf8() else {
         return empty(StatusCode::BAD_REQUEST);
     };
-    let settings = app.state::<SettingsWrapper>().get_settings();
-    let Some(path) = authorized(
-        Path::new(path.as_ref()),
-        &[settings.recordings_folder, settings.clips_folder],
-    ) else {
+    let roots = super::recording_paths::library_roots(&app.state::<SettingsWrapper>());
+    let Some(path) = authorized(Path::new(path.as_ref()), &roots) else {
         return empty(StatusCode::NOT_FOUND);
     };
     let Ok(mut file) = File::open(path) else {

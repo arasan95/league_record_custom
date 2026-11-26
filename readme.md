@@ -32,6 +32,10 @@ The Windows installer includes FFmpeg for creating short clips from your recordi
 
 Automatic app updates reuse the FFmpeg copy already saved in LeagueRecord’s app data folder.
 
+## Future updates
+
+Regular updates are not planned. If you have a feature request or find a bug, please let me know on [GitHub Issues](https://github.com/arasan95/league_record_custom/issues). Reports help me decide what to work on. I can't promise a reply, a fix, or a release date.
+
 ## How to Use
 
 A-B Loop & Clipping

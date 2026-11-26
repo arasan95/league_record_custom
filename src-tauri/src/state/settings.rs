@@ -27,7 +27,7 @@ impl SettingsFile {
 }
 
 #[derive(Debug)]
-pub struct SettingsWrapper(RwLock<Settings>);
+pub struct SettingsWrapper(RwLock<Settings>, std::sync::OnceLock<PathBuf>);
 
 impl SettingsWrapper {
     pub fn close_to_tray(&self) -> bool {
@@ -49,10 +49,13 @@ impl SettingsWrapper {
     pub fn new_from_file(settings_file: &Path) -> Result<Self> {
         let json = fs::read_to_string(settings_file)?;
         let settings = serde_json::from_str::<Settings>(json.as_str()).unwrap_or_default();
-        Ok(Self(RwLock::new(settings)))
+        Ok(Self(RwLock::new(settings), std::sync::OnceLock::new()))
     }
 
     pub fn load_from_file(&self, settings_file: &Path, app_handle: &AppHandle) {
+        if let Ok(videos) = app_handle.path().video_dir() {
+            let _ = self.1.set(videos);
+        }
         let Ok(json) = fs::read_to_string(settings_file) else {
             return;
         };
@@ -195,6 +198,10 @@ impl SettingsWrapper {
 
     pub fn get_recordings_path(&self) -> PathBuf {
         self.0.read().unwrap().recordings_folder.clone()
+    }
+
+    pub fn alternate_default_library(&self, primary: &Path) -> Vec<PathBuf> {
+        self.1.get().map_or_else(Vec::new, |videos| alternate_default_library(videos, primary))
     }
 
     pub fn get_clips_path(&self) -> PathBuf {
@@ -492,6 +499,19 @@ const DEFAULT_PLAY_RECORDING_SOUNDS: bool = true;
 const DEFAULT_TFT_ROUND_OCR_ENABLED: bool = false;
 const DEFAULT_TFT_ROUND_LIVE_OCR_ENABLED: bool = false;
 const DEFAULT_TFT_ROUND_OCR_INTERVAL_SECONDS: f64 = 2.0;
+
+fn alternate_default_library(videos: &Path, primary: &Path) -> Vec<PathBuf> {
+    let current = videos.join(default_recordings_folder());
+    let previous = videos.join("LeagueRecord");
+    let alternate = if primary == current {
+        previous
+    } else if primary == previous {
+        current
+    } else {
+        return Vec::new();
+    };
+    vec![alternate.clone(), alternate.join("clips")]
+}
 
 #[inline]
 fn default_recordings_folder() -> PathBuf {
@@ -881,6 +901,17 @@ impl Default for MarkerFlags {
 #[cfg(test)]
 mod tests {
     use super::Settings;
+
+    #[test]
+    fn default_folder_compatibility_does_not_expand_custom_storage() {
+        use std::path::Path;
+        let videos = Path::new("Videos");
+        assert_eq!(super::alternate_default_library(videos, &videos.join("league_recordings")),
+            vec![videos.join("LeagueRecord"), videos.join("LeagueRecord/clips")]);
+        assert_eq!(super::alternate_default_library(videos, &videos.join("LeagueRecord")),
+            vec![videos.join("league_recordings"), videos.join("league_recordings/clips")]);
+        assert!(super::alternate_default_library(videos, Path::new("Custom/league_recordings")).is_empty());
+    }
 
     #[test]
     fn close_to_tray_defaults_to_quit_and_round_trips_when_enabled() {

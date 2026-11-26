@@ -7,11 +7,12 @@ fn canonical_or_original(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
-fn allowed_roots(settings: &SettingsWrapper) -> Vec<PathBuf> {
-    vec![
-        canonical_or_original(&settings.get_recordings_path()),
-        canonical_or_original(&settings.get_clips_path()),
-    ]
+pub(super) fn library_roots(settings: &SettingsWrapper) -> Vec<PathBuf> {
+    let snapshot = settings.get_settings();
+    let alternate = settings.alternate_default_library(&snapshot.recordings_folder);
+    let mut roots = vec![snapshot.recordings_folder, snapshot.clips_folder];
+    roots.extend(alternate);
+    roots
 }
 
 fn normalize_path_for_compare(path: &Path) -> String {
@@ -30,7 +31,7 @@ fn normalize_path_for_compare(path: &Path) -> String {
 
 fn is_under_allowed_roots(path: &Path, settings: &SettingsWrapper) -> bool {
     let candidate = normalize_path_for_compare(path);
-    allowed_roots(settings)
+    library_roots(settings)
         .into_iter()
         .map(|root| normalize_path_for_compare(&root))
         .any(|root| candidate == root || candidate.starts_with(&(root + "\\")))

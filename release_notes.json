@@ -7,6 +7,7 @@
         "- クリップ作成の進み具合が分かるようになり、保存が終わると控えめな音で知らせます。",
         "- 右上の × を押したときに、アプリを終了するか、システムトレイに格納するかを選べるようになりました。",
         "- 設定画面の翻訳を見直しました。",
+        "- 更新後に以前の録画が一覧に出ない問題を修正し、サイドバーの背景をグレーに戻しました。",
         "",
         "[English]",
         "- Fixed issues that could prevent recording from starting, produce a black screen, or cause a recording error when exiting a game early.",
@@ -14,6 +15,7 @@
         "- Added a red REC badge in the sidebar for recordings in progress.",
         "- Clip creation now shows progress and plays a quiet sound when the clip is saved.",
         "- You can now choose whether the close button quits the app or hides it in the system tray.",
-        "- Improved translations in the settings screen."
+        "- Improved translations in the settings screen.",
+        "- Fixed missing recordings after an update and restored the gray sidebar background."
     ]
 }

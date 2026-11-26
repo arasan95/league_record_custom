@@ -7,12 +7,23 @@ use tauri::{AppHandle, Manager};
 
 use crate::app::{AppEvent, EventManager};
 use crate::state::CurrentlyRecording;
-use crate::state::FileWatcher;
+use crate::state::{FileWatcher, SettingsWrapper};
 
 pub fn replace(app_handle: &AppHandle, roots: [&Path; 2]) {
+    let mut directories = Vec::from(roots.map(Path::to_owned));
+    if let Some(settings) = app_handle.try_state::<SettingsWrapper>() {
+        directories.extend(
+            settings
+                .alternate_default_library(roots[0])
+                .into_iter()
+                .filter(|path| path.is_dir()),
+        );
+    }
+    let mut watched = std::collections::BTreeSet::new();
+    directories.retain(|path| watched.insert(path.clone()));
     let watcher = notify::recommended_watcher({
         let app_handle = app_handle.clone();
-        let watched_roots = roots.map(Path::to_owned);
+        let watched_roots = directories.clone();
         move |res: notify::Result<notify::Event>| {
             let Ok(event) = res else {
                 let _ = app_handle.send_event(AppEvent::RecordingsChanged { payload: () });
@@ -47,7 +58,8 @@ pub fn replace(app_handle: &AppHandle, roots: [&Path; 2]) {
                 EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(_))
             );
             let metadata_changed = entries_changed || matches!(event.kind, EventKind::Modify(ModifyKind::Data(_)));
-            if (entries_changed && (contains_mp4_path || root_changed)) || (metadata_changed && !json_paths.is_empty()) {
+            if (entries_changed && (contains_mp4_path || root_changed)) || (metadata_changed && !json_paths.is_empty())
+            {
                 if let Err(error) = app_handle.send_event(AppEvent::RecordingsChanged { payload: () }) {
                     log::warn!("filewatcher failed to send recordings change: {error}");
                 }
@@ -62,11 +74,8 @@ pub fn replace(app_handle: &AppHandle, roots: [&Path; 2]) {
 
     match watcher {
         Ok(mut watcher) => {
-            for (index, root) in roots.into_iter().enumerate() {
-                if index == 1 && root == roots[0] {
-                    break;
-                }
-                if let Err(error) = watcher.watch(root, notify::RecursiveMode::NonRecursive) {
+            for root in directories {
+                if let Err(error) = watcher.watch(&root, notify::RecursiveMode::NonRecursive) {
                     log::warn!("Could not watch {}: {error}", root.display());
                 }
             }

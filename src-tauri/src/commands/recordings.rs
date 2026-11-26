@@ -42,11 +42,13 @@ pub fn get_recordings_path(settings: State<SettingsWrapper>) -> PathBuf {
 #[tauri::command]
 pub async fn get_recordings_snapshot(app_handle: AppHandle) -> Result<RecordingSnapshot, String> {
     async_runtime::spawn_blocking(move || {
-        let settings = app_handle.state::<SettingsWrapper>().get_settings();
+        let settings_state = app_handle.state::<SettingsWrapper>();
+        let settings = settings_state.get_settings();
         let active = app_handle.state::<CurrentlyRecording>().get();
         let library = app_handle.state::<RecordingLibrary>();
         let roots = [settings.recordings_folder, settings.clips_folder];
-        let result = library.refresh(roots.clone(), active.as_deref());
+        let alternate = settings_state.alternate_default_library(&roots[0]);
+        let result = library.refresh_with_alternate(roots.clone(), &alternate, active.as_deref());
         if library.watcher_needs_restart(result.as_ref().map_or(true, |snapshot| snapshot.stale)) {
             crate::filewatcher::replace(&app_handle, [&roots[0], &roots[1]]);
         }

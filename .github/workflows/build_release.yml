@@ -250,7 +250,7 @@ jobs:
           artifacts: "./src-tauri/target/release/bundle/nsis/${{ steps.release_version.outputs.installer_name }}, ./.artifacts/updater/${{ steps.updater_stage.outputs.updater_exe_name }}, latest.json"
           artifactErrorsFailBuild: true
           draft: true
-          prerelease: true
+          prerelease: ${{ contains(env.RELEASE_TAG, '-rc.') }}
           body: ${{ steps.release_body.outputs.body }}
 
 

@@ -38,11 +38,31 @@ impl RecordingLibrary {
         self.1.swap(unavailable, std::sync::atomic::Ordering::AcqRel) && !unavailable
     }
 
+    #[cfg(test)]
     pub fn refresh(&self, roots: [PathBuf; 2], active: Option<&Path>) -> Result<RecordingSnapshot, String> {
+        self.refresh_with_alternate(roots, &[], active)
+    }
+
+    pub fn refresh_with_alternate(
+        &self,
+        roots: [PathBuf; 2],
+        alternate: &[PathBuf],
+        active: Option<&Path>,
+    ) -> Result<RecordingSnapshot, String> {
         let mut previous = self.0.lock().map_err(|error| error.to_string())?;
         let active = active.map(normalize_video_base_path);
         let (recordings, bytes) = match collect_recording_files(&roots, None) {
-            Ok(files) => {
+            Ok(mut files) => {
+                for root in alternate {
+                    if roots.contains(root) {
+                        continue;
+                    }
+                    match collect_recording_files(&[root.clone(), root.clone()], None) {
+                        Ok(extra) => files.extend(extra),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(error) => log::warn!("Alternate recording folder unavailable: {error}"),
+                    }
+                }
                 let mut files: Vec<_> = files.into_iter().collect();
                 files.sort_by_key(|(_, file)| std::cmp::Reverse(file.created));
                 let mut bytes = 0u64;
@@ -551,6 +571,25 @@ mod library_tests {
     }
 
     #[test]
+    fn alternate_library_shows_older_recordings_and_optional_clips() {
+        let root = Fixture::new();
+        let current = root.0.join("league_recordings");
+        let previous = root.0.join("LeagueRecord");
+        fs::create_dir(&current).unwrap();
+        fs::create_dir(&previous).unwrap();
+        fs::write(current.join("new.mp4"), [1]).unwrap();
+        fs::write(previous.join("old.mp4"), [2]).unwrap();
+        let alternate = [previous.clone(), previous.join("clips")];
+        let snapshot = RecordingLibrary::default()
+            .refresh_with_alternate([current.clone(), current], &alternate, None)
+            .unwrap();
+        assert!(!snapshot.stale);
+        assert_eq!(snapshot.recordings.len(), 2);
+        assert!(snapshot.recordings.iter().any(|item| item.video_id.ends_with("old")));
+        assert!(super::super::playback::authorized(&previous.join("old.mp4"), &alternate).is_some());
+    }
+
+    #[test]
     fn active_video_remains_in_sidebar_and_loses_badge_after_stop() {
         let root = Fixture::new();
         let video = root.0.join("game.mp4");
@@ -616,17 +655,26 @@ mod library_tests {
         let path = root.0.join("game");
         let deferred = Deferred {
             favorite: false,
-            match_id: riot_datatypes::MatchId { game_id: 1, platform_id: "JP1".into() },
+            match_id: riot_datatypes::MatchId {
+                game_id: 1,
+                platform_id: "JP1".into(),
+            },
             ingame_time_rec_start_offset: 0.0,
-            highlights: Vec::new(), tft_round_markers: Vec::new(), events: Vec::new(), participants: Vec::new(),
+            highlights: Vec::new(),
+            tft_round_markers: Vec::new(),
+            events: Vec::new(),
+            participants: Vec::new(),
         };
         action::save_recording_metadata(&path, &MetadataFile::Deferred(deferred)).unwrap();
         std::thread::scope(|threads| {
             threads.spawn(|| action::update_recording_metadata(&path, |data| data.set_favorite(true)).unwrap());
-            threads.spawn(|| action::update_recording_metadata(&path, |data| {
-                let MetadataFile::Deferred(deferred) = data else { panic!("expected deferred metadata") };
-                deferred.highlights.push(12.0);
-            }).unwrap());
+            threads.spawn(|| {
+                action::update_recording_metadata(&path, |data| {
+                    let MetadataFile::Deferred(deferred) = data else { panic!("expected deferred metadata") };
+                    deferred.highlights.push(12.0);
+                })
+                .unwrap()
+            });
         });
         let MetadataFile::Deferred(data) = action::get_recording_metadata(&path, false).unwrap() else {
             panic!("expected deferred metadata");
